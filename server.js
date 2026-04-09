@@ -8,7 +8,7 @@ const app = express();
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
-// ===== æ°æ®åºåå§å =====
+// ===== 数据库初始化 =====
 const dbPath = path.join(__dirname, ".data", "invest.db");
 const fs = require("fs");
 if (!fs.existsSync(path.join(__dirname, ".data"))) fs.mkdirSync(path.join(__dirname, ".data"));
@@ -60,7 +60,7 @@ db.exec(`
   );
 `);
 
-// ===== ç®æSessionç®¡ç =====
+// ===== 简易Session管理 =====
 const sessions = {};
 function createSession(userId) {
   const token = crypto.randomBytes(32).toString("hex");
@@ -69,18 +69,18 @@ function createSession(userId) {
 }
 function auth(req, res, next) {
   const token = req.headers["x-token"];
-  if (!token || !sessions[token]) return res.status(401).json({ error: "è¯·åç»å½" });
+  if (!token || !sessions[token]) return res.status(401).json({ error: "请先登录" });
   req.userId = sessions[token].userId;
   next();
 }
 
-// ===== ç¨æ·è®¤è¯ =====
+// ===== 用户认证 =====
 app.post("/api/register", (req, res) => {
   const { username, password } = req.body;
-  if (!username || !password) return res.status(400).json({ error: "è¯·è¾å¥ç¨æ·ååå¯ç " });
-  if (password.length < 4) return res.status(400).json({ error: "å¯ç è³å°4ä½" });
+  if (!username || !password) return res.status(400).json({ error: "请输入用户名和密码" });
+  if (password.length < 4) return res.status(400).json({ error: "密码至少4位" });
   const existing = db.prepare("SELECT id FROM users WHERE username=?").get(username);
-  if (existing) return res.status(400).json({ error: "ç¨æ·åå·²å­å¨" });
+  if (existing) return res.status(400).json({ error: "用户名已存在" });
   const hash = bcrypt.hashSync(password, 10);
   const result = db.prepare("INSERT INTO users (username, password) VALUES (?, ?)").run(username, hash);
   const token = createSession(result.lastInsertRowid);
@@ -90,8 +90,8 @@ app.post("/api/register", (req, res) => {
 app.post("/api/login", (req, res) => {
   const { username, password } = req.body;
   const user = db.prepare("SELECT * FROM users WHERE username=?").get(username);
-  if (!user) return res.status(400).json({ error: "ç¨æ·ä¸å­å¨" });
-  if (!bcrypt.compareSync(password, user.password)) return res.status(400).json({ error: "å¯ç éè¯¯" });
+  if (!user) return res.status(400).json({ error: "用户不存在" });
+  if (!bcrypt.compareSync(password, user.password)) return res.status(400).json({ error: "密码错误" });
   const token = createSession(user.id);
   res.json({ token, username: user.username, userId: user.id });
 });
@@ -102,7 +102,7 @@ app.post("/api/logout", (req, res) => {
   res.json({ ok: true });
 });
 
-// ===== æä» =====
+// ===== 持仓 =====
 app.get("/api/holdings", auth, (req, res) => {
   const rows = db.prepare("SELECT * FROM holdings WHERE user_id=? AND qty>0 ORDER BY id").all(req.userId);
   res.json(rows);
@@ -118,7 +118,7 @@ app.post("/api/holdings", auth, (req, res) => {
   res.json({ ok: true });
 });
 
-// ===== äº¤æ =====
+// ===== 交易 =====
 app.get("/api/trades", auth, (req, res) => {
   const rows = db.prepare("SELECT * FROM trades WHERE user_id=? ORDER BY date DESC, id DESC").all(req.userId);
   res.json(rows);
@@ -126,14 +126,14 @@ app.get("/api/trades", auth, (req, res) => {
 
 app.post("/api/trade", auth, (req, res) => {
   const { symbol, name, type, qty, price, fee, date, currency, market, region, attribute, sector } = req.body;
-  if (!symbol || !qty || !price || !type || !date) return res.status(400).json({ error: "è¯·å¡«åå®æ´ä¿¡æ¯" });
+  if (!symbol || !qty || !price || !type || !date) return res.status(400).json({ error: "请填写完整信息" });
 
   db.prepare("INSERT INTO trades (user_id,symbol,name,type,qty,price,fee,date) VALUES (?,?,?,?,?,?,?,?)")
     .run(req.userId, symbol, name || "", type, qty, price, fee || 0, date);
 
-  // æ´æ°æä»
+  // 更新持仓
   const h = db.prepare("SELECT * FROM holdings WHERE user_id=? AND symbol=?").get(req.userId, symbol);
-  if (type === "ä¹°å¥") {
+  if (type === "买入") {
     if (h) {
       const totalQty = h.qty + qty;
       const newAvg = (h.qty * h.avg_cost + qty * price) / totalQty;
@@ -143,7 +143,7 @@ app.post("/api/trade", auth, (req, res) => {
         VALUES (?,?,?,?,?,?,?,?,?,?)`)
         .run(req.userId, symbol, name || "", qty, price, currency || "USD", market || "", region || "", attribute || "", sector || "");
     }
-  } else if (type === "ååº") {
+  } else if (type === "卖出") {
     if (h) {
       const remain = h.qty - qty;
       if (remain <= 0) db.prepare("UPDATE holdings SET qty=0 WHERE id=?").run(h.id);
@@ -153,7 +153,7 @@ app.post("/api/trade", auth, (req, res) => {
   res.json({ ok: true });
 });
 
-// ===== æé =====
+// ===== 提醒 =====
 app.get("/api/alerts", auth, (req, res) => {
   res.json(db.prepare("SELECT * FROM alerts WHERE user_id=?").all(req.userId));
 });
@@ -176,12 +176,12 @@ app.delete("/api/alert/:id", auth, (req, res) => {
   res.json({ ok: true });
 });
 
-// ===== å®æ¶è¡ä»· (Yahoo Finance) =====
+// ===== 实时股价 (Yahoo Finance) =====
 let yahooFinance;
 try { yahooFinance = require("yahoo-finance2").default; } catch (e) { console.log("yahoo-finance2 not loaded"); }
 
 const priceCache = {};
-const CACHE_TTL = 30000; // 30ç§ç¼å­
+const CACHE_TTL = 30000; // 30秒缓存
 
 app.get("/api/prices", async (req, res) => {
   const symbols = (req.query.symbols || "").split(",").filter(Boolean);
@@ -218,17 +218,17 @@ app.get("/api/prices", async (req, res) => {
       });
     } catch (err) {
       console.error("Yahoo Finance error:", err.message);
-      // è¿åå·²ç¼å­çæ°æ®
+      // 返回已缓存的数据
     }
   }
 
   res.json(results);
 });
 
-// ===== æ¹éå¯¼å¥æä» =====
+// ===== 批量导入持仓 =====
 app.post("/api/import-holdings", auth, (req, res) => {
   const { holdings: list } = req.body;
-  if (!Array.isArray(list)) return res.status(400).json({ error: "æ°æ®æ ¼å¼éè¯¯" });
+  if (!Array.isArray(list)) return res.status(400).json({ error: "数据格式错误" });
 
   const stmt = db.prepare(`INSERT INTO holdings (user_id,symbol,name,qty,avg_cost,currency,market,region,attribute,sector)
     VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT(user_id,symbol) DO UPDATE SET
@@ -245,7 +245,7 @@ app.post("/api/import-holdings", auth, (req, res) => {
   res.json({ ok: true, count: list.length });
 });
 
-// ===== æ°æ®å¯¼åº =====
+// ===== 数据导出 =====
 app.get("/api/export", auth, (req, res) => {
   const holdings = db.prepare("SELECT symbol,name,qty,avg_cost,currency,market,region,attribute,sector FROM holdings WHERE user_id=? AND qty>0").all(req.userId);
   const trades = db.prepare("SELECT symbol,name,type,qty,price,fee,date FROM trades WHERE user_id=?").all(req.userId);
@@ -253,6 +253,6 @@ app.get("/api/export", auth, (req, res) => {
   res.json({ holdings, trades, alerts, exported_at: new Date().toISOString() });
 });
 
-// ===== å¯å¨ =====
+// ===== 启动 =====
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Arc Patrimony æå¡å¨å·²å¯å¨: http://localhost:${PORT}`));
+app.listen(PORT, () => console.log(`Arc Patrimony 服务器已启动: http://localhost:${PORT}`));
