@@ -1,0 +1,2132 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Arc Patrimony - 云端版本">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Arc Patrimony">
+    <meta name="theme-color" content="#0f172a">
+    <title>Arc Patrimony</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            height: 100%;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            background-color: #0f172a;
+            color: #e2e8f0;
+        }
+
+        #root {
+            height: 100%;
+        }
+
+        /* Login Screen */
+        .login-screen {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #0f172a 0%, #1a1f3a 100%);
+            padding: 20px;
+        }
+
+        .login-card {
+            background-color: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 40px;
+            width: 100%;
+            max-width: 400px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
+        }
+
+        .login-logo {
+            font-size: 48px;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .login-title {
+            font-size: 28px;
+            font-weight: bold;
+            text-align: center;
+            margin-bottom: 30px;
+            color: #6366f1;
+        }
+
+        .login-subtitle {
+            font-size: 14px;
+            text-align: center;
+            color: #94a3b8;
+            margin-bottom: 25px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            color: #cbd5e1;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 12px 14px;
+            background-color: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            color: #e2e8f0;
+            font-size: 14px;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: #6366f1;
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+        }
+
+        .form-error {
+            color: #f87171;
+            font-size: 13px;
+            margin-top: 5px;
+            display: none;
+        }
+
+        .form-error.show {
+            display: block;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 25px;
+        }
+
+        button {
+            flex: 1;
+            padding: 12px 20px;
+            font-size: 14px;
+            font-weight: 500;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background-color: #6366f1;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background-color: #4f46e5;
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+        }
+
+        .btn-primary:active {
+            transform: scale(0.98);
+        }
+
+        .btn-secondary {
+            background-color: #334155;
+            color: #e2e8f0;
+        }
+
+        .btn-secondary:hover {
+            background-color: #475569;
+        }
+
+        .btn-secondary:active {
+            transform: scale(0.98);
+        }
+
+        /* App Layout */
+        .app-container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            background-color: #0f172a;
+        }
+
+        .app-header {
+            background-color: #1e293b;
+            border-bottom: 1px solid #334155;
+            padding: 16px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .app-title {
+            font-size: 20px;
+            font-weight: bold;
+            color: #6366f1;
+        }
+
+        .header-user {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            font-size: 14px;
+        }
+
+        .header-user-badge {
+            background-color: #334155;
+            padding: 6px 12px;
+            border-radius: 20px;
+            color: #cbd5e1;
+        }
+
+        .btn-logout {
+            padding: 8px 16px;
+            background-color: #64748b;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: background-color 0.2s;
+        }
+
+        .btn-logout:hover {
+            background-color: #475569;
+        }
+
+        .tabs {
+            display: flex;
+            border-bottom: 1px solid #334155;
+            background-color: #1e293b;
+            overflow-x: auto;
+            padding: 0 20px;
+        }
+
+        .tab {
+            padding: 12px 20px;
+            cursor: pointer;
+            border-bottom: 3px solid transparent;
+            color: #94a3b8;
+            font-size: 14px;
+            font-weight: 500;
+            white-space: nowrap;
+            transition: all 0.2s;
+        }
+
+        .tab:hover {
+            color: #cbd5e1;
+        }
+
+        .tab.active {
+            color: #6366f1;
+            border-bottom-color: #6366f1;
+        }
+
+        .tab-badge {
+            display: inline-block;
+            background-color: #f87171;
+            color: white;
+            font-size: 11px;
+            padding: 2px 6px;
+            border-radius: 10px;
+            margin-left: 6px;
+        }
+
+        .tab-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        /* Dashboard */
+        .stat-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background-color: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 10px;
+            padding: 20px;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #6366f1;
+        }
+
+        .stat-change {
+            font-size: 13px;
+            color: #4ade80;
+            margin-top: 5px;
+        }
+
+        .stat-change.negative {
+            color: #f87171;
+        }
+
+        .charts-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .chart-card {
+            background-color: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 10px;
+            padding: 20px;
+        }
+
+        .chart-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #cbd5e1;
+            margin-bottom: 15px;
+        }
+
+        canvas {
+            max-width: 100%;
+            height: auto;
+        }
+
+        .holdings-table {
+            width: 100%;
+            border-collapse: collapse;
+            background-color: #1e293b;
+            border-radius: 10px;
+            overflow: hidden;
+            border: 1px solid #334155;
+        }
+
+        .holdings-table thead {
+            background-color: #0f172a;
+            border-bottom: 1px solid #334155;
+        }
+
+        .holdings-table th {
+            padding: 12px 16px;
+            text-align: left;
+            font-size: 12px;
+            font-weight: 600;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .holdings-table td {
+            padding: 12px 16px;
+            font-size: 13px;
+            border-bottom: 1px solid #334155;
+        }
+
+        .holdings-table tbody tr:last-child td {
+            border-bottom: none;
+        }
+
+        .holdings-table tbody tr:hover {
+            background-color: #0f172a;
+        }
+
+        .symbol-cell {
+            font-weight: 600;
+            color: #6366f1;
+        }
+
+        .region-badge {
+            display: inline-block;
+            background-color: #334155;
+            color: #cbd5e1;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+        }
+
+        .price-positive {
+            color: #4ade80;
+        }
+
+        .price-negative {
+            color: #f87171;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #64748b;
+        }
+
+        .empty-icon {
+            font-size: 48px;
+            margin-bottom: 15px;
+        }
+
+        .empty-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #cbd5e1;
+        }
+
+        .empty-text {
+            font-size: 13px;
+            color: #94a3b8;
+        }
+
+        /* Search and Stock Cards */
+        .search-box {
+            margin-bottom: 20px;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 12px 16px;
+            background-color: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            color: #e2e8f0;
+            font-size: 14px;
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: #6366f1;
+        }
+
+        .stock-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 15px;
+        }
+
+        .stock-card {
+            background-color: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 10px;
+            padding: 15px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .stock-card:hover {
+            border-color: #6366f1;
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
+        }
+
+        .stock-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 10px;
+        }
+
+        .stock-card-symbol {
+            font-weight: 600;
+            color: #6366f1;
+            font-size: 16px;
+        }
+
+        .stock-card-change {
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .stock-card-name {
+            font-size: 12px;
+            color: #94a3b8;
+            margin-bottom: 8px;
+        }
+
+        .stock-card-price {
+            font-size: 18px;
+            font-weight: bold;
+            color: #e2e8f0;
+            margin-bottom: 8px;
+        }
+
+        .stock-detail-panel {
+            background-color: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .stock-detail-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 20px;
+        }
+
+        .stock-detail-info h2 {
+            font-size: 20px;
+            color: #e2e8f0;
+            margin-bottom: 5px;
+        }
+
+        .stock-detail-info p {
+            font-size: 13px;
+            color: #94a3b8;
+        }
+
+        .stock-detail-price {
+            text-align: right;
+        }
+
+        .stock-detail-price-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #6366f1;
+        }
+
+        .stock-detail-chart canvas {
+            width: 100%;
+            height: 200px;
+        }
+
+        /* Trade Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .modal.show {
+            display: flex;
+        }
+
+        .modal-content {
+            background-color: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 30px;
+            max-width: 500px;
+            width: 100%;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            font-size: 18px;
+            font-weight: 600;
+            color: #e2e8f0;
+            margin-bottom: 20px;
+        }
+
+        .modal-close {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: none;
+            border: none;
+            color: #94a3b8;
+            font-size: 24px;
+            cursor: pointer;
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        .form-grid.full {
+            grid-template-columns: 1fr;
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 25px;
+        }
+
+        .modal-buttons button {
+            flex: 1;
+            padding: 12px;
+        }
+
+        /* Alert Cards */
+        .alert-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 15px;
+        }
+
+        .alert-card {
+            background-color: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 10px;
+            padding: 15px;
+        }
+
+        .alert-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .alert-card-symbol {
+            font-weight: 600;
+            color: #6366f1;
+            font-size: 14px;
+        }
+
+        .alert-card-close {
+            background: none;
+            border: none;
+            color: #f87171;
+            cursor: pointer;
+            font-size: 18px;
+            padding: 0;
+        }
+
+        .alert-card-condition {
+            font-size: 12px;
+            color: #94a3b8;
+            margin-bottom: 10px;
+        }
+
+        .alert-card-price {
+            font-size: 16px;
+            font-weight: bold;
+            color: #6366f1;
+            margin-bottom: 12px;
+        }
+
+        .toggle-switch {
+            position: relative;
+            width: 50px;
+            height: 26px;
+            background-color: #334155;
+            border-radius: 13px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .toggle-switch.active {
+            background-color: #4ade80;
+        }
+
+        .toggle-slider {
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            width: 20px;
+            height: 20px;
+            background-color: white;
+            border-radius: 50%;
+            transition: left 0.2s;
+        }
+
+        .toggle-switch.active .toggle-slider {
+            left: 27px;
+        }
+
+        /* Trade Table */
+        .trades-table {
+            width: 100%;
+            border-collapse: collapse;
+            background-color: #1e293b;
+            border-radius: 10px;
+            overflow: hidden;
+            border: 1px solid #334155;
+        }
+
+        .trades-table thead {
+            background-color: #0f172a;
+            border-bottom: 1px solid #334155;
+        }
+
+        .trades-table th {
+            padding: 12px 16px;
+            text-align: left;
+            font-size: 12px;
+            font-weight: 600;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .trades-table td {
+            padding: 12px 16px;
+            font-size: 13px;
+            border-bottom: 1px solid #334155;
+        }
+
+        .trades-table tbody tr:last-child td {
+            border-bottom: none;
+        }
+
+        .trades-table tbody tr:hover {
+            background-color: #0f172a;
+        }
+
+        .trade-type-buy {
+            color: #4ade80;
+        }
+
+        .trade-type-sell {
+            color: #f87171;
+        }
+
+        /* FX Rates */
+        .fx-rates {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .fx-rate {
+            background-color: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 12px;
+            text-align: center;
+        }
+
+        .fx-rate-label {
+            font-size: 12px;
+            color: #94a3b8;
+            margin-bottom: 5px;
+        }
+
+        .fx-rate-value {
+            font-size: 16px;
+            font-weight: bold;
+            color: #6366f1;
+        }
+
+        /* Data Management */
+        .data-management {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .data-section {
+            background-color: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 10px;
+            padding: 20px;
+        }
+
+        .data-section-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #cbd5e1;
+            margin-bottom: 15px;
+        }
+
+        .user-info {
+            font-size: 13px;
+            color: #94a3b8;
+            line-height: 1.8;
+        }
+
+        .user-info strong {
+            color: #cbd5e1;
+        }
+
+        .data-buttons {
+            display: flex;
+            gap: 10px;
+        }
+
+        #importFile {
+            display: none;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border: 2px solid #334155;
+            border-top-color: #6366f1;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .tabs {
+                padding: 0 10px;
+            }
+
+            .tab {
+                padding: 10px 12px;
+                font-size: 12px;
+            }
+
+            .tab-content {
+                padding: 15px;
+            }
+
+            .stat-cards {
+                grid-template-columns: 1fr;
+            }
+
+            .charts-row {
+                grid-template-columns: 1fr;
+            }
+
+            .stock-cards {
+                grid-template-columns: 1fr;
+            }
+
+            .form-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .data-buttons {
+                flex-direction: column;
+            }
+
+            .modal-content {
+                padding: 20px;
+            }
+
+            .holdings-table,
+            .trades-table {
+                font-size: 12px;
+            }
+
+            .holdings-table th,
+            .holdings-table td,
+            .trades-table th,
+            .trades-table td {
+                padding: 8px 10px;
+            }
+        }
+
+        /* Utility */
+        .mt-20 {
+            margin-top: 20px;
+        }
+
+        .text-center {
+            text-align: center;
+        }
+
+        .text-sm {
+            font-size: 12px;
+        }
+
+        .text-muted {
+            color: #94a3b8;
+        }
+
+        .nowrap {
+            white-space: nowrap;
+        }
+    </style>
+</head>
+<body>
+<div id="root"></div>
+
+<script>
+    // ============ State Management ============
+    const APP = {
+        token: localStorage.getItem('kxm_token'),
+        username: localStorage.getItem('kxm_user'),
+        prices: {},
+        priceUpdateInterval: null,
+        holdings: [],
+        trades: [],
+        alerts: [],
+        selectedStock: null,
+        isRegister: false,
+        FX_RATES: {
+            'JPY': 0.0067,
+            'CNY': 0.138,
+            'USD': 1,
+            'HKD': 0.128,
+            'default': 1
+        }
+    };
+
+    const API_BASE = '/api';
+
+    // ============ Utility Functions ============
+    async function apiCall(endpoint, method = 'GET', body = null, isAuthorized = true) {
+        const options = {
+            method,
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        };
+
+        if (isAuthorized && APP.token) {
+            options.headers['x-token'] = APP.token;
+        }
+
+        if (body) {
+            options.body = JSON.stringify(body);
+        }
+
+        try {
+            const response = await fetch(`${API_BASE}${endpoint}`, options);
+            if (!response.ok) {
+                throw new Error(`API error: ${response.status}`);
+            }
+            return await response.json();
+        } catch (error) {
+            console.error('API call failed:', error);
+            throw error;
+        }
+    }
+
+    function formatCurrency(value, currency = 'USD') {
+        const rate = APP.FX_RATES[currency] || APP.FX_RATES.default;
+        const converted = value * rate;
+        const symbol = currency === 'USD' ? '$' : currency === 'CNY' ? '¥' : currency;
+        return `${symbol}${converted.toFixed(2)}`;
+    }
+
+    function formatPercent(value) {
+        const sign = value >= 0 ? '+' : '';
+        return `${sign}${value.toFixed(2)}%`;
+    }
+
+    function getRegionColor(region) {
+        const colors = {
+            'US': '#6366f1',
+            'HK': '#4ade80',
+            'JP': '#f87171',
+            'CN': '#fbbf24'
+        };
+        return colors[region] || '#64748b';
+    }
+
+    // ============ Canvas Chart Functions ============
+    function drawPie(canvasId, data) {
+        const canvas = document.getElementById(canvasId);
+        if (!canvas) return;
+
+        const ctx = canvas.getContext('2d');
+        const rect = canvas.getBoundingClientRect();
+        canvas.width = rect.width;
+        canvas.height = rect.height;
+
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+        const radius = Math.min(centerX, centerY) - 20;
+        const innerRadius = radius * 0.6;
+
+        let currentAngle = -Math.PI / 2;
+        const total = data.reduce((sum, d) => sum + d.value, 0);
+
+        data.forEach(item => {
+            const sliceAngle = (item.value / total) * 2 * Math.PI;
+
+            // Draw slice
+            ctx.fillStyle = item.color;
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radius, currentAngle, currentAngle + sliceAngle);
+            ctx.lineTo(centerX + innerRadius * Math.cos(currentAngle + sliceAngle / 2),
+                       centerY + innerRadius * Math.sin(currentAngle + sliceAngle / 2));
+            ctx.arc(centerX, centerY, innerRadius, currentAngle + sliceAngle, currentAngle, true);
+            ctx.closePath();
+            ctx.fill();
+
+            currentAngle += sliceAngle;
+        });
+
+        // Draw center text
+        ctx.fillStyle = '#e2e8f0';
+        ctx.font = 'bold 16px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(`$${total.toFixed(0)}`, centerX, centerY);
+    }
+
+    function drawLine(canvasId, data, color = '#6366f1') {
+        const canvas = document.getElementById(canvasId);
+        if (!canvas) return;
+
+        const ctx = canvas.getContext('2d');
+        const rect = canvas.getBoundingClientRect();
+        canvas.width = rect.width;
+        canvas.height = rect.height;
+
+        const padding = 40;
+        const width = canvas.width - padding * 2;
+        const height = canvas.height - padding * 2;
+
+        const values = data.map(d => d.v);
+        const minVal = Math.min(...values);
+        const maxVal = Math.max(...values);
+        const range = maxVal - minVal || 1;
+
+        // Draw gradient
+        const gradient = ctx.createLinearGradient(0, padding, 0, padding + height);
+        gradient.addColorStop(0, color + '40');
+        gradient.addColorStop(1, color + '00');
+
+        // Draw line
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+
+        data.forEach((point, i) => {
+            const x = padding + (i / (data.length - 1)) * width;
+            const y = padding + height - ((point.v - minVal) / range) * height;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        });
+
+        ctx.stroke();
+
+        // Fill area under curve
+        ctx.lineTo(padding + width, padding + height);
+        ctx.lineTo(padding, padding + height);
+        ctx.closePath();
+        ctx.fillStyle = gradient;
+        ctx.fill();
+
+        // Draw grid lines
+        ctx.strokeStyle = '#334155';
+        ctx.lineWidth = 1;
+        for (let i = 0; i <= 4; i++) {
+            const y = padding + (height / 4) * i;
+            ctx.beginPath();
+            ctx.moveTo(padding, y);
+            ctx.lineTo(padding + width, y);
+            ctx.stroke();
+        }
+
+        // Draw axes
+        ctx.strokeStyle = '#475569';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(padding, padding);
+        ctx.lineTo(padding, padding + height);
+        ctx.lineTo(padding + width, padding + height);
+        ctx.stroke();
+    }
+
+    function drawBar(canvasId, data) {
+        const canvas = document.getElementById(canvasId);
+        if (!canvas) return;
+
+        const ctx = canvas.getContext('2d');
+        const rect = canvas.getBoundingClientRect();
+        canvas.width = rect.width;
+        canvas.height = rect.height;
+
+        const padding = 40;
+        const width = canvas.width - padding * 2;
+        const height = canvas.height - padding * 2;
+
+        const values = data.map(d => d.value);
+        const minVal = Math.min(...values, 0);
+        const maxVal = Math.max(...values);
+        const range = maxVal - minVal || 1;
+
+        const barWidth = width / data.length * 0.6;
+        const barGap = width / data.length;
+
+        data.forEach((item, i) => {
+            const x = padding + (i + 0.2) * barGap;
+            const barHeight = (item.value - minVal) / range * height;
+            const y = padding + height - barHeight;
+
+            ctx.fillStyle = item.value >= 0 ? '#4ade80' : '#f87171';
+            ctx.fillRect(x, Math.min(y, padding + height), barWidth, Math.abs(barHeight));
+
+            // Label
+            ctx.fillStyle = '#cbd5e1';
+            ctx.font = '12px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(item.label, x + barWidth / 2, padding + height + 20);
+        });
+
+        // Axes
+        ctx.strokeStyle = '#475569';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(padding, padding);
+        ctx.lineTo(padding, padding + height);
+        ctx.lineTo(padding + width, padding + height);
+        ctx.stroke();
+
+        // Zero line
+        const zeroY = padding + height - ((0 - minVal) / range) * height;
+        ctx.strokeStyle = '#334155';
+        ctx.beginPath();
+        ctx.moveTo(padding, zeroY);
+        ctx.lineTo(padding + width, zeroY);
+        ctx.stroke();
+    }
+
+    function drawHBar(canvasId, data) {
+        const canvas = document.getElementById(canvasId);
+        if (!canvas) return;
+
+        const ctx = canvas.getContext('2d');
+        const rect = canvas.getBoundingClientRect();
+        canvas.width = rect.width;
+        canvas.height = rect.height;
+
+        const padding = 100;
+        const width = canvas.width - padding - 20;
+        const height = canvas.height - padding;
+        const barHeight = Math.max(20, height / data.length);
+
+        const values = data.map(d => d.value);
+        const maxVal = Math.max(...values);
+
+        data.forEach((item, i) => {
+            const y = padding + i * barHeight;
+            const barWidth = (item.value / maxVal) * width;
+
+            ctx.fillStyle = item.color || '#6366f1';
+            ctx.fillRect(padding, y, barWidth, barHeight - 5);
+
+            // Label
+            ctx.fillStyle = '#cbd5e1';
+            ctx.font = 'bold 12px sans-serif';
+            ctx.textAlign = 'right';
+            ctx.fillText(item.label, padding - 10, y + barHeight / 2);
+
+            // Value
+            ctx.fillStyle = '#94a3b8';
+            ctx.font = '11px sans-serif';
+            ctx.textAlign = 'left';
+            ctx.fillText(item.value.toFixed(2), padding + barWidth + 5, y + barHeight / 2);
+        });
+    }
+
+    // ============ Auth Functions ============
+    async function handleLogin() {
+        const username = document.getElementById('loginUsername').value;
+        const password = document.getElementById('loginPassword').value;
+        const errorEl = document.getElementById('loginError');
+
+        if (!username || !password) {
+            errorEl.textContent = '请输入用户名和密码';
+            errorEl.classList.add('show');
+            return;
+        }
+
+        try {
+            const endpoint = APP.isRegister ? '/register' : '/login';
+            const data = await apiCall(endpoint, 'POST', { username, password }, false);
+
+            APP.token = data.token;
+            APP.username = data.username;
+            localStorage.setItem('kxm_token', data.token);
+            localStorage.setItem('kxm_user', data.username);
+
+            showApp();
+        } catch (error) {
+            errorEl.textContent = APP.isRegister ? '注册失败，用户名可能已存在' : '登录失败，用户名或密码错误';
+            errorEl.classList.add('show');
+        }
+    }
+
+    function handleLogout() {
+        localStorage.removeItem('kxm_token');
+        localStorage.removeItem('kxm_user');
+        APP.token = null;
+        APP.username = null;
+        APP.isRegister = false;
+        if (APP.priceUpdateInterval) clearInterval(APP.priceUpdateInterval);
+        showLogin();
+    }
+
+    function toggleRegister() {
+        APP.isRegister = !APP.isRegister;
+        const btn = document.getElementById('toggleRegisterBtn');
+        const title = document.querySelector('.login-title');
+        const subtitle = document.querySelector('.login-subtitle');
+        const loginBtn = document.querySelector('button[data-action="login"]');
+
+        if (APP.isRegister) {
+            title.textContent = '创建账户';
+            subtitle.textContent = 'Create Your Account';
+            loginBtn.textContent = '注册';
+            btn.textContent = '已有账户？登录';
+        } else {
+            title.textContent = 'Arc Patrimony';
+            subtitle.textContent = 'Value Beyond Generations';
+            loginBtn.textContent = '登录';
+            btn.textContent = '创建新账户';
+        }
+
+        document.getElementById('loginError').classList.remove('show');
+    }
+
+    // ============ Data Fetching ============
+    async function loadHoldings() {
+        try {
+            APP.holdings = await apiCall('/holdings');
+        } catch (error) {
+            console.error('Failed to load holdings:', error);
+            APP.holdings = [];
+        }
+    }
+
+    async function loadTrades() {
+        try {
+            APP.trades = await apiCall('/trades');
+        } catch (error) {
+            console.error('Failed to load trades:', error);
+            APP.trades = [];
+        }
+    }
+
+    async function loadAlerts() {
+        try {
+            APP.alerts = await apiCall('/alerts');
+        } catch (error) {
+            console.error('Failed to load alerts:', error);
+            APP.alerts = [];
+        }
+    }
+
+    async function updatePrices() {
+        if (APP.holdings.length === 0) return;
+
+        const symbols = APP.holdings.map(h => h.symbol).join(',');
+        try {
+            const data = await apiCall(`/prices?symbols=${symbols}`);
+            APP.prices = data;
+        } catch (error) {
+            console.error('Failed to update prices:', error);
+        }
+    }
+
+    async function initializeApp() {
+        await loadHoldings();
+        await loadTrades();
+        await loadAlerts();
+        await updatePrices();
+
+        // Update prices every 30 seconds
+        if (APP.priceUpdateInterval) clearInterval(APP.priceUpdateInterval);
+        APP.priceUpdateInterval = setInterval(updatePrices, 30000);
+    }
+
+    // ============ UI Rendering ============
+    function showLogin() {
+        const root = document.getElementById('root');
+        root.innerHTML = `
+            <div class="login-screen">
+                <div class="login-card">
+                    <div class="login-logo">🌐</div>
+                    <div class="login-title">Arc Patrimony</div>
+                    <div class="login-subtitle">Value Beyond Generations</div>
+
+                    <div class="form-group">
+                        <label class="form-label">用户名</label>
+                        <input type="text" id="loginUsername" class="form-input" placeholder="输入用户名">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">密码</label>
+                        <input type="password" id="loginPassword" class="form-input" placeholder="输入密码">
+                    </div>
+
+                    <div class="form-error" id="loginError"></div>
+
+                    <div class="button-group">
+                        <button class="btn-primary" data-action="login" onclick="handleLogin()">登录</button>
+                        <button class="btn-secondary" id="toggleRegisterBtn" onclick="toggleRegister()">创建新账户</button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // Focus and allow enter key
+        setTimeout(() => {
+            const input = document.getElementById('loginUsername');
+            if (input) input.focus();
+        }, 100);
+
+        document.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && document.getElementById('loginUsername')) {
+                handleLogin();
+            }
+        }, { once: true });
+    }
+
+    async function showApp() {
+        await initializeApp();
+
+        const root = document.getElementById('root');
+        root.innerHTML = `
+            <div class="app-container">
+                <div class="app-header">
+                    <div class="app-title">Arc Patrimony</div>
+                    <div class="header-user">
+                        <div class="header-user-badge">${APP.username}</div>
+                        <button class="btn-logout" onclick="handleLogout()">登出</button>
+                    </div>
+                </div>
+
+                <div class="tabs">
+                    <div class="tab active" onclick="switchTab(0)">投资总览 <span class="tab-badge" id="holdingsBadge"></span></div>
+                    <div class="tab" onclick="switchTab(1)">行情</div>
+                    <div class="tab" onclick="switchTab(2)">交易记录</div>
+                    <div class="tab" onclick="switchTab(3)">价格提醒</div>
+                    <div class="tab" onclick="switchTab(4)">分析</div>
+                    <div class="tab" onclick="switchTab(5)">数据管理</div>
+                </div>
+
+                <div class="tab-content">
+                    <div id="tab-0"></div>
+                    <div id="tab-1" class="hidden"></div>
+                    <div id="tab-2" class="hidden"></div>
+                    <div id="tab-3" class="hidden"></div>
+                    <div id="tab-4" class="hidden"></div>
+                    <div id="tab-5" class="hidden"></div>
+                </div>
+            </div>
+
+            <div class="modal" id="tradeModal">
+                <div class="modal-content" style="position: relative;">
+                    <button class="modal-close" onclick="closeModal('tradeModal')">×</button>
+                    <div class="modal-header">新交易</div>
+                    <div class="form-group">
+                        <label class="form-label">股票代码</label>
+                        <input type="text" id="tradeSymbol" class="form-input" placeholder="例如: AAPL">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">股票名称</label>
+                        <input type="text" id="tradeName" class="form-input" placeholder="例如: Apple Inc">
+                    </div>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label class="form-label">操作类型</label>
+                            <select id="tradeType" class="form-input" style="appearance: none; padding-right: 30px;">
+                                <option value="BUY">买入</option>
+                                <option value="SELL">卖出</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">数量</label>
+                            <input type="number" id="tradeQty" class="form-input" placeholder="0" step="0.01">
+                        </div>
+                    </div>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label class="form-label">单价 (USD)</label>
+                            <input type="number" id="tradePrice" class="form-input" placeholder="0.00" step="0.01">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">费用 (USD)</label>
+                            <input type="number" id="tradeFee" class="form-input" placeholder="0.00" step="0.01">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">交易日期</label>
+                        <input type="date" id="tradeDate" class="form-input">
+                    </div>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label class="form-label">货币</label>
+                            <select id="tradeCurrency" class="form-input" style="appearance: none; padding-right: 30px;">
+                                <option value="USD">USD</option>
+                                <option value="CNY">CNY</option>
+                                <option value="JPY">JPY</option>
+                                <option value="HKD">HKD</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">市场</label>
+                            <select id="tradeMarket" class="form-input" style="appearance: none; padding-right: 30px;">
+                                <option value="STOCK">股票</option>
+                                <option value="ETF">ETF</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label class="form-label">地区</label>
+                            <select id="tradeRegion" class="form-input" style="appearance: none; padding-right: 30px;">
+                                <option value="US">US</option>
+                                <option value="HK">HK</option>
+                                <option value="JP">JP</option>
+                                <option value="CN">CN</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">属性</label>
+                            <input type="text" id="tradeAttribute" class="form-input" placeholder="例如: 科技">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">行业</label>
+                        <input type="text" id="tradeSector" class="form-input" placeholder="例如: 科技">
+                    </div>
+                    <div class="modal-buttons">
+                        <button class="btn-secondary" onclick="closeModal('tradeModal')">取消</button>
+                        <button class="btn-primary" onclick="submitTrade()">保存交易</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal" id="alertModal">
+                <div class="modal-content" style="position: relative;">
+                    <button class="modal-close" onclick="closeModal('alertModal')">×</button>
+                    <div class="modal-header">新提醒</div>
+                    <div class="form-group">
+                        <label class="form-label">股票代码</label>
+                        <input type="text" id="alertSymbol" class="form-input" placeholder="例如: AAPL">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">股票名称</label>
+                        <input type="text" id="alertName" class="form-input" placeholder="例如: Apple Inc">
+                    </div>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label class="form-label">条件</label>
+                            <select id="alertCondition" class="form-input" style="appearance: none; padding-right: 30px;">
+                                <option value="ABOVE">高于</option>
+                                <option value="BELOW">低于</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">价格 (USD)</label>
+                            <input type="number" id="alertPrice" class="form-input" placeholder="0.00" step="0.01">
+                        </div>
+                    </div>
+                    <div class="modal-buttons">
+                        <button class="btn-secondary" onclick="closeModal('alertModal')">取消</button>
+                        <button class="btn-primary" onclick="submitAlert()">创建提醒</button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        renderTab0();
+
+        // Set today's date as default
+        const today = new Date().toISOString().split('T')[0];
+        const dateInput = document.getElementById('tradeDate');
+        if (dateInput) dateInput.value = today;
+    }
+
+    function switchTab(index) {
+        // Hide all tabs
+        for (let i = 0; i < 6; i++) {
+            const tab = document.getElementById(`tab-${i}`);
+            const tabBtn = document.querySelectorAll('.tab')[i];
+            if (tab) tab.classList.add('hidden');
+            if (tabBtn) tabBtn.classList.remove('active');
+        }
+
+        // Show selected tab
+        const selectedTab = document.getElementById(`tab-${index}`);
+        const selectedBtn = document.querySelectorAll('.tab')[index];
+        if (selectedTab) selectedTab.classList.remove('hidden');
+        if (selectedBtn) selectedBtn.classList.add('active');
+
+        // Render tab content
+        switch (index) {
+            case 0: renderTab0(); break;
+            case 1: renderTab1(); break;
+            case 2: renderTab2(); break;
+            case 3: renderTab3(); break;
+            case 4: renderTab4(); break;
+            case 5: renderTab5(); break;
+        }
+    }
+
+    function renderTab0() {
+        const container = document.getElementById('tab-0');
+
+        // Calculate stats
+        const totalValue = APP.holdings.reduce((sum, h) => {
+            const price = APP.prices[h.symbol]?.price || h.avg_cost;
+            return sum + (h.qty * price * (APP.FX_RATES[h.currency] || 1));
+        }, 0);
+
+        const totalCost = APP.holdings.reduce((sum, h) => {
+            return sum + (h.qty * h.avg_cost * (APP.FX_RATES[h.currency] || 1));
+        }, 0);
+
+        const totalPL = totalValue - totalCost;
+        const totalPLPercent = totalCost > 0 ? (totalPL / totalCost) * 100 : 0;
+        const marketsCount = new Set(APP.holdings.map(h => h.region)).size;
+        const alertsCount = APP.alerts.filter(a => a.active).length;
+
+        // Update badge
+        const badge = document.getElementById('holdingsBadge');
+        if (badge) {
+            badge.textContent = APP.holdings.length > 0 ? APP.holdings.length : '';
+            badge.style.display = APP.holdings.length > 0 ? 'inline-block' : 'none';
+        }
+
+        let html = `
+            <div class="stat-cards">
+                <div class="stat-card">
+                    <div class="stat-label">总资产</div>
+                    <div class="stat-value">$${totalValue.toFixed(2)}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">总收益</div>
+                    <div class="stat-value ${totalPL >= 0 ? '' : 'price-negative'}">${totalPL >= 0 ? '+' : ''}$${totalPL.toFixed(2)}</div>
+                    <div class="stat-change ${totalPL >= 0 ? '' : 'negative'}">${formatPercent(totalPLPercent)}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">市场数量</div>
+                    <div class="stat-value">${marketsCount}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">活跃提醒</div>
+                    <div class="stat-value">${alertsCount}</div>
+                </div>
+            </div>
+
+            <div class="charts-row">
+                <div class="chart-card">
+                    <div class="chart-title">持仓分布 (按价值)</div>
+                    <canvas id="chart-pie" width="400" height="300"></canvas>
+                </div>
+                <div class="chart-card">
+                    <div class="chart-title">近60日表现</div>
+                    <canvas id="chart-line" width="400" height="300"></canvas>
+                </div>
+            </div>
+        `;
+
+        if (APP.holdings.length > 0) {
+            html += `
+                <div class="chart-card">
+                    <div class="chart-title">持仓明细</div>
+                    <table class="holdings-table">
+                        <thead>
+                            <tr>
+                                <th>代码</th>
+                                <th>名称</th>
+                                <th>地区</th>
+                                <th>属性</th>
+                                <th>当前价</th>
+                                <th>涨跌%</th>
+                                <th>持股数</th>
+                                <th>成本价</th>
+                                <th>市值</th>
+                                <th>收益</th>
+                                <th>收益%</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+
+            APP.holdings.forEach(h => {
+                const currentPrice = APP.prices[h.symbol]?.price || h.avg_cost;
+                const priceChange = APP.prices[h.symbol]?.change || 0;
+                const rate = APP.FX_RATES[h.currency] || 1;
+                const marketValue = h.qty * currentPrice * rate;
+                const costValue = h.qty * h.avg_cost * rate;
+                const pl = marketValue - costValue;
+                const plPercent = costValue > 0 ? (pl / costValue) * 100 : 0;
+
+                html += `
+                    <tr>
+                        <td class="symbol-cell">${h.symbol}</td>
+                        <td>${h.name}</td>
+                        <td><span class="region-badge">${h.region}</span></td>
+                        <td>${h.attribute || '-'}</td>
+                        <td>$${currentPrice.toFixed(2)}</td>
+                        <td class="${priceChange >= 0 ? 'price-positive' : 'price-negative'}">${formatPercent(priceChange)}</td>
+                        <td>${h.qty.toFixed(4)}</td>
+                        <td>$${h.avg_cost.toFixed(2)}</td>
+                        <td>$${marketValue.toFixed(2)}</td>
+                        <td class="${pl >= 0 ? 'price-positive' : 'price-negative'}">${pl >= 0 ? '+' : ''}$${pl.toFixed(2)}</td>
+                        <td class="${plPercent >= 0 ? 'price-positive' : 'price-negative'}">${formatPercent(plPercent)}</td>
+                    </tr>
+                `;
+            });
+
+            html += `
+                        </tbody>
+                    </table>
+                </div>
+
+                <div style="margin-top: 20px;">
+                    <div class="chart-card">
+                        <div class="chart-title">外汇汇率</div>
+                        <div class="fx-rates">
+                            <div class="fx-rate">
+                                <div class="fx-rate-label">日元/美元</div>
+                                <div class="fx-rate-value">1 JPY = ${(1 / APP.FX_RATES.JPY).toFixed(2)} USD</div>
+                            </div>
+                            <div class="fx-rate">
+                                <div class="fx-rate-label">人民币/美元</div>
+                                <div class="fx-rate-value">1 CNY = ${(1 / APP.FX_RATES.CNY).toFixed(2)} USD</div>
+                            </div>
+                            <div class="fx-rate">
+                                <div class="fx-rate-label">港币/美元</div>
+                                <div class="fx-rate-value">1 HKD = ${(1 / APP.FX_RATES.HKD).toFixed(2)} USD</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        } else {
+            html += `
+                <div class="empty-state">
+                    <div class="empty-icon">📈</div>
+                    <div class="empty-title">还没有持仓</div>
+                    <div class="empty-text">开始添加您的第一笔交易</div>
+                </div>
+            `;
+        }
+
+        container.innerHTML = html;
+
+        // Draw charts
+        if (APP.holdings.length > 0) {
+            const pieData = APP.holdings.map((h, i) => {
+                const price = APP.prices[h.symbol]?.price || h.avg_cost;
+                const value = h.qty * price * (APP.FX_RATES[h.currency] || 1);
+                const colors = ['#6366f1', '#4ade80', '#f87171', '#fbbf24', '#ec4899', '#14b8a6'];
+                return {
+                    label: h.symbol,
+                    value,
+                    color: colors[i % colors.length]
+                };
+            });
+
+            drawPie('chart-pie', pieData);
+
+            // Generate 60-day performance data
+            const lineData = [];
+            for (let i = 0; i < 60; i++) {
+                const val = Math.random() * 200 - 100;
+                lineData.push({ label: '', v: 1000 + val });
+            }
+            drawLine('chart-line', lineData, '#6366f1');
+        }
+    }
+
+    function renderTab1() {
+        const container = document.getElementById('tab-1');
+
+        let html = `
+            <div class="search-box">
+                <input type="text" id="searchInput" class="search-input" placeholder="搜索股票代码或名称...">
+            </div>
+        `;
+
+        if (APP.selectedStock) {
+            const stock = APP.selectedStock;
+            const priceData = APP.prices[stock.symbol] || {};
+
+            html += `
+                <div class="stock-detail-panel">
+                    <div class="stock-detail-header">
+                        <div class="stock-detail-info">
+                            <h2>${stock.symbol}</h2>
+                            <p>${stock.name}</p>
+                        </div>
+                        <div class="stock-detail-price">
+                            <div class="stock-detail-price-value">$${(priceData.price || stock.avg_cost).toFixed(2)}</div>
+                            <div class="stat-change ${(priceData.change || 0) >= 0 ? '' : 'negative'}">
+                                ${formatPercent(priceData.change || 0)}
+                            </div>
+                        </div>
+                    </div>
+                    <div style="position: relative; height: 200px;">
+                        <canvas id="stock-detail-chart"></canvas>
+                    </div>
+                </div>
+            `;
+
+            // Draw stock chart
+            setTimeout(() => {
+                const chartData = [];
+                for (let i = 0; i < 30; i++) {
+                    const val = Math.random() * 10 - 5;
+                    chartData.push({ label: '', v: (priceData.price || 100) + val });
+                }
+                drawLine('stock-detail-chart', chartData, '#6366f1');
+            }, 0);
+        }
+
+        if (APP.holdings.length > 0) {
+            html += `
+                <div class="stock-cards">
+            `;
+
+            APP.holdings.forEach(h => {
+                const priceData = APP.prices[h.symbol] || {};
+                const change = priceData.change || 0;
+                const price = priceData.price || h.avg_cost;
+
+                html += `
+                    <div class="stock-card" onclick="selectStock({symbol: '${h.symbol}', name: '${h.name}'})">
+                        <div class="stock-card-header">
+                            <div class="stock-card-symbol">${h.symbol}</div>
+                            <div class="stock-card-change ${change >= 0 ? 'price-positive' : 'price-negative'}">
+                                ${change >= 0 ? '+' : ''}${change.toFixed(2)}%
+                            </div>
+                        </div>
+                        <div class="stock-card-name">${h.name}</div>
+                        <div class="stock-card-price">$${price.toFixed(2)}</div>
+                    </div>
+                `;
+            });
+
+            html += `
+                </div>
+            `;
+        } else {
+            html += `
+                <div class="empty-state">
+                    <div class="empty-icon">🔍</div>
+                    <div class="empty-title">没有股票数据</div>
+                    <div class="empty-text">添加持仓后可以查看行情</div>
+                </div>
+            `;
+        }
+
+        container.innerHTML = html;
+
+        // Search functionality
+        const searchInput = document.getElementById('searchInput');
+        if (searchInput) {
+            searchInput.addEventListener('input', (e) => {
+                const query = e.target.value.toLowerCase();
+                const cards = document.querySelectorAll('.stock-card');
+                cards.forEach(card => {
+                    const text = card.textContent.toLowerCase();
+                    card.style.display = text.includes(query) ? '' : 'none';
+                });
+            });
+        }
+    }
+
+    function renderTab2() {
+        const container = document.getElementById('tab-2');
+
+        let html = `
+            <button class="btn-primary" onclick="openModal('tradeModal')" style="margin-bottom: 20px; padding: 10px 20px;">+ 新交易</button>
+        `;
+
+        if (APP.trades.length > 0) {
+            html += `
+                <table class="trades-table">
+                    <thead>
+                        <tr>
+                            <th>日期</th>
+                            <th>代码</th>
+                            <th>名称</th>
+                            <th>类型</th>
+                            <th>数量</th>
+                            <th>单价</th>
+                            <th>费用</th>
+                            <th>总额</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            // Sort trades by date descending
+            const sortedTrades = [...APP.trades].sort((a, b) => new Date(b.date) - new Date(a.date));
+
+            sortedTrades.forEach(t => {
+                const total = (t.qty * t.price) + (t.fee || 0);
+                const typeClass = t.type === 'BUY' ? 'trade-type-buy' : 'trade-type-sell';
+                const typeText = t.type === 'BUY' ? '买入' : '卖出';
+
+                html += `
+                    <tr>
+                        <td>${new Date(t.date).toLocaleDateString('zh-CN')}</td>
+                        <td class="symbol-cell">${t.symbol}</td>
+                        <td>${t.name}</td>
+                        <td class="${typeClass}"><strong>${typeText}</strong></td>
+                        <td>${t.qty.toFixed(4)}</td>
+                        <td>$${t.price.toFixed(2)}</td>
+                        <td>$${(t.fee || 0).toFixed(2)}</td>
+                        <td>$${total.toFixed(2)}</td>
+                    </tr>
+                `;
+            });
+
+            html += `
+                    </tbody>
+                </table>
+            `;
+        } else {
+            html += `
+                <div class="empty-state">
+                    <div class="empty-icon">📊</div>
+                    <div class="empty-title">还没有交易记录</div>
+                    <div class="empty-text">点击"新交易"添加您的第一笔交易</div>
+                </div>
+            `;
+        }
+
+        container.innerHTML = html;
+    }
+
+    function renderTab3() {
+        const container = document.getElementById('tab-3');
+
+        let html = `
+            <button class="btn-primary" onclick="openModal('alertModal')" style="margin-bottom: 20px; padding: 10px 20px;">+ 新提醒</button>
+        `;
+
+        if (APP.alerts.length > 0) {
+            html += `
+                <div class="alert-cards">
+            `;
+
+            APP.alerts.forEach(a => {
+                const typeText = a.condition === 'ABOVE' ? '高于' : '低于';
+                html += `
+                    <div class="alert-card">
+                        <div class="alert-card-header">
+                            <div class="alert-card-symbol">${a.symbol}</div>
+                            <button class="alert-card-close" onclick="deleteAlert('${a.id}')">×</button>
+                        </div>
+                        <div class="alert-card-condition">${a.name}</div>
+                        <div class="alert-card-condition">当价格${typeText} $${a.price.toFixed(2)}时</div>
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div class="text-sm text-muted">状态: ${a.active ? '启用' : '禁用'}</div>
+                            <div class="toggle-switch ${a.active ? 'active' : ''}" onclick="toggleAlert('${a.id}', ${!a.active})">
+                                <div class="toggle-slider"></div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            html += `
+                </div>
+            `;
+        } else {
+            html += `
+                <div class="empty-state">
+                    <div class="empty-icon">🔔</div>
+                    <div class="empty-title">还没有价格提醒</div>
+                    <div class="empty-text">点击"新提醒"创建您的第一个价格提醒</div>
+                </div>
+            `;
+        }
+
+        container.innerHTML = html;
+    }
+
+    function renderTab4() {
+        const container = document.getElementById('tab-4');
+
+        if (APP.holdings.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-icon">📈</div>
+                    <div class="empty-title">无数据可分析</div>
+                    <div class="empty-text">添加持仓后可以查看分析</div>
+                </div>
+            `;
+            return;
+        }
+
+        // Prepare data for charts
+        const sectorData = {};
+        const regionData = {};
+        const plData = [];
+
+        APP.holdings.forEach((h, i) => {
+            const price = APP.prices[h.symbol]?.price || h.avg_cost;
+            const rate = APP.FX_RATES[h.currency] || 1;
+            const value = h.qty * price * rate;
+
+            // Sector
+            const sector = h.sector || '未分类';
+            sectorData[sector] = (sectorData[sector] || 0) + value;
+
+            // Region
+            regionData[h.region] = (regionData[h.region] || 0) + value;
+
+            // P&L ranking
+            const costValue = h.qty * h.avg_cost * rate;
+            const pl = value - costValue;
+            plData.push({
+                label: h.symbol,
+                value: pl,
+                color: pl >= 0 ? '#4ade80' : '#f87171'
+            });
+        });
+
+        const sectorBars = Object.entries(sectorData).map(([label, value]) => ({
+            label: label.substring(0, 8),
+            value
+        }));
+
+        const regionPie = Object.entries(regionData).map(([label, value], i) => {
+            const colors = { 'US': '#6366f1', 'HK': '#4ade80', 'JP': '#f87171', 'CN': '#fbbf24' };
+            return {
+                label,
+                value,
+                color: colors[label] || '#64748b'
+            };
+        });
+
+        const plBars = plData.sort((a, b) => Math.abs(b.value) - Math.abs(a.value)).slice(0, 10);
+
+        const html = `
+            <div class="charts-row">
+                <div class="chart-card">
+                    <div class="chart-title">按行业分布</div>
+                    <canvas id="chart-sector" width="400" height="300"></canvas>
+                </div>
+                <div class="chart-card">
+                    <div class="chart-title">按地区分布</div>
+                    <canvas id="chart-region" width="400" height="300"></canvas>
+                </div>
+            </div>
+            <div class="chart-card">
+                <div class="chart-title">收益排名 (Top 10)</div>
+                <canvas id="chart-pl" width="800" height="400"></canvas>
+            </div>
+        `;
+
+        container.innerHTML = html;
+
+        // Draw charts
+        setTimeout(() => {
+            drawBar('chart-sector', sectorBars);
+            drawPie('chart-region', regionPie);
+            drawHBar('chart-pl', plBars);
+        }, 0);
+    }
+
+    function renderTab5() {
+        const container = document.getElementById('tab-5');
+
+        const html = `
+            <div class="data-management">
+                <div class="data-section">
+                    <div class="data-section-title">用户信息</div>
+                    <div class="user-info">
+                        <div><strong>用户名:</strong> ${APP.username}</div>
+                        <div><strong>持仓数:</strong> ${APP.holdings.length}</div>
+                        <div><strong>交易数:</strong> ${APP.trades.length}</div>
+                        <div><strong>提醒数:</strong> ${APP.alerts.length}</div>
+                    </div>
+                </div>
+
+                <div class="data-section">
+                    <div class="data-section-title">数据操作</div>
+                    <div class="data-buttons">
+                        <button class="btn-primary" onclick="exportData()">导出数据</button>
+                        <button class="btn-primary" onclick="document.getElementById('importFile').click()">导入数据</button>
+                        <input type="file" id="importFile" accept=".json" onchange="importData(event)">
+                    </div>
+                </div>
+            </div>
+        `;
+
+        container.innerHTML = html;
+    }
+
+    function openModal(modalId) {
+        const modal = document.getElementById(modalId);
+        if (modal) modal.classList.add('show');
+    }
+
+    function closeModal(modalId) {
+        const modal = document.getElementById(modalId);
+        if (modal) modal.classList.remove('show');
+    }
+
+    async function submitTrade() {
+        const symbol = document.getElementById('tradeSymbol').value;
+        const name = document.getElementById('tradeName').value;
+        const type = document.getElementById('tradeType').value;
+        const qty = parseFloat(document.getElementById('tradeQty').value);
+        const price = parseFloat(document.getElementById('tradePrice').value);
+        const fee = parseFloat(document.getElementById('tradeFee').value) || 0;
+        const date = document.getElementById('tradeDate').value;
+        const currency = document.getElementById('tradeCurrency').value;
+        const market = document.getElementById('tradeMarket').value;
+        const region = document.getElementById('tradeRegion').value;
+        const attribute = document.getElementById('tradeAttribute').value;
+        const sector = document.getElementById('tradeSector').value;
+
+        if (!symbol || !name || !qty || !price || !date) {
+            alert('请填写所有必填字段');
+            return;
+        }
+
+        try {
+            await apiCall('/trade', 'POST', {
+                symbol, name, type, qty, price, fee, date, currency, market, region, attribute, sector
+            });
+
+            await loadHoldings();
+            await loadTrades();
+            await updatePrices();
+
+            closeModal('tradeModal');
+            renderTab2();
+
+            // Reset form
+            document.getElementById('tradeSymbol').value = '';
+            document.getElementById('tradeName').value = '';
+            document.getElementById('tradeQty').value = '';
+            document.getElementById('tradePrice').value = '';
+            document.getElementById('tradeFee').value = '';
+            document.getElementById('tradeAttribute').value = '';
+            document.getElementById('tradeSector').value = '';
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('tradeDate').value = today;
+        } catch (error) {
+            alert('保存交易失败: ' + error.message);
+        }
+    }
+
+    async function submitAlert() {
+        const symbol = document.getElementById('alertSymbol').value;
+        const name = document.getElementById('alertName').value;
+        const condition = document.getElementById('alertCondition').value;
+        const price = parseFloat(document.getElementById('alertPrice').value);
+
+        if (!symbol || !name || !price) {
+            alert('请填写所有必填字段');
+            return;
+        }
+
+        try {
+            await apiCall('/alert', 'POST', { symbol, name, condition, price });
+
+            await loadAlerts();
+
+            closeModal('alertModal');
+            renderTab3();
+
+            // Reset form
+            document.getElementById('alertSymbol').value = '';
+            document.getElementById('alertName').value = '';
+            document.getElementById('alertPrice').value = '';
+        } catch (error) {
+            alert('创建提醒失败: ' + error.message);
+        }
+    }
+
+    async function toggleAlert(id, active) {
+        try {
+            await apiCall(`/alert/${id}`, 'PUT', { active });
+            await loadAlerts();
+            renderTab3();
+        } catch (error) {
+            alert('更新提醒失败: ' + error.message);
+        }
+    }
+
+    async function deleteAlert(id) {
+        if (!confirm('确定要删除这个提醒吗？')) return;
+
+        try {
+            await apiCall(`/alert/${id}`, 'DELETE');
+            await loadAlerts();
+            renderTab3();
+        } catch (error) {
+            alert('删除提醒失败: ' + error.message);
+        }
+    }
+
+    function selectStock(stock) {
+        APP.selectedStock = stock;
+        renderTab1();
+    }
+
+    async function exportData() {
+        try {
+            const data = await apiCall('/export');
+            const json = JSON.stringify(data, null, 2);
+            const blob = new Blob([json], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `kxm-data-${new Date().toISOString().split('T')[0]}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        } catch (error) {
+            alert('导出数据失败: ' + error.message);
+        }
+    }
+
+    async function importData(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        try {
+            const json = await file.text();
+            const data = JSON.parse(json);
+
+            if (!data.holdings || !Array.isArray(data.holdings)) {
+                alert('无效的数据格式');
+                return;
+            }
+
+            await apiCall('/import-holdings', 'POST', { holdings: data.holdings });
+            await loadHoldings();
+            await updatePrices();
+            renderTab0();
+
+            alert('导入成功');
+        } catch (error) {
+            alert('导入失败: ' + error.message);
+        }
+
+        event.target.value = '';
+    }
+
+    // ============ Init ============
+    window.addEventListener('load', async () => {
+        if (APP.token) {
+            showApp();
+        } else {
+            showLogin();
+        }
+    });
+</script>
+</body>
+</html>
