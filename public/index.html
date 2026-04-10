@@ -339,6 +339,10 @@
             color: #94a3b8;
             text-transform: uppercase;
             letter-spacing: 0.5px;
+            position: sticky;
+            top: 0;
+            background-color: #0f172a;
+            z-index: 10;
         }
 
         .holdings-table td {
@@ -704,6 +708,10 @@
 
         .trade-type-sell {
             color: #f87171;
+        }
+
+        .trade-type-dividend {
+            color: #fbbf24;
         }
 
         /* FX Rates */
@@ -1379,6 +1387,7 @@
                             <select id="tradeType" class="form-input" style="appearance: none; padding-right: 30px;">
                                 <option value="买入">买入</option>
                                 <option value="卖出">卖出</option>
+                                <option value="分红">分红</option>
                             </select>
                         </div>
                         <div class="form-group">
@@ -1681,7 +1690,7 @@
                         <span style="color:#94a3b8;font-size:13px;">币种:</span>
                         ${allCurrencies.map(c => `<button onclick="filterCurrency('${c}')" style="padding:4px 14px;border-radius:16px;border:1px solid ${APP.currencyFilter===c?'#6366f1':'#334155'};background:${APP.currencyFilter===c?'#6366f1':'transparent'};color:${APP.currencyFilter===c?'#fff':'#94a3b8'};cursor:pointer;font-size:12px;">${c}</button>`).join('')}
                     </div>
-                    <div style="overflow-x:auto;">
+                    <div style="overflow:auto;max-height:70vh;">
                     <table class="holdings-table" style="font-size:13px;">
                         <thead>
                             <tr>
@@ -1705,8 +1714,12 @@
                         <tbody>
             `;
 
+            // Split into active and sold
+            const activeList = enriched.filter(d => !d.isSold);
+            const soldList = enriched.filter(d => d.isSold);
+
             let filteredValue = 0, filteredCost = 0, filteredLocalValue = 0, filteredLocalCost = 0;
-            enriched.forEach(d => {
+            activeList.forEach(d => {
                 const curSym = curSym0fn(d.currency);
                 const tw = d.target_weight || 0;
                 const cw = grandTotal > 0 ? (d.mv / grandTotal * 100) : 0;
@@ -1718,25 +1731,23 @@
                 const dMV = isLocalCur0 ? d.mvLocal : d.mv;
                 const dPL = isLocalCur0 ? d.plLocal : d.pl;
 
-                const soldStyle = d.isSold ? 'opacity:0.5;' : '';
-                const soldLabel = d.isSold ? ' (已清仓)' : '';
                 html += `
-                    <tr style="${soldStyle}">
+                    <tr style="cursor:pointer;" onclick="showStockDetail('${d.symbol}')">
                         <td class="symbol-cell">${d.symbol}</td>
-                        <td>${d.name}${soldLabel}</td>
+                        <td>${d.name}</td>
                         <td><span class="region-badge">${d.region}</span></td>
                         <td>${d.currency}</td>
                         <td>${d.attribute || '-'}</td>
                         <td style="text-align:right;">${fmtNum(d.qty, 0)}</td>
                         <td style="text-align:right;">${curSym}${fmtNum(d.avg_cost)}</td>
-                        <td style="text-align:right;">${d.isSold ? '-' : curSym+fmtNum(d.currentPrice)}</td>
-                        <td class="${d.priceChange>=0?'price-positive':'price-negative'}" style="text-align:right;">${d.isSold ? '-' : formatPercent(d.priceChange)}</td>
-                        <td style="text-align:right;">${d.isSold ? '-' : dispSym0+fmtNum(dMV)}</td>
+                        <td style="text-align:right;">${curSym}${fmtNum(d.currentPrice)}</td>
+                        <td class="${d.priceChange>=0?'price-positive':'price-negative'}" style="text-align:right;">${formatPercent(d.priceChange)}</td>
+                        <td style="text-align:right;">${dispSym0}${fmtNum(dMV)}</td>
                         <td class="${dPL>=0?'price-positive':'price-negative'}" style="text-align:right;">${dPL>=0?'+':''}${dispSym0}${fmtNum(dPL)}</td>
                         <td class="${d.plPct>=0?'price-positive':'price-negative'}" style="text-align:right;">${formatPercent(d.plPct)}</td>
-                        <td style="text-align:right;">${d.isSold ? '-' : (tw > 0 ? fmtNum(tw,1)+'%' : '-')}</td>
-                        <td style="text-align:right;">${d.isSold ? '-' : fmtNum(cw,1)+'%'}</td>
-                        <td style="text-align:right;${d.isSold?'':('color:'+(Math.abs(diff)<1?'#94a3b8':diff>0?'#4ade80':'#f87171'))}">${d.isSold ? '-' : (diff>=0?'+':'')+fmtNum(diff,1)+'%'}</td>
+                        <td style="text-align:right;">${tw > 0 ? fmtNum(tw,1)+'%' : '-'}</td>
+                        <td style="text-align:right;">${fmtNum(cw,1)}%</td>
+                        <td style="text-align:right;color:${Math.abs(diff)<1?'#94a3b8':diff>0?'#4ade80':'#f87171'}">${(diff>=0?'+':'')+fmtNum(diff,1)}%</td>
                     </tr>
                 `;
             });
@@ -1747,10 +1758,14 @@
             const filteredLocalPLPct = filteredLocalCost > 0 ? (filteredLocalPL / filteredLocalCost * 100) : 0;
             const filterLabel = [APP.regionFilter!=='全部'?APP.regionFilter:'', APP.currencyFilter!=='全部'?APP.currencyFilter:''].filter(Boolean).join(' ') || '全部';
 
+            // Sold stocks realized P&L totals
+            let soldTotalPL = 0;
+            soldList.forEach(d => { soldTotalPL += (d.pl || 0); });
+
             html += `</tbody><tfoot>`;
             if (isLocalCur0) {
                 html += `<tr style="border-top:2px solid #334155;font-weight:bold;">
-                    <td colspan="5">${filterLabel} 合计 (${enriched.length}只) — ${curLabel0}</td>
+                    <td colspan="5">${filterLabel} 合计 (${activeList.length}只) — ${curLabel0}</td>
                     <td></td><td></td><td></td><td></td>
                     <td style="text-align:right;">${dispSym0}${fmtNum(filteredLocalValue)}</td>
                     <td class="${filteredLocalPL>=0?'price-positive':'price-negative'}" style="text-align:right;">${filteredLocalPL>=0?'+':''}${dispSym0}${fmtNum(filteredLocalPL)}</td>
@@ -1767,7 +1782,7 @@
                 </tr>`;
             } else {
                 html += `<tr style="border-top:2px solid #334155;font-weight:bold;">
-                    <td colspan="5">${filterLabel} 合计 (${enriched.length}只)</td>
+                    <td colspan="5">${filterLabel} 合计 (${activeList.length}只)</td>
                     <td></td><td></td><td></td><td></td>
                     <td style="text-align:right;">$${fmtNum(filteredValue)}</td>
                     <td class="${filteredPL>=0?'price-positive':'price-negative'}" style="text-align:right;">${filteredPL>=0?'+':''}$${fmtNum(filteredPL)}</td>
@@ -1776,6 +1791,34 @@
                 </tr>`;
             }
             html += `</tfoot></table></div></div>
+
+            <!-- 已清仓股票 -->
+            ${soldList.length > 0 ? `
+            <div class="chart-card" style="margin-top:16px;border-left:3px solid #f97316;">
+                <div class="chart-title" style="color:#f97316;">已清仓股票 (${soldList.length}只) — 已实现盈亏: <span class="${soldTotalPL>=0?'price-positive':'price-negative'}">${soldTotalPL>=0?'+':''}$${fmtNum(soldTotalPL)}</span></div>
+                <table class="holdings-table" style="font-size:13px;background:#1a1520;">
+                    <thead><tr>
+                        <th>代码</th><th>名称</th><th>地区</th><th>货币</th><th>属性</th>
+                        <th>持股数</th><th>平均成本</th><th>已实现收益</th><th>收益率</th>
+                    </tr></thead><tbody>
+                    ${soldList.map(d => {
+                        const curSym = curSym0fn(d.currency);
+                        const dPL = isLocalCur0 ? d.plLocal : d.pl;
+                        return `<tr style="cursor:pointer;opacity:0.85;" onclick="showStockDetail('${d.symbol}')">
+                            <td class="symbol-cell" style="color:#f97316;">${d.symbol}</td>
+                            <td>${d.name}</td>
+                            <td><span class="region-badge">${d.region}</span></td>
+                            <td>${d.currency}</td>
+                            <td>${d.attribute||'-'}</td>
+                            <td style="text-align:right;">0</td>
+                            <td style="text-align:right;">${curSym}${fmtNum(d.avg_cost)}</td>
+                            <td class="${dPL>=0?'price-positive':'price-negative'}" style="text-align:right;">${dPL>=0?'+':''}${dispSym0}${fmtNum(dPL)}</td>
+                            <td class="${d.plPct>=0?'price-positive':'price-negative'}" style="text-align:right;">${formatPercent(d.plPct)}</td>
+                        </tr>`;
+                    }).join('')}
+                    </tbody>
+                </table>
+            </div>` : ''}
 
                 <div style="margin-top: 20px;">
                     <div class="chart-card">
@@ -1918,8 +1961,8 @@
             html += `<thead><tr style="border-bottom:1px solid #334155;color:#94a3b8;font-size:12px;">`;
             html += `<th style="text-align:left;padding:8px 6px;width:14%;">代码</th>`;
             html += `<th style="text-align:left;padding:8px 6px;width:14%;">名称</th>`;
-            html += `<th style="text-align:right;padding:8px 6px;width:12%;cursor:pointer;user-select:none;" onclick="APP._tab1State.sortDir=APP._tab1State.sortDir==='desc'?'asc':'desc';renderTab1()">涨跌% ${sortArrow}</th>`;
             html += `<th style="text-align:right;padding:8px 6px;width:16%;">现价</th>`;
+            html += `<th style="text-align:right;padding:8px 6px;width:12%;cursor:pointer;user-select:none;" onclick="APP._tab1State.sortDir=APP._tab1State.sortDir==='desc'?'asc':'desc';renderTab1()">涨跌% ${sortArrow}</th>`;
             html += `<th style="text-align:left;padding:8px 6px;width:12%;">属地</th>`;
             html += `<th style="text-align:left;padding:8px 6px;width:10%;">币种</th>`;
             html += `<th style="text-align:left;padding:8px 6px;width:12%;">属性</th>`;
@@ -1932,8 +1975,8 @@
                 html += `<tr style="border-bottom:1px solid #1e293b;" class="tab1-row">`;
                 html += `<td style="padding:10px 6px;color:#e2e8f0;font-weight:600;">${d.symbol}</td>`;
                 html += `<td style="padding:10px 6px;color:#cbd5e1;">${d.name}</td>`;
-                html += `<td style="padding:10px 6px;text-align:right;color:${color};font-weight:600;">${sign}${d.change.toFixed(2)}%</td>`;
                 html += `<td style="padding:10px 6px;text-align:right;color:#e2e8f0;">${curSym}${fmtNum(d.price, 2)}</td>`;
+                html += `<td style="padding:10px 6px;text-align:right;color:${color};font-weight:600;">${sign}${d.change.toFixed(2)}%</td>`;
                 html += `<td style="padding:10px 6px;color:#94a3b8;">${d.region}</td>`;
                 html += `<td style="padding:10px 6px;color:#94a3b8;">${d.currency}</td>`;
                 html += `<td style="padding:10px 6px;color:#94a3b8;">${d.attribute||'-'}</td>`;
@@ -1989,8 +2032,9 @@
             sortedTrades.forEach(t => {
                 const total = (t.qty * t.price) + (t.fee || 0);
                 const isBuy = t.type === 'BUY' || t.type === '买入';
-                const typeClass = isBuy ? 'trade-type-buy' : 'trade-type-sell';
-                const typeText = isBuy ? '买入' : '卖出';
+                const isDividend = t.type === '分红' || t.type === 'DIVIDEND';
+                const typeClass = isDividend ? 'trade-type-dividend' : (isBuy ? 'trade-type-buy' : 'trade-type-sell');
+                const typeText = isDividend ? '分红' : (isBuy ? '买入' : '卖出');
 
                 html += `
                     <tr>
@@ -2086,23 +2130,26 @@
         const currencies = ['全部', ...new Set(APP.holdings.map(h => h.currency).filter(Boolean))];
 
         // Build enriched data
-        let data = APP.holdings.map(h => {
+        let allData = APP.holdings.map(h => {
             const currentPrice = APP.prices[h.symbol]?.price || h.avg_cost;
             const priceChange = APP.prices[h.symbol]?.change || 0;
             const rate = APP.FX_RATES[h.currency] || 1;
-            const marketValueLocal = h.qty * currentPrice;
-            const costLocal = h.qty * h.avg_cost;
-            const plLocal = marketValueLocal - costLocal;
-            const marketValueUSD = marketValueLocal * rate;
-            const costUSD = costLocal * rate;
-            const plUSD = marketValueUSD - costUSD;
-            const plPct = costUSD > 0 ? (plUSD / costUSD * 100) : 0;
-            return { ...h, currentPrice, priceChange, marketValueLocal, costLocal, plLocal, marketValueUSD, costUSD, plUSD, plPct };
+            const isSold = h.qty <= 0;
+            const marketValueLocal = isSold ? 0 : h.qty * currentPrice;
+            const costLocal = isSold ? 0 : h.qty * h.avg_cost;
+            const plLocal = isSold ? (h.realized_pl || 0) : marketValueLocal - costLocal;
+            const marketValueUSD = isSold ? 0 : marketValueLocal * rate;
+            const costUSD = isSold ? 0 : costLocal * rate;
+            const plUSD = isSold ? (h.realized_pl || 0) * rate : marketValueUSD - costUSD;
+            const plPct = isSold ? (h.realized_cost > 0 ? (h.realized_pl / h.realized_cost * 100) : 0) : (costUSD > 0 ? (plUSD / costUSD * 100) : 0);
+            return { ...h, currentPrice, priceChange, marketValueLocal, costLocal, plLocal, marketValueUSD, costUSD, plUSD, plPct, isSold };
         });
+        let data = allData.filter(d => !d.isSold);
+        let soldData = allData.filter(d => d.isSold);
 
         // Apply filters
-        if (st.regionFilter !== '全部') data = data.filter(d => d.region === st.regionFilter);
-        if (st.currencyFilter !== '全部') data = data.filter(d => d.currency === st.currencyFilter);
+        if (st.regionFilter !== '全部') { data = data.filter(d => d.region === st.regionFilter); soldData = soldData.filter(d => d.region === st.regionFilter); }
+        if (st.currencyFilter !== '全部') { data = data.filter(d => d.currency === st.currencyFilter); soldData = soldData.filter(d => d.currency === st.currencyFilter); }
 
         // Sort
         const dir = st.sortDir === 'asc' ? 1 : -1;
@@ -2169,7 +2216,7 @@
             const dMV = isLocalCur ? d.marketValueLocal : d.marketValueUSD;
             const dPL = isLocalCur ? d.plLocal : d.plUSD;
             const ds = isLocalCur ? displaySym : '$';
-            html += `<tr>
+            html += `<tr style="cursor:pointer;" onclick="showStockDetail('${d.symbol}')">
                 <td class="symbol-cell">${d.symbol}</td>
                 <td>${d.name}</td>
                 <td><span class="region-badge">${d.region}</span></td>
@@ -2235,9 +2282,41 @@
             <canvas id="chart-pl" width="800" height="400"></canvas>
         </div>`;
 
+        // Sold stocks section in analysis
+        if (soldData.length > 0) {
+            const soldTotalPL = soldData.reduce((s, d) => s + d.plUSD, 0);
+            const ds4 = isLocalCur ? displaySym : '$';
+            html += `
+            <div class="chart-card" style="margin-top:16px;border-left:3px solid #f97316;">
+                <div class="chart-title" style="color:#f97316;">已清仓股票 (${soldData.length}只) — 已实现盈亏: <span class="${soldTotalPL>=0?'price-positive':'price-negative'}">${soldTotalPL>=0?'+':''}$${fmtNum(soldTotalPL)}</span></div>
+                <table class="holdings-table" style="font-size:13px;background:#1a1520;">
+                    <thead><tr>
+                        <th>代码</th><th>名称</th><th>地区</th><th>货币</th><th>属性</th><th>行业</th>
+                        <th>平均成本</th><th>已实现收益</th><th>收益率</th>
+                    </tr></thead><tbody>
+                    ${soldData.map(d => {
+                        const cs = curSym4(d.currency);
+                        const dPL = isLocalCur ? d.plLocal : d.plUSD;
+                        return `<tr style="cursor:pointer;opacity:0.85;" onclick="showStockDetail('${d.symbol}')">
+                            <td class="symbol-cell" style="color:#f97316;">${d.symbol}</td>
+                            <td>${d.name}</td>
+                            <td><span class="region-badge">${d.region}</span></td>
+                            <td>${d.currency}</td>
+                            <td>${d.attribute||'-'}</td>
+                            <td>${d.sector||'-'}</td>
+                            <td style="text-align:right;">${cs}${fmtNum(d.avg_cost)}</td>
+                            <td class="${dPL>=0?'price-positive':'price-negative'}" style="text-align:right;">${dPL>=0?'+':''}${ds4}${fmtNum(dPL)}</td>
+                            <td class="${d.plPct>=0?'price-positive':'price-negative'}" style="text-align:right;">${formatPercent(d.plPct)}</td>
+                        </tr>`;
+                    }).join('')}
+                    </tbody>
+                </table>
+            </div>`;
+        }
+
         container.innerHTML = html;
 
-        // Charts use filtered data
+        // Charts use filtered data (active only)
         const sectorData = {}, regionData = {}, plBars = [];
         data.forEach(d => {
             const sec = d.sector || '未分类';
@@ -2293,6 +2372,122 @@
             document.body.removeChild(ta);
             alert('表格已复制到剪贴板！');
         });
+    }
+
+    // ===== 股票详情弹窗 =====
+    function showStockDetail(symbol) {
+        const holding = APP.holdings.find(h => h.symbol === symbol);
+        if (!holding) return;
+        const trades = APP.trades.filter(t => t.symbol === symbol).sort((a, b) => new Date(a.date) - new Date(b.date));
+        if (trades.length === 0) { alert('暂无该股票的交易记录'); return; }
+
+        const rate = APP.FX_RATES[holding.currency] || 1;
+        const curSym = holding.currency==='CNY'?'¥':holding.currency==='JPY'?'¥':holding.currency==='HKD'?'HK$':'$';
+        const isSold = holding.qty <= 0;
+        const currentPrice = APP.prices[symbol]?.price || holding.avg_cost;
+
+        // Calculate running position
+        let runQty = 0, totalBuyCost = 0, totalBuyQty = 0;
+        let totalSellRevenue = 0, totalSellQty = 0, totalDividend = 0;
+        const timeline = trades.map(t => {
+            const isBuy = t.type === '买入' || t.type === 'BUY';
+            const isDividend = t.type === '分红' || t.type === 'DIVIDEND';
+            if (isBuy) {
+                runQty += t.qty;
+                totalBuyCost += t.qty * t.price;
+                totalBuyQty += t.qty;
+            } else if (isDividend) {
+                totalDividend += t.qty * t.price;
+            } else {
+                runQty -= t.qty;
+                totalSellRevenue += t.qty * t.price;
+                totalSellQty += t.qty;
+            }
+            return { ...t, runQty: Math.max(0, runQty) };
+        });
+
+        const avgBuyCost = totalBuyQty > 0 ? totalBuyCost / totalBuyQty : 0;
+        const currentMV = holding.qty * currentPrice;
+        const unrealizedPL = isSold ? 0 : currentMV - (holding.qty * avgBuyCost);
+        const realizedPL = totalSellQty > 0 ? totalSellRevenue - (totalSellQty * avgBuyCost) : 0;
+        const totalPL = unrealizedPL + realizedPL + totalDividend;
+        const totalInvested = totalBuyCost;
+        const totalReturn = totalInvested > 0 ? (totalPL / totalInvested * 100) : 0;
+
+        let html = `
+        <div class="modal show" id="stockDetailModal" onclick="if(event.target===this)this.classList.remove('show')" style="z-index:1001;">
+            <div class="modal-content" style="max-width:700px;position:relative;">
+                <button class="modal-close" onclick="document.getElementById('stockDetailModal').classList.remove('show')">×</button>
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;">
+                    <div>
+                        <h2 style="color:#6366f1;margin-bottom:4px;">${holding.symbol}</h2>
+                        <div style="color:#cbd5e1;font-size:16px;">${holding.name}</div>
+                        <div style="color:#94a3b8;font-size:13px;margin-top:4px;">${holding.region} · ${holding.currency} · ${holding.attribute||''}</div>
+                    </div>
+                    <div style="text-align:right;">
+                        <div style="font-size:13px;color:#94a3b8;">${isSold ? '已清仓' : '当前持有 '+fmtNum(holding.qty,0)+' 股'}</div>
+                        ${!isSold ? `<div style="font-size:20px;font-weight:bold;color:#e2e8f0;">${curSym}${fmtNum(currentPrice)}</div>` : ''}
+                    </div>
+                </div>
+
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:16px;">
+                    <div style="background:#0f172a;border-radius:8px;padding:12px;">
+                        <div style="font-size:11px;color:#94a3b8;">总投入</div>
+                        <div style="font-size:16px;font-weight:bold;color:#e2e8f0;">${curSym}${fmtNum(totalBuyCost)}</div>
+                    </div>
+                    <div style="background:#0f172a;border-radius:8px;padding:12px;">
+                        <div style="font-size:11px;color:#94a3b8;">已实现盈亏</div>
+                        <div style="font-size:16px;font-weight:bold;" class="${realizedPL>=0?'price-positive':'price-negative'}">${realizedPL>=0?'+':''}${curSym}${fmtNum(realizedPL)}</div>
+                    </div>
+                    <div style="background:#0f172a;border-radius:8px;padding:12px;">
+                        <div style="font-size:11px;color:#94a3b8;">未实现盈亏</div>
+                        <div style="font-size:16px;font-weight:bold;" class="${unrealizedPL>=0?'price-positive':'price-negative'}">${isSold?'-':(unrealizedPL>=0?'+':'')+curSym+fmtNum(unrealizedPL)}</div>
+                    </div>
+                    <div style="background:#0f172a;border-radius:8px;padding:12px;">
+                        <div style="font-size:11px;color:#94a3b8;">分红收入</div>
+                        <div style="font-size:16px;font-weight:bold;color:#fbbf24;">${totalDividend > 0 ? '+'+curSym+fmtNum(totalDividend) : '-'}</div>
+                    </div>
+                    <div style="background:#0f172a;border-radius:8px;padding:12px;">
+                        <div style="font-size:11px;color:#94a3b8;">总收益</div>
+                        <div style="font-size:16px;font-weight:bold;" class="${totalPL>=0?'price-positive':'price-negative'}">${totalPL>=0?'+':''}${curSym}${fmtNum(totalPL)}</div>
+                    </div>
+                    <div style="background:#0f172a;border-radius:8px;padding:12px;">
+                        <div style="font-size:11px;color:#94a3b8;">总收益率</div>
+                        <div style="font-size:16px;font-weight:bold;" class="${totalReturn>=0?'price-positive':'price-negative'}">${formatPercent(totalReturn)}</div>
+                    </div>
+                </div>
+
+                <div style="font-size:14px;font-weight:600;color:#cbd5e1;margin-bottom:10px;">交易时间线</div>
+                <div style="max-height:300px;overflow-y:auto;">
+                <table class="trades-table" style="font-size:12px;">
+                    <thead><tr>
+                        <th>日期</th><th>类型</th><th>数量</th><th>单价</th><th>金额</th><th>持仓</th>
+                    </tr></thead><tbody>
+                    ${timeline.map(t => {
+                        const isBuy = t.type === '买入' || t.type === 'BUY';
+                        const isDiv = t.type === '分红' || t.type === 'DIVIDEND';
+                        const cls = isDiv ? 'trade-type-dividend' : (isBuy ? 'trade-type-buy' : 'trade-type-sell');
+                        const label = isDiv ? '分红' : (isBuy ? '买入' : '卖出');
+                        const amount = t.qty * t.price;
+                        return `<tr>
+                            <td>${new Date(t.date).toLocaleDateString('zh-CN')}</td>
+                            <td class="${cls}"><strong>${label}</strong></td>
+                            <td style="text-align:right;">${fmtNum(t.qty, isDiv ? 0 : 2)}</td>
+                            <td style="text-align:right;">${curSym}${fmtNum(t.price)}</td>
+                            <td style="text-align:right;">${curSym}${fmtNum(amount)}</td>
+                            <td style="text-align:right;">${fmtNum(t.runQty, 0)}</td>
+                        </tr>`;
+                    }).join('')}
+                    </tbody>
+                </table>
+                </div>
+            </div>
+        </div>`;
+
+        // Remove existing modal if any
+        const old = document.getElementById('stockDetailModal');
+        if (old) old.remove();
+        document.body.insertAdjacentHTML('beforeend', html);
     }
 
     // ===== 投资组合 Tab =====
