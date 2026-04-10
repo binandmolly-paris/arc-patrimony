@@ -69,6 +69,7 @@ db.exec(`
   const r = db.prepare("INSERT INTO users (username, password) VALUES (?, ?)").run("LiuBin", pw);
   const uid = r.lastInsertRowid;
   const holdings = [
+    {s:"0700.HK",n:"腾讯控股",q:1600,c:514.36,cur:"HKD",m:"香港",r:"中国",a:"进攻",sec:"科技"},
     {s:"300750.SZ",n:"宁德时代",q:1000,c:353.26,cur:"CNY",m:"深圳",r:"中国",a:"进攻",sec:"新能源"},
     {s:"1211.HK",n:"比亚迪股份",q:500,c:102.28,cur:"HKD",m:"香港",r:"中国",a:"进攻",sec:"汽车"},
     {s:"1810.HK",n:"小米集团",q:4000,c:33.22,cur:"HKD",m:"香港",r:"中国",a:"进攻",sec:"科技"},
@@ -166,10 +167,23 @@ app.post("/api/change-password", auth, (req, res) => {
   if (!oldPassword || !newPassword) return res.status(400).json({ error: "请输入旧密码和新密码" });
   if (newPassword.length < 4) return res.status(400).json({ error: "新密码至少4位" });
   const user = db.prepare("SELECT * FROM users WHERE id=?").get(req.userId);
+  if (!user) return res.status(400).json({ error: "用户不存在" });
   if (!bcrypt.compareSync(oldPassword, user.password)) return res.status(400).json({ error: "旧密码错误" });
   const hash = bcrypt.hashSync(newPassword, 10);
-  db.prepare("UPDATE users SET password=? WHERE id=?").run(hash, req.userId);
-  res.json({ ok: true });
+  const result = db.prepare("UPDATE users SET password=? WHERE id=?").run(hash, req.userId);
+  if (result.changes === 0) return res.status(500).json({ error: "密码更新失败" });
+  // Verify the update actually persisted
+  const updated = db.prepare("SELECT password FROM users WHERE id=?").get(req.userId);
+  if (!bcrypt.compareSync(newPassword, updated.password)) {
+    return res.status(500).json({ error: "密码验证失败，请重试" });
+  }
+  // Invalidate all sessions for this user so they must re-login with new password
+  const currentToken = req.headers["x-token"];
+  Object.keys(sessions).forEach(tk => {
+    if (sessions[tk].userId === req.userId && tk !== currentToken) delete sessions[tk];
+  });
+  console.log("✅ 用户 " + user.username + " 密码已成功修改");
+  res.json({ ok: true, message: "密码修改成功" });
 });
 
 // ===== 持仓目标权重 =====
