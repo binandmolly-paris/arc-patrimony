@@ -985,7 +985,7 @@
         ctx.font = 'bold 16px sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(`$${total.toFixed(0)}`, centerX, centerY);
+        ctx.fillText(`$${Number(total.toFixed(0)).toLocaleString('en-US')}`, centerX, centerY);
     }
 
     function drawLine(canvasId, data, color = '#6366f1') {
@@ -1561,15 +1561,19 @@
                     const pl = s.value - s.cost;
                     const pct = s.cost > 0 ? (pl / s.cost * 100) : 0;
                     const flag = r==='美国'?'🇺🇸':r==='中国'?'🇨🇳':r==='日本'?'🇯🇵':'🌐';
-                    return `<div class="stat-card">
-                        <div class="stat-label">${flag} ${r}资产 (${s.count}只)</div>
-                        <div class="stat-value" style="font-size:18px;">$${fmtNum(s.value)}</div>
-                        <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:12px;">
-                            <span style="color:#94a3b8;">成本 $${fmtNum(s.cost)}</span>
-                            <span class="${pl>=0?'price-positive':'price-negative'}">${pl>=0?'+':''}$${fmtNum(pl)} (${formatPercent(pct)})</span>
+                    const barColor = r==='美国'?'#6366f1':r==='中国'?'#fbbf24':'#f87171';
+                    return `<div class="stat-card" style="position:relative;">
+                        <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+                            <div class="stat-label">${flag} ${r}资产 (${s.count}只)</div>
+                            <div style="text-align:right;">
+                                <div class="${pct>=0?'price-positive':'price-negative'}" style="font-size:22px;font-weight:bold;line-height:1.1;">${formatPercent(pct)}</div>
+                                <div class="${pl>=0?'price-positive':'price-negative'}" style="font-size:12px;margin-top:2px;">${pl>=0?'+':''}$${fmtNum(pl)}</div>
+                            </div>
                         </div>
+                        <div class="stat-value" style="font-size:18px;margin-top:4px;">$${fmtNum(s.value)}</div>
+                        <div style="font-size:12px;color:#94a3b8;margin-top:2px;">成本 $${fmtNum(s.cost)}</div>
                         <div style="margin-top:6px;background:#1e293b;border-radius:4px;height:4px;overflow:hidden;">
-                            <div style="width:${Math.min(100, s.value/totalValue*100)}%;height:100%;background:${r==='美国'?'#6366f1':r==='中国'?'#fbbf24':'#f87171'};border-radius:4px;"></div>
+                            <div style="width:${Math.min(100, s.value/totalValue*100)}%;height:100%;background:${barColor};border-radius:4px;"></div>
                         </div>
                         <div style="text-align:right;font-size:11px;color:#64748b;margin-top:2px;">占比 ${fmtNum(totalValue>0?s.value/totalValue*100:0,1)}%</div>
                     </div>`;
@@ -1578,35 +1582,17 @@
 
             <div class="charts-row">
                 <div class="chart-card">
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-                        <div class="chart-title" style="margin-bottom:0;">持仓分布</div>
-                        <div style="display:flex;gap:4px;">
-                            <button onclick="APP._pieDim='region';renderTab0()" style="padding:3px 10px;border-radius:12px;border:1px solid ${(!APP._pieDim||APP._pieDim==='region')?'#6366f1':'#334155'};background:${(!APP._pieDim||APP._pieDim==='region')?'#6366f1':'transparent'};color:${(!APP._pieDim||APP._pieDim==='region')?'#fff':'#94a3b8'};cursor:pointer;font-size:11px;">按地区</button>
-                            <button onclick="APP._pieDim='currency';renderTab0()" style="padding:3px 10px;border-radius:12px;border:1px solid ${APP._pieDim==='currency'?'#6366f1':'#334155'};background:${APP._pieDim==='currency'?'#6366f1':'transparent'};color:${APP._pieDim==='currency'?'#fff':'#94a3b8'};cursor:pointer;font-size:11px;">按币种</button>
-                            <button onclick="APP._pieDim='sector';renderTab0()" style="padding:3px 10px;border-radius:12px;border:1px solid ${APP._pieDim==='sector'?'#6366f1':'#334155'};background:${APP._pieDim==='sector'?'#6366f1':'transparent'};color:${APP._pieDim==='sector'?'#fff':'#94a3b8'};cursor:pointer;font-size:11px;">按行业</button>
-                        </div>
+                    <div class="chart-title">持仓占比（按地区）</div>
+                    <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+                        <canvas id="chart-pie-region" width="280" height="260"></canvas>
+                        <div id="legend-region" style="flex:1;min-width:140px;"></div>
                     </div>
-                    <canvas id="chart-pie" width="400" height="300"></canvas>
                 </div>
                 <div class="chart-card">
-                    <div class="chart-title">浮盈亏概览</div>
-                    <div style="padding:20px 0;">
-                        ${Object.entries(regionStats).map(([r, s]) => {
-                            const pl = s.value - s.cost;
-                            const pct = s.cost > 0 ? (pl / s.cost * 100) : 0;
-                            const barW = totalValue > 0 ? Math.abs(pl) / totalValue * 300 : 0;
-                            return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
-                                <span style="width:50px;font-size:13px;color:#94a3b8;">${r}</span>
-                                <div style="flex:1;display:flex;align-items:center;gap:8px;">
-                                    <div style="width:${Math.min(200,barW)}px;height:16px;background:${pl>=0?'#4ade80':'#f87171'};border-radius:3px;"></div>
-                                    <span class="${pl>=0?'price-positive':'price-negative'}" style="font-size:13px;white-space:nowrap;">${pl>=0?'+':''}$${fmtNum(pl)} (${formatPercent(pct)})</span>
-                                </div>
-                            </div>`;
-                        }).join('')}
-                        <div style="border-top:1px solid #334155;padding-top:10px;display:flex;align-items:center;gap:10px;">
-                            <span style="width:50px;font-size:13px;font-weight:bold;color:#e2e8f0;">合计</span>
-                            <span class="${totalPL>=0?'price-positive':'price-negative'}" style="font-size:15px;font-weight:bold;">${totalPL>=0?'+':''}$${fmtNum(totalPL)} (${formatPercent(totalPLPercent)})</span>
-                        </div>
+                    <div class="chart-title">投资占比（按币种）</div>
+                    <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+                        <canvas id="chart-pie-currency" width="280" height="260"></canvas>
+                        <div id="legend-currency" style="flex:1;min-width:140px;"></div>
                     </div>
                 </div>
             </div>
@@ -1754,20 +1740,61 @@
 
         container.innerHTML = html;
 
-        // Draw pie chart based on selected dimension
+        // Draw two pie charts: region + currency
         if (APP.holdings.length > 0) {
-            const dim = APP._pieDim || 'region';
-            const grouped = {};
-            APP.holdings.forEach(h => {
-                const key = dim==='region'?h.region:dim==='currency'?h.currency:(h.sector||'未分类');
-                const p = APP.prices[h.symbol]?.price || h.avg_cost;
-                grouped[key] = (grouped[key]||0) + h.qty * p * (APP.FX_RATES[h.currency]||1);
-            });
             const colors = ['#6366f1','#4ade80','#f87171','#fbbf24','#ec4899','#14b8a6','#f97316','#8b5cf6','#06b6d4','#84cc16'];
-            const pieData = Object.entries(grouped).map(([label, value], i) => ({
+
+            // Region pie
+            const regionGrouped = {};
+            APP.holdings.forEach(h => {
+                const key = h.region || '其他';
+                const p = APP.prices[h.symbol]?.price || h.avg_cost;
+                regionGrouped[key] = (regionGrouped[key]||0) + h.qty * p * (APP.FX_RATES[h.currency]||1);
+            });
+            const regionTotal = Object.values(regionGrouped).reduce((a,b) => a+b, 0);
+            const regionPie = Object.entries(regionGrouped).map(([label, value], i) => ({
                 label, value, color: colors[i % colors.length]
             }));
-            drawPie('chart-pie', pieData);
+            drawPie('chart-pie-region', regionPie);
+            const legendR = document.getElementById('legend-region');
+            if (legendR) {
+                legendR.innerHTML = regionPie.map(d => {
+                    const pct = regionTotal > 0 ? (d.value / regionTotal * 100) : 0;
+                    return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+                        <div style="width:12px;height:12px;border-radius:3px;background:${d.color};flex-shrink:0;"></div>
+                        <div>
+                            <div style="color:#e2e8f0;font-size:13px;font-weight:600;">${d.label}</div>
+                            <div style="color:#94a3b8;font-size:12px;">$${fmtNum(d.value)} (${fmtNum(pct,1)}%)</div>
+                        </div>
+                    </div>`;
+                }).join('');
+            }
+
+            // Currency pie
+            const currencyGrouped = {};
+            APP.holdings.forEach(h => {
+                const key = h.currency || 'USD';
+                const p = APP.prices[h.symbol]?.price || h.avg_cost;
+                currencyGrouped[key] = (currencyGrouped[key]||0) + h.qty * p * (APP.FX_RATES[h.currency]||1);
+            });
+            const currencyTotal = Object.values(currencyGrouped).reduce((a,b) => a+b, 0);
+            const currencyPie = Object.entries(currencyGrouped).map(([label, value], i) => ({
+                label, value, color: colors[(i+3) % colors.length]
+            }));
+            drawPie('chart-pie-currency', currencyPie);
+            const legendC = document.getElementById('legend-currency');
+            if (legendC) {
+                legendC.innerHTML = currencyPie.map(d => {
+                    const pct = currencyTotal > 0 ? (d.value / currencyTotal * 100) : 0;
+                    return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+                        <div style="width:12px;height:12px;border-radius:3px;background:${d.color};flex-shrink:0;"></div>
+                        <div>
+                            <div style="color:#e2e8f0;font-size:13px;font-weight:600;">${d.label}</div>
+                            <div style="color:#94a3b8;font-size:12px;">$${fmtNum(d.value)} (${fmtNum(pct,1)}%)</div>
+                        </div>
+                    </div>`;
+                }).join('');
+            }
         }
     }
 
