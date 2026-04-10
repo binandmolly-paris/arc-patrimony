@@ -405,6 +405,26 @@ app.put("/api/alert/:id", auth, async (req, res) => {
   }
 });
 
+// 批量导入提醒
+app.post("/api/import-alerts", auth, async (req, res) => {
+  try {
+    const { alerts: list } = req.body;
+    if (!Array.isArray(list)) return res.status(400).json({ error: "数据格式错误" });
+    // Clear existing alerts for user first
+    await pool.query("DELETE FROM alerts WHERE user_id=$1", [req.userId]);
+    for (const a of list) {
+      await pool.query(
+        "INSERT INTO alerts (user_id,symbol,name,condition,price) VALUES ($1,$2,$3,$4,$5)",
+        [req.userId, a.symbol, a.name || "", a.condition || "低于", a.price]
+      );
+    }
+    res.json({ ok: true, count: list.length });
+  } catch (e) {
+    console.error("Import alerts error:", e.message);
+    res.status(500).json({ error: "导入提醒失败" });
+  }
+});
+
 app.delete("/api/alert/:id", auth, async (req, res) => {
   try {
     await pool.query("DELETE FROM alerts WHERE id=$1 AND user_id=$2", [req.params.id, req.userId]);
