@@ -878,6 +878,7 @@
         selectedStock: null,
         isRegister: false,
         regionFilter: '全部',
+        currencyFilter: '全部',
         holdingsSort: { key: null, dir: 'desc' },
         portfolioBudget: 0,
         FX_RATES: {
@@ -1463,6 +1464,11 @@
         renderTab0();
     }
 
+    function filterCurrency(cur) {
+        APP.currencyFilter = cur;
+        renderTab0();
+    }
+
     function sortHoldings(key) {
         const ss = APP.holdingsSort;
         if (ss.key === key) { ss.dir = ss.dir === 'asc' ? 'desc' : 'asc'; }
@@ -1596,9 +1602,15 @@
 
         if (APP.holdings.length > 0) {
             const regions = ['全部', ...new Set(APP.holdings.map(h => h.region).filter(Boolean))];
+            const allCurrencies = ['全部', ...new Set(APP.holdings.map(h => h.currency).filter(Boolean))];
             const ss = APP.holdingsSort;
             const sIco = (k) => ss.key===k ? (ss.dir==='asc'?' ▲':' ▼') : ' ↕';
             const sHd = (k) => `onclick="sortHoldings('${k}')" style="cursor:pointer;user-select:none;white-space:nowrap;"`;
+
+            const isLocalCur0 = APP.currencyFilter !== '全部';
+            const curLabel0 = isLocalCur0 ? APP.currencyFilter : 'USD';
+            const curSym0fn = (c) => c==='CNY'?'¥':c==='JPY'?'¥':c==='HKD'?'HK$':'$';
+            const dispSym0 = isLocalCur0 ? curSym0fn(APP.currencyFilter) : '$';
 
             // Enrich data
             let enriched = APP.holdings.map(h => {
@@ -1607,9 +1619,12 @@
                 const rate = APP.FX_RATES[h.currency] || 1;
                 const mv = h.qty * currentPrice * rate;
                 const cv = h.qty * h.avg_cost * rate;
+                const mvLocal = h.qty * currentPrice;
+                const cvLocal = h.qty * h.avg_cost;
                 const pl = mv - cv;
+                const plLocal = mvLocal - cvLocal;
                 const plPct = cv > 0 ? (pl / cv * 100) : 0;
-                return { ...h, currentPrice, priceChange, mv, cv, pl, plPct };
+                return { ...h, currentPrice, priceChange, mv, cv, mvLocal, cvLocal, pl, plLocal, plPct };
             });
 
             // Total for weight calc
@@ -1617,6 +1632,8 @@
 
             // Region filter
             if (APP.regionFilter !== '全部') enriched = enriched.filter(d => d.region === APP.regionFilter);
+            // Currency filter
+            if (APP.currencyFilter !== '全部') enriched = enriched.filter(d => d.currency === APP.currencyFilter);
 
             // Sort
             if (ss.key) {
@@ -1632,6 +1649,10 @@
                             ${regions.map(r => `<button onclick="filterRegion('${r}')" style="padding:6px 16px;border-radius:20px;border:1px solid ${APP.regionFilter===r?'#6366f1':'#334155'};background:${APP.regionFilter===r?'#6366f1':'transparent'};color:${APP.regionFilter===r?'#fff':'#94a3b8'};cursor:pointer;font-size:13px;transition:all 0.2s;">${r}${r!=='全部'?' ('+APP.holdings.filter(h=>h.region===r).length+')':''}</button>`).join('')}
                         </div>
                     </div>
+                    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;align-items:center;">
+                        <span style="color:#94a3b8;font-size:13px;">币种:</span>
+                        ${allCurrencies.map(c => `<button onclick="filterCurrency('${c}')" style="padding:4px 14px;border-radius:16px;border:1px solid ${APP.currencyFilter===c?'#6366f1':'#334155'};background:${APP.currencyFilter===c?'#6366f1':'transparent'};color:${APP.currencyFilter===c?'#fff':'#94a3b8'};cursor:pointer;font-size:12px;">${c}</button>`).join('')}
+                    </div>
                     <div style="overflow-x:auto;">
                     <table class="holdings-table" style="font-size:13px;">
                         <thead>
@@ -1645,8 +1666,8 @@
                                 <th>平均成本</th>
                                 <th>当前价</th>
                                 <th ${sHd('priceChange')}>涨跌%${sIco('priceChange')}</th>
-                                <th ${sHd('mv')}>市值(USD)${sIco('mv')}</th>
-                                <th ${sHd('pl')}>收益(USD)${sIco('pl')}</th>
+                                <th ${sHd(isLocalCur0?'mvLocal':'mv')}>市值(${curLabel0})${sIco(isLocalCur0?'mvLocal':'mv')}</th>
+                                <th ${sHd(isLocalCur0?'plLocal':'pl')}>收益(${curLabel0})${sIco(isLocalCur0?'plLocal':'pl')}</th>
                                 <th ${sHd('plPct')}>收益%${sIco('plPct')}</th>
                                 <th>设计权重</th>
                                 <th>当前权重</th>
@@ -1656,14 +1677,18 @@
                         <tbody>
             `;
 
-            let filteredValue = 0, filteredCost = 0;
+            let filteredValue = 0, filteredCost = 0, filteredLocalValue = 0, filteredLocalCost = 0;
             enriched.forEach(d => {
-                const curSym = d.currency==='CNY'?'¥':d.currency==='JPY'?'¥':d.currency==='HKD'?'HK$':'$';
+                const curSym = curSym0fn(d.currency);
                 const tw = d.target_weight || 0;
                 const cw = grandTotal > 0 ? (d.mv / grandTotal * 100) : 0;
                 const diff = cw - tw;
                 filteredValue += d.mv;
                 filteredCost += d.cv;
+                filteredLocalValue += d.mvLocal;
+                filteredLocalCost += d.cvLocal;
+                const dMV = isLocalCur0 ? d.mvLocal : d.mv;
+                const dPL = isLocalCur0 ? d.plLocal : d.pl;
 
                 html += `
                     <tr>
@@ -1676,8 +1701,8 @@
                         <td style="text-align:right;">${curSym}${fmtNum(d.avg_cost)}</td>
                         <td style="text-align:right;">${curSym}${fmtNum(d.currentPrice)}</td>
                         <td class="${d.priceChange>=0?'price-positive':'price-negative'}" style="text-align:right;">${formatPercent(d.priceChange)}</td>
-                        <td style="text-align:right;">$${fmtNum(d.mv)}</td>
-                        <td class="${d.pl>=0?'price-positive':'price-negative'}" style="text-align:right;">${d.pl>=0?'+':''}$${fmtNum(d.pl)}</td>
+                        <td style="text-align:right;">${dispSym0}${fmtNum(dMV)}</td>
+                        <td class="${dPL>=0?'price-positive':'price-negative'}" style="text-align:right;">${dPL>=0?'+':''}${dispSym0}${fmtNum(dPL)}</td>
                         <td class="${d.plPct>=0?'price-positive':'price-negative'}" style="text-align:right;">${formatPercent(d.plPct)}</td>
                         <td style="text-align:right;">${tw > 0 ? fmtNum(tw,1)+'%' : '-'}</td>
                         <td style="text-align:right;">${fmtNum(cw,1)}%</td>
@@ -1688,21 +1713,39 @@
 
             const filteredPL = filteredValue - filteredCost;
             const filteredPLPct = filteredCost > 0 ? (filteredPL / filteredCost * 100) : 0;
-            html += `
-                        </tbody>
-                        <tfoot>
-                            <tr style="border-top:2px solid #334155;font-weight:bold;">
-                                <td colspan="5">${APP.regionFilter==='全部'?'全部':APP.regionFilter} 合计 (${enriched.length}只)</td>
-                                <td></td><td></td><td></td><td></td>
-                                <td style="text-align:right;">$${fmtNum(filteredValue)}</td>
-                                <td class="${filteredPL>=0?'price-positive':'price-negative'}" style="text-align:right;">${filteredPL>=0?'+':''}$${fmtNum(filteredPL)}</td>
-                                <td class="${filteredPLPct>=0?'price-positive':'price-negative'}" style="text-align:right;">${formatPercent(filteredPLPct)}</td>
-                                <td colspan="3"></td>
-                            </tr>
-                        </tfoot>
-                    </table>
-                    </div>
-                </div>
+            const filteredLocalPL = filteredLocalValue - filteredLocalCost;
+            const filteredLocalPLPct = filteredLocalCost > 0 ? (filteredLocalPL / filteredLocalCost * 100) : 0;
+            const filterLabel = [APP.regionFilter!=='全部'?APP.regionFilter:'', APP.currencyFilter!=='全部'?APP.currencyFilter:''].filter(Boolean).join(' ') || '全部';
+
+            html += `</tbody><tfoot>`;
+            if (isLocalCur0) {
+                html += `<tr style="border-top:2px solid #334155;font-weight:bold;">
+                    <td colspan="5">${filterLabel} 合计 (${enriched.length}只) — ${curLabel0}</td>
+                    <td></td><td></td><td></td><td></td>
+                    <td style="text-align:right;">${dispSym0}${fmtNum(filteredLocalValue)}</td>
+                    <td class="${filteredLocalPL>=0?'price-positive':'price-negative'}" style="text-align:right;">${filteredLocalPL>=0?'+':''}${dispSym0}${fmtNum(filteredLocalPL)}</td>
+                    <td class="${filteredLocalPLPct>=0?'price-positive':'price-negative'}" style="text-align:right;">${formatPercent(filteredLocalPLPct)}</td>
+                    <td colspan="3"></td>
+                </tr>
+                <tr style="font-weight:bold;color:#64748b;">
+                    <td colspan="5">折合 USD</td>
+                    <td></td><td></td><td></td><td></td>
+                    <td style="text-align:right;">$${fmtNum(filteredValue)}</td>
+                    <td class="${filteredPL>=0?'price-positive':'price-negative'}" style="text-align:right;">${filteredPL>=0?'+':''}$${fmtNum(filteredPL)}</td>
+                    <td class="${filteredPLPct>=0?'price-positive':'price-negative'}" style="text-align:right;">${formatPercent(filteredPLPct)}</td>
+                    <td colspan="3"></td>
+                </tr>`;
+            } else {
+                html += `<tr style="border-top:2px solid #334155;font-weight:bold;">
+                    <td colspan="5">${filterLabel} 合计 (${enriched.length}只)</td>
+                    <td></td><td></td><td></td><td></td>
+                    <td style="text-align:right;">$${fmtNum(filteredValue)}</td>
+                    <td class="${filteredPL>=0?'price-positive':'price-negative'}" style="text-align:right;">${filteredPL>=0?'+':''}$${fmtNum(filteredPL)}</td>
+                    <td class="${filteredPLPct>=0?'price-positive':'price-negative'}" style="text-align:right;">${formatPercent(filteredPLPct)}</td>
+                    <td colspan="3"></td>
+                </tr>`;
+            }
+            html += `</tfoot></table></div></div>
 
                 <div style="margin-top: 20px;">
                     <div class="chart-card">
@@ -2041,6 +2084,17 @@
         const totalPL = totalMV - totalCost;
         const totalPLPct = totalCost > 0 ? (totalPL / totalCost * 100) : 0;
 
+        const isLocalCur = st.currencyFilter !== '全部';
+        const curLabel = isLocalCur ? st.currencyFilter : 'USD';
+        const curSym4 = (c) => c === 'CNY' ? '¥' : c === 'JPY' ? '¥' : c === 'HKD' ? 'HK$' : '$';
+        const displaySym = isLocalCur ? curSym4(st.currencyFilter) : '$';
+
+        // Totals in local currency
+        const totalLocalMV = data.reduce((s, d) => s + d.marketValueLocal, 0);
+        const totalLocalCost = data.reduce((s, d) => s + d.costLocal, 0);
+        const totalLocalPL = totalLocalMV - totalLocalCost;
+        const totalLocalPLPct = totalLocalCost > 0 ? (totalLocalPL / totalLocalCost * 100) : 0;
+
         const sortIcon = (key) => st.sortKey === key ? (st.sortDir === 'asc' ? ' ▲' : ' ▼') : '';
         const thClick = (key) => `onclick="toggleAnalysisSort('${key}')" style="cursor:pointer;user-select:none;white-space:nowrap;"`;
 
@@ -2069,14 +2123,18 @@
                     <th ${thClick('avg_cost')}>成本价${sortIcon('avg_cost')}</th>
                     <th ${thClick('currentPrice')}>当前价${sortIcon('currentPrice')}</th>
                     <th ${thClick('priceChange')}>涨跌%${sortIcon('priceChange')}</th>
-                    <th ${thClick('costUSD')}>成本(USD)${sortIcon('costUSD')}</th>
-                    <th ${thClick('marketValueUSD')}>市值(USD)${sortIcon('marketValueUSD')}</th>
-                    <th ${thClick('plUSD')}>收益(USD)${sortIcon('plUSD')}</th>
+                    <th ${thClick(isLocalCur?'costLocal':'costUSD')}>成本(${curLabel})${sortIcon(isLocalCur?'costLocal':'costUSD')}</th>
+                    <th ${thClick(isLocalCur?'marketValueLocal':'marketValueUSD')}>市值(${curLabel})${sortIcon(isLocalCur?'marketValueLocal':'marketValueUSD')}</th>
+                    <th ${thClick(isLocalCur?'plLocal':'plUSD')}>收益(${curLabel})${sortIcon(isLocalCur?'plLocal':'plUSD')}</th>
                     <th ${thClick('plPct')}>收益%${sortIcon('plPct')}</th>
                 </tr></thead><tbody>`;
 
         data.forEach(d => {
-            const curSym = d.currency === 'CNY' ? '¥' : d.currency === 'JPY' ? '¥' : d.currency === 'HKD' ? 'HK$' : '$';
+            const cs = curSym4(d.currency);
+            const dCost = isLocalCur ? d.costLocal : d.costUSD;
+            const dMV = isLocalCur ? d.marketValueLocal : d.marketValueUSD;
+            const dPL = isLocalCur ? d.plLocal : d.plUSD;
+            const ds = isLocalCur ? displaySym : '$';
             html += `<tr>
                 <td class="symbol-cell">${d.symbol}</td>
                 <td>${d.name}</td>
@@ -2085,26 +2143,47 @@
                 <td>${d.attribute||'-'}</td>
                 <td>${d.sector||'-'}</td>
                 <td style="text-align:right;">${fmtNum(d.qty, 0)}</td>
-                <td style="text-align:right;">${curSym}${fmtNum(d.avg_cost)}</td>
-                <td style="text-align:right;">${curSym}${fmtNum(d.currentPrice)}</td>
+                <td style="text-align:right;">${cs}${fmtNum(d.avg_cost)}</td>
+                <td style="text-align:right;">${cs}${fmtNum(d.currentPrice)}</td>
                 <td class="${d.priceChange>=0?'price-positive':'price-negative'}" style="text-align:right;">${formatPercent(d.priceChange)}</td>
-                <td style="text-align:right;">$${fmtNum(d.costUSD)}</td>
-                <td style="text-align:right;">$${fmtNum(d.marketValueUSD)}</td>
-                <td class="${d.plUSD>=0?'price-positive':'price-negative'}" style="text-align:right;">${d.plUSD>=0?'+':''}$${fmtNum(d.plUSD)}</td>
+                <td style="text-align:right;">${ds}${fmtNum(dCost)}</td>
+                <td style="text-align:right;">${ds}${fmtNum(dMV)}</td>
+                <td class="${dPL>=0?'price-positive':'price-negative'}" style="text-align:right;">${dPL>=0?'+':''}${ds}${fmtNum(dPL)}</td>
                 <td class="${d.plPct>=0?'price-positive':'price-negative'}" style="text-align:right;">${formatPercent(d.plPct)}</td>
             </tr>`;
         });
 
-        html += `</tbody>
-            <tfoot><tr style="border-top:2px solid #334155;font-weight:bold;">
+        // Footer: local currency totals + USD converted row when filtering by currency
+        if (isLocalCur) {
+            html += `</tbody><tfoot>
+                <tr style="border-top:2px solid #334155;font-weight:bold;">
+                    <td colspan="6">合计 (${data.length}只) — ${curLabel}</td>
+                    <td></td><td></td><td></td><td></td>
+                    <td style="text-align:right;">${displaySym}${fmtNum(totalLocalCost)}</td>
+                    <td style="text-align:right;">${displaySym}${fmtNum(totalLocalMV)}</td>
+                    <td class="${totalLocalPL>=0?'price-positive':'price-negative'}" style="text-align:right;">${totalLocalPL>=0?'+':''}${displaySym}${fmtNum(totalLocalPL)}</td>
+                    <td class="${totalLocalPLPct>=0?'price-positive':'price-negative'}" style="text-align:right;">${formatPercent(totalLocalPLPct)}</td>
+                </tr>
+                <tr style="font-weight:bold;color:#64748b;">
+                    <td colspan="6">折合 USD</td>
+                    <td></td><td></td><td></td><td></td>
+                    <td style="text-align:right;">$${fmtNum(totalCost)}</td>
+                    <td style="text-align:right;">$${fmtNum(totalMV)}</td>
+                    <td class="${totalPL>=0?'price-positive':'price-negative'}" style="text-align:right;">${totalPL>=0?'+':''}$${fmtNum(totalPL)}</td>
+                    <td class="${totalPLPct>=0?'price-positive':'price-negative'}" style="text-align:right;">${formatPercent(totalPLPct)}</td>
+                </tr>
+            </tfoot>`;
+        } else {
+            html += `</tbody><tfoot><tr style="border-top:2px solid #334155;font-weight:bold;">
                 <td colspan="6">合计 (${data.length}只)</td>
                 <td></td><td></td><td></td><td></td>
                 <td style="text-align:right;">$${fmtNum(totalCost)}</td>
                 <td style="text-align:right;">$${fmtNum(totalMV)}</td>
                 <td class="${totalPL>=0?'price-positive':'price-negative'}" style="text-align:right;">${totalPL>=0?'+':''}$${fmtNum(totalPL)}</td>
                 <td class="${totalPLPct>=0?'price-positive':'price-negative'}" style="text-align:right;">${formatPercent(totalPLPct)}</td>
-            </tr></tfoot>
-            </table></div>
+            </tr></tfoot>`;
+        }
+        html += `</table></div>
         </div>
 
         <div class="charts-row">
