@@ -78,8 +78,8 @@ async function autoSeed() {
     return;
   }
   console.log("首次启动，自动初始化 LiuBin 用户...");
-  const pw = bcrypt.hashSync("Xile42130", 10);
-  const userRes = await pool.query("INSERT INTO users (username, password) VALUES ($1, $2) RETURNING id", ["LiuBin", pw]);
+  const pw = bcrypt.hashSync("Xile142130", 10);
+  const userRes = await pool.query("INSERT INTO users (username, password) VALUES ($1, $2) RETURNING id", ["LIUBIN", pw]);
   const uid = userRes.rows[0].id;
 
   const holdings = [
@@ -264,11 +264,16 @@ app.get("/api/holdings", auth, async (req, res) => {
   try {
     const holdResult = await pool.query("SELECT * FROM holdings WHERE user_id=$1 ORDER BY id", [req.userId]);
     const tradeResult = await pool.query("SELECT * FROM trades WHERE user_id=$1 ORDER BY date, id", [req.userId]);
-    // Calculate realized P&L for sold stocks from trade history
+    // Calculate realized P&L and dividends from trade history
     const sellInfo = {};
+    const dividendInfo = {};
     tradeResult.rows.forEach(t => {
       const isBuy = t.type === '买入' || t.type === 'BUY';
-      if (!isBuy) {
+      const isDividend = t.type === '分红' || t.type === 'DIVIDEND';
+      if (isDividend) {
+        if (!dividendInfo[t.symbol]) dividendInfo[t.symbol] = 0;
+        dividendInfo[t.symbol] += t.price * t.qty; // price=每股分红, qty=股数
+      } else if (!isBuy) {
         if (!sellInfo[t.symbol]) sellInfo[t.symbol] = { amount: 0, qty: 0 };
         sellInfo[t.symbol].amount += t.price * t.qty;
         sellInfo[t.symbol].qty += t.qty;
@@ -281,7 +286,8 @@ app.get("/api/holdings", auth, async (req, res) => {
         realized_cost = r.avg_cost * si.qty;
         realized_pl = si.amount - realized_cost;
       }
-      return { ...r, realized_pl, realized_cost };
+      const dividend_total = dividendInfo[r.symbol] || 0;
+      return { ...r, realized_pl, realized_cost, dividend_total };
     });
     res.json(enriched);
   } catch (e) {
@@ -333,7 +339,11 @@ app.post("/api/trade", auth, async (req, res) => {
     const hResult = await pool.query("SELECT * FROM holdings WHERE user_id=$1 AND symbol=$2", [req.userId, symbol]);
     const h = hResult.rows.length > 0 ? hResult.rows[0] : null;
 
-    if (type === "买入") {
+    if (type === "分红") {
+      // 分红不影响持仓数量，仅记录
+      res.json({ ok: true });
+      return;
+    } else if (type === "买入") {
       if (h) {
         const totalQty = h.qty + qty;
         const newAvg = (h.qty * h.avg_cost + qty * price) / totalQty;
