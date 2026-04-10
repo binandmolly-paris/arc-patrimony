@@ -1270,11 +1270,54 @@
         } catch(e) { console.warn('FX rate fetch failed:', e.message); }
     }
 
+    async function seedTargetAlerts() {
+        const targets = [
+            {symbol:"BRK-B",name:"伯克希尔哈撒韦",condition:"低于",price:412},
+            {symbol:"KO",name:"可口可乐",condition:"低于",price:62},
+            {symbol:"SPGI",name:"标普全球",condition:"低于",price:335},
+            {symbol:"PG",name:"宝洁",condition:"低于",price:136},
+            {symbol:"V",name:"Visa",condition:"低于",price:247},
+            {symbol:"JNJ",name:"强生",condition:"低于",price:196},
+            {symbol:"UNH",name:"联合健康",condition:"低于",price:389},
+            {symbol:"GOOGL",name:"谷歌",condition:"低于",price:252},
+            {symbol:"MSFT",name:"微软",condition:"低于",price:298},
+            {symbol:"VOO",name:"Vanguard S&P 500",condition:"低于",price:462},
+            {symbol:"COST",name:"开市客",condition:"低于",price:845},
+            {symbol:"AAPL",name:"苹果",condition:"低于",price:201},
+            {symbol:"TSM",name:"台积电",condition:"低于",price:272},
+            {symbol:"ASML",name:"阿斯麦",condition:"低于",price:1078},
+            {symbol:"META",name:"Meta",condition:"低于",price:487},
+            {symbol:"AMZN",name:"亚马逊",condition:"低于",price:180},
+            {symbol:"NVDA",name:"英伟达",condition:"低于",price:132},
+            {symbol:"AVGO",name:"博通",condition:"低于",price:253},
+            {symbol:"NFLX",name:"Netflix",condition:"低于",price:72},
+            {symbol:"TCOM",name:"携程",condition:"低于",price:40},
+            {symbol:"PDD",name:"拼多多",condition:"低于",price:79},
+            {symbol:"BABA",name:"阿里巴巴",condition:"低于",price:97},
+            {symbol:"PANW",name:"Palo Alto",condition:"低于",price:121},
+            {symbol:"MU",name:"美光",condition:"低于",price:258},
+            {symbol:"TSLA",name:"特斯拉",condition:"低于",price:181},
+            {symbol:"PLTR",name:"Palantir",condition:"低于",price:66},
+            {symbol:"BZ=F",name:"布伦特原油",condition:"低于",price:68},
+        ];
+        try {
+            await apiCall('/import-alerts', 'POST', { alerts: targets });
+            console.log("✅ 目标价提醒已导入");
+        } catch(e) {
+            console.warn("导入提醒失败:", e.message);
+        }
+    }
+
     async function initializeApp() {
         await updateFXRates();
         await loadHoldings();
         await loadTrades();
         await loadAlerts();
+        // If no alerts exist, seed the target price alerts
+        if (APP.alerts.length === 0) {
+            await seedTargetAlerts();
+            await loadAlerts();
+        }
         await updatePrices();
         try {
             const config = await apiCall('/portfolio-config');
