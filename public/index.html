@@ -1283,7 +1283,18 @@
 
         // Update prices every 30 seconds
         if (APP.priceUpdateInterval) clearInterval(APP.priceUpdateInterval);
-        APP.priceUpdateInterval = setInterval(updatePrices, 30000);
+        APP.priceUpdateInterval = setInterval(async () => {
+            await updatePrices();
+            // Re-render current active tab with latest prices
+            const activeIdx = document.querySelector('.tab.active');
+            if (activeIdx) {
+                const tabs = document.querySelectorAll('.tab');
+                const idx = Array.from(tabs).indexOf(activeIdx);
+                if (idx === 0) renderTab0();
+                else if (idx === 1) renderTab1();
+                else if (idx === 4) renderTab4();
+            }
+        }, 30000);
 
         // Update FX rates every 10 minutes
         if (APP._fxInterval) clearInterval(APP._fxInterval);
@@ -1456,7 +1467,7 @@
                     <div class="modal-header">新提醒</div>
                     <div class="form-group">
                         <label class="form-label">股票代码</label>
-                        <input type="text" id="alertSymbol" class="form-input" placeholder="例如: AAPL">
+                        <input type="text" id="alertSymbol" class="form-input" placeholder="例如: AAPL" onblur="autoFillAlert()" style="text-transform:uppercase;">
                     </div>
                     <div class="form-group">
                         <label class="form-label">股票名称</label>
@@ -2711,6 +2722,25 @@
         }
     }
 
+    async function autoFillAlert() {
+        let sym = document.getElementById('alertSymbol').value.trim().toUpperCase();
+        if (!sym) return;
+        document.getElementById('alertSymbol').value = sym;
+        const match = APP.holdings.find(h => h.symbol.toUpperCase() === sym);
+        if (match) {
+            document.getElementById('alertName').value = match.name;
+            return;
+        }
+        try {
+            document.getElementById('alertName').value = '查询中...';
+            const data = await fetch(`${API_BASE}/stock-lookup?symbol=${encodeURIComponent(sym)}`).then(r => r.json());
+            document.getElementById('alertName').value = data.found ? data.name : '';
+            if (data.symbol && data.symbol !== sym) document.getElementById('alertSymbol').value = data.symbol;
+        } catch(e) {
+            document.getElementById('alertName').value = '';
+        }
+    }
+
     async function submitTrade() {
         const symbol = document.getElementById('tradeSymbol').value;
         const name = document.getElementById('tradeName').value;
@@ -2735,17 +2765,20 @@
                 symbol, name, type, qty, price, fee, date, currency, market, region, attribute, sector
             });
 
-            await loadHoldings();
-            await loadTrades();
+            // Reload all data in parallel then re-render
+            await Promise.all([loadHoldings(), loadTrades(), updateFXRates()]);
             await updatePrices();
 
             closeModal('tradeModal');
 
-            // Re-render all visible tabs
+            // Re-render ALL tabs to sync data
             renderTab0();
             renderTab1();
             renderTab2();
             renderTab4();
+            if (typeof renderTab5Portfolio === 'function') {
+                try { renderTab5Portfolio(); } catch(e) {}
+            }
 
             // Reset form
             document.getElementById('tradeSymbol').value = '';
