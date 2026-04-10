@@ -382,6 +382,37 @@ app.get("/api/export", auth, (req, res) => {
   res.json({ holdings, trades, alerts, exported_at: new Date().toISOString() });
 });
 
+// ===== 实时汇率 =====
+const fxRates = { JPY: 0.0067, CNY: 0.138, USD: 1, HKD: 0.128 };
+const fxPairs = ['JPYUSD=X', 'CNYUSD=X', 'HKDUSD=X'];
+
+async function fetchFXRates() {
+  for (const pair of fxPairs) {
+    try {
+      const url = `https://query1.finance.yahoo.com/v8/finance/chart/${pair}?range=1d&interval=1d`;
+      const resp = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
+      if (!resp.ok) continue;
+      const json = await resp.json();
+      const rate = json?.chart?.result?.[0]?.meta?.regularMarketPrice;
+      if (rate && rate > 0) {
+        const cur = pair.substring(0, 3);
+        fxRates[cur] = rate;
+        console.log(`汇率更新: 1 ${cur} = ${rate} USD`);
+      }
+    } catch (e) {
+      console.error("FX fetch error for", pair, e.message);
+    }
+  }
+}
+
+// Fetch on startup and every 10 minutes
+fetchFXRates();
+setInterval(fetchFXRates, 10 * 60 * 1000);
+
+app.get("/api/fx-rates", (req, res) => {
+  res.json(fxRates);
+});
+
 // ===== 启动 =====
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Arc Patrimony 服务器已启动: http://localhost:${PORT}`));
