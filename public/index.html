@@ -1341,7 +1341,7 @@
                     <div class="modal-header">新交易</div>
                     <div class="form-group">
                         <label class="form-label">股票代码</label>
-                        <input type="text" id="tradeSymbol" class="form-input" placeholder="例如: AAPL" onblur="autoFillTrade()">
+                        <input type="text" id="tradeSymbol" class="form-input" placeholder="例如: AAPL" onblur="autoFillTrade()" style="text-transform:uppercase;">
                     </div>
                     <div class="form-group">
                         <label class="form-label">股票名称</label>
@@ -1351,8 +1351,8 @@
                         <div class="form-group">
                             <label class="form-label">操作类型</label>
                             <select id="tradeType" class="form-input" style="appearance: none; padding-right: 30px;">
-                                <option value="BUY">买入</option>
-                                <option value="SELL">卖出</option>
+                                <option value="买入">买入</option>
+                                <option value="卖出">卖出</option>
                             </select>
                         </div>
                         <div class="form-group">
@@ -1954,8 +1954,9 @@
 
             sortedTrades.forEach(t => {
                 const total = (t.qty * t.price) + (t.fee || 0);
-                const typeClass = t.type === 'BUY' ? 'trade-type-buy' : 'trade-type-sell';
-                const typeText = t.type === 'BUY' ? '买入' : '卖出';
+                const isBuy = t.type === 'BUY' || t.type === '买入';
+                const typeClass = isBuy ? 'trade-type-buy' : 'trade-type-sell';
+                const typeText = isBuy ? '买入' : '卖出';
 
                 html += `
                     <tr>
@@ -2426,9 +2427,13 @@
     }
 
     function autoFillTrade() {
-        const sym = document.getElementById('tradeSymbol').value.trim().toUpperCase();
+        let sym = document.getElementById('tradeSymbol').value.trim();
         if (!sym) return;
-        // Look up from existing holdings
+        // Normalize: uppercase
+        sym = sym.toUpperCase();
+        document.getElementById('tradeSymbol').value = sym;
+
+        // Look up from existing holdings (case-insensitive)
         const match = APP.holdings.find(h => h.symbol.toUpperCase() === sym);
         if (match) {
             document.getElementById('tradeName').value = match.name;
@@ -2436,16 +2441,31 @@
             document.getElementById('tradeRegion').value = match.region;
             if (match.attribute) document.getElementById('tradeAttribute').value = match.attribute;
             if (match.sector) document.getElementById('tradeSector').value = match.sector;
-            // Set price to current market price if available, else avg_cost
             const pd = APP.prices[match.symbol];
             const price = pd && pd.price ? pd.price : match.avg_cost;
             document.getElementById('tradePrice').value = price.toFixed(2);
+            return;
+        }
+
+        // Not in holdings — detect region/currency from symbol pattern
+        if (sym.endsWith('.HK')) {
+            document.getElementById('tradeCurrency').value = 'HKD';
+            document.getElementById('tradeRegion').value = '中国';
+        } else if (sym.endsWith('.T')) {
+            document.getElementById('tradeCurrency').value = 'JPY';
+            document.getElementById('tradeRegion').value = '日本';
+        } else if (sym.endsWith('.SS') || sym.endsWith('.SZ')) {
+            document.getElementById('tradeCurrency').value = 'CNY';
+            document.getElementById('tradeRegion').value = '中国';
         } else {
-            // Not in holdings, try to get price from APP.prices (in case it was fetched)
-            const pd = APP.prices[sym];
-            if (pd && pd.price) {
-                document.getElementById('tradePrice').value = pd.price.toFixed(2);
-            }
+            document.getElementById('tradeCurrency').value = 'USD';
+            document.getElementById('tradeRegion').value = '美国';
+        }
+
+        // Try to get live price
+        const pd = APP.prices[sym];
+        if (pd && pd.price) {
+            document.getElementById('tradePrice').value = pd.price.toFixed(2);
         }
     }
 
