@@ -219,8 +219,28 @@ app.post("/api/holdings/target-weight", auth, (req, res) => {
 
 // ===== 持仓 =====
 app.get("/api/holdings", auth, (req, res) => {
-  const rows = db.prepare("SELECT * FROM holdings WHERE user_id=? AND qty>0 ORDER BY id").all(req.userId);
-  res.json(rows);
+  const rows = db.prepare("SELECT * FROM holdings WHERE user_id=? ORDER BY id").all(req.userId);
+  // Calculate realized P&L for sold stocks from trade history
+  const trades = db.prepare("SELECT * FROM trades WHERE user_id=? ORDER BY date, id").all(req.userId);
+  const sellInfo = {}; // { symbol: { totalSellAmount, totalSellQty } }
+  trades.forEach(t => {
+    const isBuy = t.type === '买入' || t.type === 'BUY';
+    if (!isBuy) {
+      if (!sellInfo[t.symbol]) sellInfo[t.symbol] = { amount: 0, qty: 0 };
+      sellInfo[t.symbol].amount += t.price * t.qty;
+      sellInfo[t.symbol].qty += t.qty;
+    }
+  });
+  const enriched = rows.map(r => {
+    const si = sellInfo[r.symbol];
+    let realized_pl = 0, realized_cost = 0;
+    if (si && si.qty > 0) {
+      realized_cost = r.avg_cost * si.qty;
+      realized_pl = si.amount - realized_cost;
+    }
+    return { ...r, realized_pl, realized_cost };
+  });
+  res.json(enriched);
 });
 
 app.post("/api/holdings", auth, (req, res) => {
@@ -289,6 +309,39 @@ app.put("/api/alert/:id", auth, (req, res) => {
 app.delete("/api/alert/:id", auth, (req, res) => {
   db.prepare("DELETE FROM alerts WHERE id=? AND user_id=?").run(req.params.id, req.userId);
   res.json({ ok: true });
+});
+
+// ===== 股票查询 (单个股票实时信息) =====
+app.get("/api/stock-lookup", async (req, res) => {
+  const symbol = (req.query.symbol || "").trim().toUpperCase();
+  if (!symbol) return res.status(400).json({ error: "请提供股票代码" });
+  try {
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=1d&interval=1d`;
+    const resp = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
+    if (!resp.ok) return res.json({ found: false });
+    const json = await resp.json();
+    const meta = json?.chart?.result?.[0]?.meta;
+    if (!meta) return res.json({ found: false });
+    // Detect region from exchange
+    const exch = (meta.exchangeName || "").toUpperCase();
+    let region = "美国", currency = meta.currency || "USD";
+    if (exch.includes("HKG") || exch.includes("HONG KONG") || symbol.endsWith(".HK")) { region = "中国"; currency = "HKD"; }
+    else if (exch.includes("TYO") || exch.includes("JPX") || exch.includes("TOKYO") || symbol.endsWith(".T")) { region = "日本"; currency = "JPY"; }
+    else if (exch.includes("SHH") || exch.includes("SHANGHAI") || symbol.endsWith(".SS")) { region = "中国"; currency = "CNY"; }
+    else if (exch.includes("SHZ") || exch.includes("SHENZHEN") || symbol.endsWith(".SZ")) { region = "中国"; currency = "CNY"; }
+    res.json({
+      found: true,
+      symbol: meta.symbol || symbol,
+      name: meta.shortName || meta.longName || symbol,
+      price: meta.regularMarketPrice || 0,
+      currency: currency,
+      region: region,
+      exchange: meta.exchangeName || ""
+    });
+  } catch (e) {
+    console.error("Stock lookup error:", e.message);
+    res.json({ found: false, error: e.message });
+  }
 });
 
 // ===== 实时股价 (Yahoo Finance v8 API) =====
