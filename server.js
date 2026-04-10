@@ -161,6 +161,48 @@ app.post("/api/logout", (req, res) => {
   res.json({ ok: true });
 });
 
+app.post("/api/change-password", auth, (req, res) => {
+  const { oldPassword, newPassword } = req.body;
+  if (!oldPassword || !newPassword) return res.status(400).json({ error: "请输入旧密码和新密码" });
+  if (newPassword.length < 4) return res.status(400).json({ error: "新密码至少4位" });
+  const user = db.prepare("SELECT * FROM users WHERE id=?").get(req.userId);
+  if (!bcrypt.compareSync(oldPassword, user.password)) return res.status(400).json({ error: "旧密码错误" });
+  const hash = bcrypt.hashSync(newPassword, 10);
+  db.prepare("UPDATE users SET password=? WHERE id=?").run(hash, req.userId);
+  res.json({ ok: true });
+});
+
+// ===== 持仓目标权重 =====
+db.exec(`CREATE TABLE IF NOT EXISTS portfolio_config (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  key TEXT NOT NULL,
+  value TEXT,
+  UNIQUE(user_id, key)
+)`);
+db.exec(`ALTER TABLE holdings ADD COLUMN target_weight REAL DEFAULT 0`).catch ? null : null;
+try { db.exec(`ALTER TABLE holdings ADD COLUMN target_weight REAL DEFAULT 0`); } catch(e) {}
+
+app.get("/api/portfolio-config", auth, (req, res) => {
+  const rows = db.prepare("SELECT key, value FROM portfolio_config WHERE user_id=?").all(req.userId);
+  const config = {};
+  rows.forEach(r => config[r.key] = r.value);
+  res.json(config);
+});
+
+app.post("/api/portfolio-config", auth, (req, res) => {
+  const { key, value } = req.body;
+  db.prepare("INSERT INTO portfolio_config (user_id,key,value) VALUES (?,?,?) ON CONFLICT(user_id,key) DO UPDATE SET value=excluded.value")
+    .run(req.userId, key, value);
+  res.json({ ok: true });
+});
+
+app.post("/api/holdings/target-weight", auth, (req, res) => {
+  const { symbol, target_weight } = req.body;
+  db.prepare("UPDATE holdings SET target_weight=? WHERE user_id=? AND symbol=?").run(target_weight || 0, req.userId, symbol);
+  res.json({ ok: true });
+});
+
 // ===== 持仓 =====
 app.get("/api/holdings", auth, (req, res) => {
   const rows = db.prepare("SELECT * FROM holdings WHERE user_id=? AND qty>0 ORDER BY id").all(req.userId);
@@ -235,12 +277,38 @@ app.delete("/api/alert/:id", auth, (req, res) => {
   res.json({ ok: true });
 });
 
-// ===== 实时股价 (Yahoo Finance) =====
-let yahooFinance;
-try { yahooFinance = require("yahoo-finance2").default; } catch (e) { console.log("yahoo-finance2 not loaded"); }
-
+// ===== 实时股价 (Yahoo Finance v8 API) =====
 const priceCache = {};
 const CACHE_TTL = 30000; // 30秒缓存
+
+async function fetchYahooQuotes(symbols) {
+  const results = {};
+  // Yahoo Finance v8 API - 逐个获取或批量
+  for (const sym of symbols) {
+    try {
+      const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?range=1d&interval=1d`;
+      const resp = await fetch(url, {
+        headers: { "User-Agent": "Mozilla/5.0" }
+      });
+      if (!resp.ok) continue;
+      const json = await resp.json();
+      const meta = json?.chart?.result?.[0]?.meta;
+      if (meta) {
+        results[sym] = {
+          price: meta.regularMarketPrice || 0,
+          prevClose: meta.chartPreviousClose || meta.previousClose || 0,
+          change: meta.chartPreviousClose ? ((meta.regularMarketPrice - meta.chartPreviousClose) / meta.chartPreviousClose * 100) : 0,
+          currency: meta.currency || "USD",
+          name: sym,
+          market: meta.exchangeName || "",
+        };
+      }
+    } catch (e) {
+      console.error("Yahoo fetch error for", sym, e.message);
+    }
+  }
+  return results;
+}
 
 app.get("/api/prices", async (req, res) => {
   const symbols = (req.query.symbols || "").split(",").filter(Boolean);
@@ -257,27 +325,15 @@ app.get("/api/prices", async (req, res) => {
     }
   });
 
-  if (toFetch.length > 0 && yahooFinance) {
+  if (toFetch.length > 0) {
     try {
-      const quotes = await yahooFinance.quote(toFetch);
-      const arr = Array.isArray(quotes) ? quotes : [quotes];
-      arr.forEach(q => {
-        if (q && q.symbol) {
-          const data = {
-            price: q.regularMarketPrice || 0,
-            prevClose: q.regularMarketPreviousClose || 0,
-            change: q.regularMarketChangePercent || 0,
-            currency: q.currency || "USD",
-            name: q.shortName || q.longName || q.symbol,
-            market: q.exchange || "",
-          };
-          priceCache[q.symbol] = { data, ts: Date.now() };
-          results[q.symbol] = data;
-        }
+      const fetched = await fetchYahooQuotes(toFetch);
+      Object.entries(fetched).forEach(([sym, data]) => {
+        priceCache[sym] = { data, ts: Date.now() };
+        results[sym] = data;
       });
     } catch (err) {
       console.error("Yahoo Finance error:", err.message);
-      // 返回已缓存的数据
     }
   }
 
