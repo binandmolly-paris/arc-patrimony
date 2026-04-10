@@ -1,5 +1,5 @@
 const express = require("express");
-const Database = require("better-sqlite3");
+const { Pool } = require("pg");
 const bcrypt = require("bcryptjs");
 const path = require("path");
 const crypto = require("crypto");
@@ -8,66 +8,80 @@ const app = express();
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
+// ===== PostgreSQL 数据库连接 =====
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false,
+});
+
 // ===== 数据库初始化 =====
-const dbPath = path.join(__dirname, ".data", "invest.db");
-const fs = require("fs");
-if (!fs.existsSync(path.join(__dirname, ".data"))) fs.mkdirSync(path.join(__dirname, ".data"));
-
-const db = new Database(dbPath);
-db.pragma("journal_mode = WAL");
-
-db.exec(`
-  CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT UNIQUE NOT NULL,
-    password TEXT NOT NULL,
-    created_at TEXT DEFAULT (datetime('now'))
-  );
-  CREATE TABLE IF NOT EXISTS holdings (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL,
-    symbol TEXT NOT NULL,
-    name TEXT,
-    qty REAL NOT NULL DEFAULT 0,
-    avg_cost REAL NOT NULL DEFAULT 0,
-    currency TEXT DEFAULT 'USD',
-    market TEXT,
-    region TEXT,
-    attribute TEXT,
-    sector TEXT,
-    UNIQUE(user_id, symbol)
-  );
-  CREATE TABLE IF NOT EXISTS trades (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL,
-    symbol TEXT NOT NULL,
-    name TEXT,
-    type TEXT NOT NULL,
-    qty REAL NOT NULL,
-    price REAL NOT NULL,
-    fee REAL DEFAULT 0,
-    date TEXT NOT NULL,
-    created_at TEXT DEFAULT (datetime('now'))
-  );
-  CREATE TABLE IF NOT EXISTS alerts (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL,
-    symbol TEXT NOT NULL,
-    name TEXT,
-    condition TEXT NOT NULL,
-    price REAL NOT NULL,
-    active INTEGER DEFAULT 1
-  );
-`);
+async function initDB() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS users (
+      id SERIAL PRIMARY KEY,
+      username TEXT UNIQUE NOT NULL,
+      password TEXT NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS holdings (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      symbol TEXT NOT NULL,
+      name TEXT,
+      qty REAL NOT NULL DEFAULT 0,
+      avg_cost REAL NOT NULL DEFAULT 0,
+      currency TEXT DEFAULT 'USD',
+      market TEXT,
+      region TEXT,
+      attribute TEXT,
+      sector TEXT,
+      target_weight REAL DEFAULT 0,
+      UNIQUE(user_id, symbol)
+    );
+    CREATE TABLE IF NOT EXISTS trades (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      symbol TEXT NOT NULL,
+      name TEXT,
+      type TEXT NOT NULL,
+      qty REAL NOT NULL,
+      price REAL NOT NULL,
+      fee REAL DEFAULT 0,
+      date TEXT NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS alerts (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      symbol TEXT NOT NULL,
+      name TEXT,
+      condition TEXT NOT NULL,
+      price REAL NOT NULL,
+      active INTEGER DEFAULT 1
+    );
+    CREATE TABLE IF NOT EXISTS portfolio_config (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      key TEXT NOT NULL,
+      value TEXT,
+      UNIQUE(user_id, key)
+    );
+  `);
+  console.log("✅ 数据库表已就绪");
+}
 
 // ===== 自动初始化 LiuBin 用户 =====
-(function autoSeed() {
-  const userCount = db.prepare("SELECT COUNT(*) as c FROM users").get().c;
-  if (userCount > 0) return console.log("数据库已有用户，跳过初始化");
+async function autoSeed() {
+  const { rows } = await pool.query("SELECT COUNT(*) as c FROM users");
+  if (parseInt(rows[0].c) > 0) {
+    console.log("数据库已有用户，跳过初始化");
+    return;
+  }
   console.log("首次启动，自动初始化 LiuBin 用户...");
   const pw = bcrypt.hashSync("Xile42130", 10);
-  const r = db.prepare("INSERT INTO users (username, password) VALUES (?, ?)").run("LiuBin", pw);
-  const uid = r.lastInsertRowid;
+  const userRes = await pool.query("INSERT INTO users (username, password) VALUES ($1, $2) RETURNING id", ["LiuBin", pw]);
+  const uid = userRes.rows[0].id;
+
   const holdings = [
     {s:"0700.HK",n:"腾讯控股",q:1600,c:514.36,cur:"HKD",m:"香港",r:"中国",a:"进攻",sec:"科技"},
     {s:"300750.SZ",n:"宁德时代",q:1000,c:353.26,cur:"CNY",m:"深圳",r:"中国",a:"进攻",sec:"新能源"},
@@ -107,18 +121,21 @@ db.exec(`
     {s:"V",n:"Visa",q:100,c:296.08,cur:"USD",m:"纽约",r:"美国",a:"防守",sec:"金融"},
     {s:"UNH",n:"联合健康",q:100,c:256.58,cur:"USD",m:"纽约",r:"美国",a:"防守",sec:"医疗"},
   ];
-  const iH = db.prepare("INSERT INTO holdings (user_id,symbol,name,qty,avg_cost,currency,market,region,attribute,sector) VALUES (?,?,?,?,?,?,?,?,?,?)");
-  const iT = db.prepare("INSERT INTO trades (user_id,symbol,name,type,qty,price,fee,date) VALUES (?,?,?,?,?,?,?,?)");
-  const tx = db.transaction(() => {
-    const today = new Date().toISOString().slice(0,10);
-    holdings.forEach(h => {
-      iH.run(uid,h.s,h.n,h.q,h.c,h.cur,h.m,h.r,h.a,h.sec);
-      iT.run(uid,h.s,h.n,"买入",h.q,h.c,0,today);
-    });
-  });
-  tx();
+
+  const today = new Date().toISOString().slice(0, 10);
+  for (const h of holdings) {
+    await pool.query(
+      `INSERT INTO holdings (user_id,symbol,name,qty,avg_cost,currency,market,region,attribute,sector)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+      [uid, h.s, h.n, h.q, h.c, h.cur, h.m, h.r, h.a, h.sec]
+    );
+    await pool.query(
+      `INSERT INTO trades (user_id,symbol,name,type,qty,price,fee,date) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+      [uid, h.s, h.n, "买入", h.q, h.c, 0, today]
+    );
+  }
   console.log("✅ 自动初始化完成: LiuBin + " + holdings.length + " 只股票");
-})();
+}
 
 // ===== 简易Session管理 =====
 const sessions = {};
@@ -135,25 +152,36 @@ function auth(req, res, next) {
 }
 
 // ===== 用户认证 =====
-app.post("/api/register", (req, res) => {
-  const { username, password } = req.body;
-  if (!username || !password) return res.status(400).json({ error: "请输入用户名和密码" });
-  if (password.length < 4) return res.status(400).json({ error: "密码至少4位" });
-  const existing = db.prepare("SELECT id FROM users WHERE username=?").get(username);
-  if (existing) return res.status(400).json({ error: "用户名已存在" });
-  const hash = bcrypt.hashSync(password, 10);
-  const result = db.prepare("INSERT INTO users (username, password) VALUES (?, ?)").run(username, hash);
-  const token = createSession(result.lastInsertRowid);
-  res.json({ token, username, userId: result.lastInsertRowid });
+app.post("/api/register", async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    if (!username || !password) return res.status(400).json({ error: "请输入用户名和密码" });
+    if (password.length < 4) return res.status(400).json({ error: "密码至少4位" });
+    const existing = await pool.query("SELECT id FROM users WHERE username=$1", [username]);
+    if (existing.rows.length > 0) return res.status(400).json({ error: "用户名已存在" });
+    const hash = bcrypt.hashSync(password, 10);
+    const result = await pool.query("INSERT INTO users (username, password) VALUES ($1, $2) RETURNING id", [username, hash]);
+    const token = createSession(result.rows[0].id);
+    res.json({ token, username, userId: result.rows[0].id });
+  } catch (e) {
+    console.error("Register error:", e.message);
+    res.status(500).json({ error: "注册失败" });
+  }
 });
 
-app.post("/api/login", (req, res) => {
-  const { username, password } = req.body;
-  const user = db.prepare("SELECT * FROM users WHERE username=?").get(username);
-  if (!user) return res.status(400).json({ error: "用户不存在" });
-  if (!bcrypt.compareSync(password, user.password)) return res.status(400).json({ error: "密码错误" });
-  const token = createSession(user.id);
-  res.json({ token, username: user.username, userId: user.id });
+app.post("/api/login", async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    const result = await pool.query("SELECT * FROM users WHERE username=$1", [username]);
+    if (result.rows.length === 0) return res.status(400).json({ error: "用户不存在" });
+    const user = result.rows[0];
+    if (!bcrypt.compareSync(password, user.password)) return res.status(400).json({ error: "密码错误" });
+    const token = createSession(user.id);
+    res.json({ token, username: user.username, userId: user.id });
+  } catch (e) {
+    console.error("Login error:", e.message);
+    res.status(500).json({ error: "登录失败" });
+  }
 });
 
 app.post("/api/logout", (req, res) => {
@@ -162,153 +190,219 @@ app.post("/api/logout", (req, res) => {
   res.json({ ok: true });
 });
 
-app.post("/api/change-password", auth, (req, res) => {
-  const { oldPassword, newPassword } = req.body;
-  if (!oldPassword || !newPassword) return res.status(400).json({ error: "请输入旧密码和新密码" });
-  if (newPassword.length < 4) return res.status(400).json({ error: "新密码至少4位" });
-  const user = db.prepare("SELECT * FROM users WHERE id=?").get(req.userId);
-  if (!user) return res.status(400).json({ error: "用户不存在" });
-  if (!bcrypt.compareSync(oldPassword, user.password)) return res.status(400).json({ error: "旧密码错误" });
-  const hash = bcrypt.hashSync(newPassword, 10);
-  const result = db.prepare("UPDATE users SET password=? WHERE id=?").run(hash, req.userId);
-  if (result.changes === 0) return res.status(500).json({ error: "密码更新失败" });
-  // Verify the update actually persisted
-  const updated = db.prepare("SELECT password FROM users WHERE id=?").get(req.userId);
-  if (!bcrypt.compareSync(newPassword, updated.password)) {
-    return res.status(500).json({ error: "密码验证失败，请重试" });
+app.post("/api/change-password", auth, async (req, res) => {
+  try {
+    const { oldPassword, newPassword } = req.body;
+    if (!oldPassword || !newPassword) return res.status(400).json({ error: "请输入旧密码和新密码" });
+    if (newPassword.length < 4) return res.status(400).json({ error: "新密码至少4位" });
+    const result = await pool.query("SELECT * FROM users WHERE id=$1", [req.userId]);
+    if (result.rows.length === 0) return res.status(400).json({ error: "用户不存在" });
+    const user = result.rows[0];
+    if (!bcrypt.compareSync(oldPassword, user.password)) return res.status(400).json({ error: "旧密码错误" });
+    const hash = bcrypt.hashSync(newPassword, 10);
+    const upd = await pool.query("UPDATE users SET password=$1 WHERE id=$2", [hash, req.userId]);
+    if (upd.rowCount === 0) return res.status(500).json({ error: "密码更新失败" });
+    // Verify the update actually persisted
+    const updated = await pool.query("SELECT password FROM users WHERE id=$1", [req.userId]);
+    if (!bcrypt.compareSync(newPassword, updated.rows[0].password)) {
+      return res.status(500).json({ error: "密码验证失败，请重试" });
+    }
+    // Invalidate all sessions for this user so they must re-login with new password
+    const currentToken = req.headers["x-token"];
+    Object.keys(sessions).forEach(tk => {
+      if (sessions[tk].userId === req.userId && tk !== currentToken) delete sessions[tk];
+    });
+    console.log("✅ 用户 " + user.username + " 密码已成功修改");
+    res.json({ ok: true, message: "密码修改成功" });
+  } catch (e) {
+    console.error("Change password error:", e.message);
+    res.status(500).json({ error: "密码修改失败" });
   }
-  // Invalidate all sessions for this user so they must re-login with new password
-  const currentToken = req.headers["x-token"];
-  Object.keys(sessions).forEach(tk => {
-    if (sessions[tk].userId === req.userId && tk !== currentToken) delete sessions[tk];
-  });
-  console.log("✅ 用户 " + user.username + " 密码已成功修改");
-  res.json({ ok: true, message: "密码修改成功" });
 });
 
 // ===== 持仓目标权重 =====
-db.exec(`CREATE TABLE IF NOT EXISTS portfolio_config (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  user_id INTEGER NOT NULL,
-  key TEXT NOT NULL,
-  value TEXT,
-  UNIQUE(user_id, key)
-)`);
-db.exec(`ALTER TABLE holdings ADD COLUMN target_weight REAL DEFAULT 0`).catch ? null : null;
-try { db.exec(`ALTER TABLE holdings ADD COLUMN target_weight REAL DEFAULT 0`); } catch(e) {}
-
-app.get("/api/portfolio-config", auth, (req, res) => {
-  const rows = db.prepare("SELECT key, value FROM portfolio_config WHERE user_id=?").all(req.userId);
-  const config = {};
-  rows.forEach(r => config[r.key] = r.value);
-  res.json(config);
+app.get("/api/portfolio-config", auth, async (req, res) => {
+  try {
+    const result = await pool.query("SELECT key, value FROM portfolio_config WHERE user_id=$1", [req.userId]);
+    const config = {};
+    result.rows.forEach(r => config[r.key] = r.value);
+    res.json(config);
+  } catch (e) {
+    console.error("Portfolio config error:", e.message);
+    res.status(500).json({ error: "获取配置失败" });
+  }
 });
 
-app.post("/api/portfolio-config", auth, (req, res) => {
-  const { key, value } = req.body;
-  db.prepare("INSERT INTO portfolio_config (user_id,key,value) VALUES (?,?,?) ON CONFLICT(user_id,key) DO UPDATE SET value=excluded.value")
-    .run(req.userId, key, value);
-  res.json({ ok: true });
+app.post("/api/portfolio-config", auth, async (req, res) => {
+  try {
+    const { key, value } = req.body;
+    await pool.query(
+      `INSERT INTO portfolio_config (user_id,key,value) VALUES ($1,$2,$3)
+       ON CONFLICT(user_id,key) DO UPDATE SET value=EXCLUDED.value`,
+      [req.userId, key, value]
+    );
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("Portfolio config save error:", e.message);
+    res.status(500).json({ error: "保存配置失败" });
+  }
 });
 
-app.post("/api/holdings/target-weight", auth, (req, res) => {
-  const { symbol, target_weight } = req.body;
-  db.prepare("UPDATE holdings SET target_weight=? WHERE user_id=? AND symbol=?").run(target_weight || 0, req.userId, symbol);
-  res.json({ ok: true });
+app.post("/api/holdings/target-weight", auth, async (req, res) => {
+  try {
+    const { symbol, target_weight } = req.body;
+    await pool.query("UPDATE holdings SET target_weight=$1 WHERE user_id=$2 AND symbol=$3", [target_weight || 0, req.userId, symbol]);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("Target weight error:", e.message);
+    res.status(500).json({ error: "更新失败" });
+  }
 });
 
 // ===== 持仓 =====
-app.get("/api/holdings", auth, (req, res) => {
-  const rows = db.prepare("SELECT * FROM holdings WHERE user_id=? ORDER BY id").all(req.userId);
-  // Calculate realized P&L for sold stocks from trade history
-  const trades = db.prepare("SELECT * FROM trades WHERE user_id=? ORDER BY date, id").all(req.userId);
-  const sellInfo = {}; // { symbol: { totalSellAmount, totalSellQty } }
-  trades.forEach(t => {
-    const isBuy = t.type === '买入' || t.type === 'BUY';
-    if (!isBuy) {
-      if (!sellInfo[t.symbol]) sellInfo[t.symbol] = { amount: 0, qty: 0 };
-      sellInfo[t.symbol].amount += t.price * t.qty;
-      sellInfo[t.symbol].qty += t.qty;
-    }
-  });
-  const enriched = rows.map(r => {
-    const si = sellInfo[r.symbol];
-    let realized_pl = 0, realized_cost = 0;
-    if (si && si.qty > 0) {
-      realized_cost = r.avg_cost * si.qty;
-      realized_pl = si.amount - realized_cost;
-    }
-    return { ...r, realized_pl, realized_cost };
-  });
-  res.json(enriched);
+app.get("/api/holdings", auth, async (req, res) => {
+  try {
+    const holdResult = await pool.query("SELECT * FROM holdings WHERE user_id=$1 ORDER BY id", [req.userId]);
+    const tradeResult = await pool.query("SELECT * FROM trades WHERE user_id=$1 ORDER BY date, id", [req.userId]);
+    // Calculate realized P&L for sold stocks from trade history
+    const sellInfo = {};
+    tradeResult.rows.forEach(t => {
+      const isBuy = t.type === '买入' || t.type === 'BUY';
+      if (!isBuy) {
+        if (!sellInfo[t.symbol]) sellInfo[t.symbol] = { amount: 0, qty: 0 };
+        sellInfo[t.symbol].amount += t.price * t.qty;
+        sellInfo[t.symbol].qty += t.qty;
+      }
+    });
+    const enriched = holdResult.rows.map(r => {
+      const si = sellInfo[r.symbol];
+      let realized_pl = 0, realized_cost = 0;
+      if (si && si.qty > 0) {
+        realized_cost = r.avg_cost * si.qty;
+        realized_pl = si.amount - realized_cost;
+      }
+      return { ...r, realized_pl, realized_cost };
+    });
+    res.json(enriched);
+  } catch (e) {
+    console.error("Holdings error:", e.message);
+    res.status(500).json({ error: "获取持仓失败" });
+  }
 });
 
-app.post("/api/holdings", auth, (req, res) => {
-  const { symbol, name, qty, avg_cost, currency, market, region, attribute, sector } = req.body;
-  db.prepare(`INSERT INTO holdings (user_id,symbol,name,qty,avg_cost,currency,market,region,attribute,sector)
-    VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT(user_id,symbol) DO UPDATE SET
-    name=excluded.name, qty=excluded.qty, avg_cost=excluded.avg_cost, currency=excluded.currency,
-    market=excluded.market, region=excluded.region, attribute=excluded.attribute, sector=excluded.sector`)
-    .run(req.userId, symbol, name, qty, avg_cost, currency || "USD", market, region, attribute, sector);
-  res.json({ ok: true });
+app.post("/api/holdings", auth, async (req, res) => {
+  try {
+    const { symbol, name, qty, avg_cost, currency, market, region, attribute, sector } = req.body;
+    await pool.query(
+      `INSERT INTO holdings (user_id,symbol,name,qty,avg_cost,currency,market,region,attribute,sector)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+       ON CONFLICT(user_id,symbol) DO UPDATE SET
+       name=EXCLUDED.name, qty=EXCLUDED.qty, avg_cost=EXCLUDED.avg_cost, currency=EXCLUDED.currency,
+       market=EXCLUDED.market, region=EXCLUDED.region, attribute=EXCLUDED.attribute, sector=EXCLUDED.sector`,
+      [req.userId, symbol, name, qty, avg_cost, currency || "USD", market, region, attribute, sector]
+    );
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("Holdings save error:", e.message);
+    res.status(500).json({ error: "保存持仓失败" });
+  }
 });
 
 // ===== 交易 =====
-app.get("/api/trades", auth, (req, res) => {
-  const rows = db.prepare("SELECT * FROM trades WHERE user_id=? ORDER BY date DESC, id DESC").all(req.userId);
-  res.json(rows);
+app.get("/api/trades", auth, async (req, res) => {
+  try {
+    const result = await pool.query("SELECT * FROM trades WHERE user_id=$1 ORDER BY date DESC, id DESC", [req.userId]);
+    res.json(result.rows);
+  } catch (e) {
+    console.error("Trades error:", e.message);
+    res.status(500).json({ error: "获取交易失败" });
+  }
 });
 
-app.post("/api/trade", auth, (req, res) => {
-  const { symbol, name, type, qty, price, fee, date, currency, market, region, attribute, sector } = req.body;
-  if (!symbol || !qty || !price || !type || !date) return res.status(400).json({ error: "请填写完整信息" });
+app.post("/api/trade", auth, async (req, res) => {
+  try {
+    const { symbol, name, type, qty, price, fee, date, currency, market, region, attribute, sector } = req.body;
+    if (!symbol || !qty || !price || !type || !date) return res.status(400).json({ error: "请填写完整信息" });
 
-  db.prepare("INSERT INTO trades (user_id,symbol,name,type,qty,price,fee,date) VALUES (?,?,?,?,?,?,?,?)")
-    .run(req.userId, symbol, name || "", type, qty, price, fee || 0, date);
+    await pool.query(
+      "INSERT INTO trades (user_id,symbol,name,type,qty,price,fee,date) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
+      [req.userId, symbol, name || "", type, qty, price, fee || 0, date]
+    );
 
-  // 更新持仓
-  const h = db.prepare("SELECT * FROM holdings WHERE user_id=? AND symbol=?").get(req.userId, symbol);
-  if (type === "买入") {
-    if (h) {
-      const totalQty = h.qty + qty;
-      const newAvg = (h.qty * h.avg_cost + qty * price) / totalQty;
-      db.prepare("UPDATE holdings SET qty=?, avg_cost=? WHERE id=?").run(totalQty, Math.round(newAvg * 100) / 100, h.id);
-    } else {
-      db.prepare(`INSERT INTO holdings (user_id,symbol,name,qty,avg_cost,currency,market,region,attribute,sector)
-        VALUES (?,?,?,?,?,?,?,?,?,?)`)
-        .run(req.userId, symbol, name || "", qty, price, currency || "USD", market || "", region || "", attribute || "", sector || "");
+    // 更新持仓
+    const hResult = await pool.query("SELECT * FROM holdings WHERE user_id=$1 AND symbol=$2", [req.userId, symbol]);
+    const h = hResult.rows.length > 0 ? hResult.rows[0] : null;
+
+    if (type === "买入") {
+      if (h) {
+        const totalQty = h.qty + qty;
+        const newAvg = (h.qty * h.avg_cost + qty * price) / totalQty;
+        await pool.query("UPDATE holdings SET qty=$1, avg_cost=$2 WHERE id=$3", [totalQty, Math.round(newAvg * 100) / 100, h.id]);
+      } else {
+        await pool.query(
+          `INSERT INTO holdings (user_id,symbol,name,qty,avg_cost,currency,market,region,attribute,sector)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+          [req.userId, symbol, name || "", qty, price, currency || "USD", market || "", region || "", attribute || "", sector || ""]
+        );
+      }
+    } else if (type === "卖出") {
+      if (h) {
+        const remain = h.qty - qty;
+        if (remain <= 0) await pool.query("UPDATE holdings SET qty=0 WHERE id=$1", [h.id]);
+        else await pool.query("UPDATE holdings SET qty=$1 WHERE id=$2", [remain, h.id]);
+      }
     }
-  } else if (type === "卖出") {
-    if (h) {
-      const remain = h.qty - qty;
-      if (remain <= 0) db.prepare("UPDATE holdings SET qty=0 WHERE id=?").run(h.id);
-      else db.prepare("UPDATE holdings SET qty=? WHERE id=?").run(remain, h.id);
-    }
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("Trade error:", e.message);
+    res.status(500).json({ error: "交易保存失败" });
   }
-  res.json({ ok: true });
 });
 
 // ===== 提醒 =====
-app.get("/api/alerts", auth, (req, res) => {
-  res.json(db.prepare("SELECT * FROM alerts WHERE user_id=?").all(req.userId));
+app.get("/api/alerts", auth, async (req, res) => {
+  try {
+    const result = await pool.query("SELECT * FROM alerts WHERE user_id=$1", [req.userId]);
+    res.json(result.rows);
+  } catch (e) {
+    console.error("Alerts error:", e.message);
+    res.status(500).json({ error: "获取提醒失败" });
+  }
 });
 
-app.post("/api/alert", auth, (req, res) => {
-  const { symbol, name, condition, price } = req.body;
-  db.prepare("INSERT INTO alerts (user_id,symbol,name,condition,price) VALUES (?,?,?,?,?)")
-    .run(req.userId, symbol, name || "", condition, price);
-  res.json({ ok: true });
+app.post("/api/alert", auth, async (req, res) => {
+  try {
+    const { symbol, name, condition, price } = req.body;
+    await pool.query(
+      "INSERT INTO alerts (user_id,symbol,name,condition,price) VALUES ($1,$2,$3,$4,$5)",
+      [req.userId, symbol, name || "", condition, price]
+    );
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("Alert save error:", e.message);
+    res.status(500).json({ error: "保存提醒失败" });
+  }
 });
 
-app.put("/api/alert/:id", auth, (req, res) => {
-  const { active } = req.body;
-  db.prepare("UPDATE alerts SET active=? WHERE id=? AND user_id=?").run(active ? 1 : 0, req.params.id, req.userId);
-  res.json({ ok: true });
+app.put("/api/alert/:id", auth, async (req, res) => {
+  try {
+    const { active } = req.body;
+    await pool.query("UPDATE alerts SET active=$1 WHERE id=$2 AND user_id=$3", [active ? 1 : 0, req.params.id, req.userId]);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("Alert update error:", e.message);
+    res.status(500).json({ error: "更新提醒失败" });
+  }
 });
 
-app.delete("/api/alert/:id", auth, (req, res) => {
-  db.prepare("DELETE FROM alerts WHERE id=? AND user_id=?").run(req.params.id, req.userId);
-  res.json({ ok: true });
+app.delete("/api/alert/:id", auth, async (req, res) => {
+  try {
+    await pool.query("DELETE FROM alerts WHERE id=$1 AND user_id=$2", [req.params.id, req.userId]);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("Alert delete error:", e.message);
+    res.status(500).json({ error: "删除提醒失败" });
+  }
 });
 
 // ===== 股票查询 (单个股票实时信息) =====
@@ -322,7 +416,6 @@ app.get("/api/stock-lookup", async (req, res) => {
     const json = await resp.json();
     const meta = json?.chart?.result?.[0]?.meta;
     if (!meta) return res.json({ found: false });
-    // Detect region from exchange
     const exch = (meta.exchangeName || "").toUpperCase();
     let region = "美国", currency = meta.currency || "USD";
     if (exch.includes("HKG") || exch.includes("HONG KONG") || symbol.endsWith(".HK")) { region = "中国"; currency = "HKD"; }
@@ -346,17 +439,14 @@ app.get("/api/stock-lookup", async (req, res) => {
 
 // ===== 实时股价 (Yahoo Finance v8 API) =====
 const priceCache = {};
-const CACHE_TTL = 30000; // 30秒缓存
+const CACHE_TTL = 30000;
 
 async function fetchYahooQuotes(symbols) {
   const results = {};
-  // Yahoo Finance v8 API - 逐个获取或批量
   for (const sym of symbols) {
     try {
       const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?range=1d&interval=1d`;
-      const resp = await fetch(url, {
-        headers: { "User-Agent": "Mozilla/5.0" }
-      });
+      const resp = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
       if (!resp.ok) continue;
       const json = await resp.json();
       const meta = json?.chart?.result?.[0]?.meta;
@@ -408,31 +498,40 @@ app.get("/api/prices", async (req, res) => {
 });
 
 // ===== 批量导入持仓 =====
-app.post("/api/import-holdings", auth, (req, res) => {
-  const { holdings: list } = req.body;
-  if (!Array.isArray(list)) return res.status(400).json({ error: "数据格式错误" });
+app.post("/api/import-holdings", auth, async (req, res) => {
+  try {
+    const { holdings: list } = req.body;
+    if (!Array.isArray(list)) return res.status(400).json({ error: "数据格式错误" });
 
-  const stmt = db.prepare(`INSERT INTO holdings (user_id,symbol,name,qty,avg_cost,currency,market,region,attribute,sector)
-    VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT(user_id,symbol) DO UPDATE SET
-    name=excluded.name, qty=excluded.qty, avg_cost=excluded.avg_cost, currency=excluded.currency,
-    market=excluded.market, region=excluded.region, attribute=excluded.attribute, sector=excluded.sector`);
-
-  const tx = db.transaction(() => {
-    list.forEach(h => {
-      stmt.run(req.userId, h.symbol, h.name || "", h.qty || 0, h.avg_cost || 0,
-        h.currency || "USD", h.market || "", h.region || "", h.attribute || "", h.sector || "");
-    });
-  });
-  tx();
-  res.json({ ok: true, count: list.length });
+    for (const h of list) {
+      await pool.query(
+        `INSERT INTO holdings (user_id,symbol,name,qty,avg_cost,currency,market,region,attribute,sector)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+         ON CONFLICT(user_id,symbol) DO UPDATE SET
+         name=EXCLUDED.name, qty=EXCLUDED.qty, avg_cost=EXCLUDED.avg_cost, currency=EXCLUDED.currency,
+         market=EXCLUDED.market, region=EXCLUDED.region, attribute=EXCLUDED.attribute, sector=EXCLUDED.sector`,
+        [req.userId, h.symbol, h.name || "", h.qty || 0, h.avg_cost || 0,
+         h.currency || "USD", h.market || "", h.region || "", h.attribute || "", h.sector || ""]
+      );
+    }
+    res.json({ ok: true, count: list.length });
+  } catch (e) {
+    console.error("Import error:", e.message);
+    res.status(500).json({ error: "导入失败" });
+  }
 });
 
 // ===== 数据导出 =====
-app.get("/api/export", auth, (req, res) => {
-  const holdings = db.prepare("SELECT symbol,name,qty,avg_cost,currency,market,region,attribute,sector FROM holdings WHERE user_id=? AND qty>0").all(req.userId);
-  const trades = db.prepare("SELECT symbol,name,type,qty,price,fee,date FROM trades WHERE user_id=?").all(req.userId);
-  const alerts = db.prepare("SELECT symbol,name,condition,price,active FROM alerts WHERE user_id=?").all(req.userId);
-  res.json({ holdings, trades, alerts, exported_at: new Date().toISOString() });
+app.get("/api/export", auth, async (req, res) => {
+  try {
+    const holdRes = await pool.query("SELECT symbol,name,qty,avg_cost,currency,market,region,attribute,sector FROM holdings WHERE user_id=$1 AND qty>0", [req.userId]);
+    const tradeRes = await pool.query("SELECT symbol,name,type,qty,price,fee,date FROM trades WHERE user_id=$1", [req.userId]);
+    const alertRes = await pool.query("SELECT symbol,name,condition,price,active FROM alerts WHERE user_id=$1", [req.userId]);
+    res.json({ holdings: holdRes.rows, trades: tradeRes.rows, alerts: alertRes.rows, exported_at: new Date().toISOString() });
+  } catch (e) {
+    console.error("Export error:", e.message);
+    res.status(500).json({ error: "导出失败" });
+  }
 });
 
 // ===== 实时汇率 =====
@@ -468,4 +567,16 @@ app.get("/api/fx-rates", (req, res) => {
 
 // ===== 启动 =====
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Arc Patrimony 服务器已启动: http://localhost:${PORT}`));
+
+async function startServer() {
+  try {
+    await initDB();
+    await autoSeed();
+    app.listen(PORT, () => console.log(`Arc Patrimony 服务器已启动: http://localhost:${PORT}`));
+  } catch (e) {
+    console.error("启动失败:", e.message);
+    process.exit(1);
+  }
+}
+
+startServer();
