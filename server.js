@@ -65,7 +65,7 @@ db.exec(`
   const userCount = db.prepare("SELECT COUNT(*) as c FROM users").get().c;
   if (userCount > 0) return console.log("数据库已有用户，跳过初始化");
   console.log("首次启动，自动初始化 LiuBin 用户...");
-  const pw = bcrypt.hashSync("123456", 10);
+  const pw = bcrypt.hashSync("Xile42130", 10);
   const r = db.prepare("INSERT INTO users (username, password) VALUES (?, ?)").run("LiuBin", pw);
   const uid = r.lastInsertRowid;
   const holdings = [
