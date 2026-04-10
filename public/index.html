@@ -878,6 +878,7 @@
         selectedStock: null,
         isRegister: false,
         regionFilter: '全部',
+        holdingsSort: { key: null, dir: 'desc' },
         portfolioBudget: 0,
         FX_RATES: {
             'JPY': 0.0067,
@@ -1466,6 +1467,13 @@
         renderTab0();
     }
 
+    function sortHoldings(key) {
+        const ss = APP.holdingsSort;
+        if (ss.key === key) { ss.dir = ss.dir === 'asc' ? 'desc' : 'asc'; }
+        else { ss.key = key; ss.dir = 'desc'; }
+        renderTab0();
+    }
+
     function switchTab(index) {
         // Hide all tabs
         for (let i = 0; i < 7; i++) {
@@ -1508,8 +1516,18 @@
 
         const totalPL = totalValue - totalCost;
         const totalPLPercent = totalCost > 0 ? (totalPL / totalCost) * 100 : 0;
-        const marketsCount = new Set(APP.holdings.map(h => h.region)).size;
-        const alertsCount = APP.alerts.filter(a => a.active).length;
+
+        // Regional breakdowns
+        const regionStats = {};
+        APP.holdings.forEach(h => {
+            const r = h.region || '其他';
+            if (!regionStats[r]) regionStats[r] = { value: 0, cost: 0, count: 0 };
+            const p = APP.prices[h.symbol]?.price || h.avg_cost;
+            const rate = APP.FX_RATES[h.currency] || 1;
+            regionStats[r].value += h.qty * p * rate;
+            regionStats[r].cost += h.qty * h.avg_cost * rate;
+            regionStats[r].count++;
+        });
 
         // Update badge
         const badge = document.getElementById('holdingsBadge');
@@ -1521,38 +1539,109 @@
         let html = `
             <div class="stat-cards">
                 <div class="stat-card">
-                    <div class="stat-label">总资产</div>
+                    <div class="stat-label">总市值</div>
                     <div class="stat-value">$${fmtNum(totalValue)}</div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-label">总收益</div>
-                    <div class="stat-value ${totalPL >= 0 ? '' : 'price-negative'}">${totalPL >= 0 ? '+' : ''}$${fmtNum(totalPL)}</div>
-                    <div class="stat-change ${totalPL >= 0 ? '' : 'negative'}">${formatPercent(totalPLPercent)}</div>
+                    <div class="stat-label">总成本</div>
+                    <div class="stat-value">$${fmtNum(totalCost)}</div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-label">市场数量</div>
-                    <div class="stat-value">${marketsCount}</div>
+                    <div class="stat-label">浮盈亏</div>
+                    <div class="stat-value ${totalPL >= 0 ? 'price-positive' : 'price-negative'}">${totalPL >= 0 ? '+' : ''}$${fmtNum(totalPL)}</div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-label">活跃提醒</div>
-                    <div class="stat-value">${alertsCount}</div>
+                    <div class="stat-label">收益率</div>
+                    <div class="stat-value ${totalPLPercent >= 0 ? 'price-positive' : 'price-negative'}">${formatPercent(totalPLPercent)}</div>
                 </div>
+            </div>
+
+            <div class="stat-cards" style="margin-top:12px;">
+                ${Object.entries(regionStats).map(([r, s]) => {
+                    const pl = s.value - s.cost;
+                    const pct = s.cost > 0 ? (pl / s.cost * 100) : 0;
+                    const flag = r==='美国'?'🇺🇸':r==='中国'?'🇨🇳':r==='日本'?'🇯🇵':'🌐';
+                    return `<div class="stat-card">
+                        <div class="stat-label">${flag} ${r}资产 (${s.count}只)</div>
+                        <div class="stat-value" style="font-size:18px;">$${fmtNum(s.value)}</div>
+                        <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:12px;">
+                            <span style="color:#94a3b8;">成本 $${fmtNum(s.cost)}</span>
+                            <span class="${pl>=0?'price-positive':'price-negative'}">${pl>=0?'+':''}$${fmtNum(pl)} (${formatPercent(pct)})</span>
+                        </div>
+                        <div style="margin-top:6px;background:#1e293b;border-radius:4px;height:4px;overflow:hidden;">
+                            <div style="width:${Math.min(100, s.value/totalValue*100)}%;height:100%;background:${r==='美国'?'#6366f1':r==='中国'?'#fbbf24':'#f87171'};border-radius:4px;"></div>
+                        </div>
+                        <div style="text-align:right;font-size:11px;color:#64748b;margin-top:2px;">占比 ${fmtNum(totalValue>0?s.value/totalValue*100:0,1)}%</div>
+                    </div>`;
+                }).join('')}
             </div>
 
             <div class="charts-row">
                 <div class="chart-card">
-                    <div class="chart-title">持仓分布 (按价值)</div>
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                        <div class="chart-title" style="margin-bottom:0;">持仓分布</div>
+                        <div style="display:flex;gap:4px;">
+                            <button onclick="APP._pieDim='region';renderTab0()" style="padding:3px 10px;border-radius:12px;border:1px solid ${(!APP._pieDim||APP._pieDim==='region')?'#6366f1':'#334155'};background:${(!APP._pieDim||APP._pieDim==='region')?'#6366f1':'transparent'};color:${(!APP._pieDim||APP._pieDim==='region')?'#fff':'#94a3b8'};cursor:pointer;font-size:11px;">按地区</button>
+                            <button onclick="APP._pieDim='currency';renderTab0()" style="padding:3px 10px;border-radius:12px;border:1px solid ${APP._pieDim==='currency'?'#6366f1':'#334155'};background:${APP._pieDim==='currency'?'#6366f1':'transparent'};color:${APP._pieDim==='currency'?'#fff':'#94a3b8'};cursor:pointer;font-size:11px;">按币种</button>
+                            <button onclick="APP._pieDim='sector';renderTab0()" style="padding:3px 10px;border-radius:12px;border:1px solid ${APP._pieDim==='sector'?'#6366f1':'#334155'};background:${APP._pieDim==='sector'?'#6366f1':'transparent'};color:${APP._pieDim==='sector'?'#fff':'#94a3b8'};cursor:pointer;font-size:11px;">按行业</button>
+                        </div>
+                    </div>
                     <canvas id="chart-pie" width="400" height="300"></canvas>
                 </div>
                 <div class="chart-card">
-                    <div class="chart-title">近60日表现</div>
-                    <canvas id="chart-line" width="400" height="300"></canvas>
+                    <div class="chart-title">浮盈亏概览</div>
+                    <div style="padding:20px 0;">
+                        ${Object.entries(regionStats).map(([r, s]) => {
+                            const pl = s.value - s.cost;
+                            const pct = s.cost > 0 ? (pl / s.cost * 100) : 0;
+                            const barW = totalValue > 0 ? Math.abs(pl) / totalValue * 300 : 0;
+                            return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+                                <span style="width:50px;font-size:13px;color:#94a3b8;">${r}</span>
+                                <div style="flex:1;display:flex;align-items:center;gap:8px;">
+                                    <div style="width:${Math.min(200,barW)}px;height:16px;background:${pl>=0?'#4ade80':'#f87171'};border-radius:3px;"></div>
+                                    <span class="${pl>=0?'price-positive':'price-negative'}" style="font-size:13px;white-space:nowrap;">${pl>=0?'+':''}$${fmtNum(pl)} (${formatPercent(pct)})</span>
+                                </div>
+                            </div>`;
+                        }).join('')}
+                        <div style="border-top:1px solid #334155;padding-top:10px;display:flex;align-items:center;gap:10px;">
+                            <span style="width:50px;font-size:13px;font-weight:bold;color:#e2e8f0;">合计</span>
+                            <span class="${totalPL>=0?'price-positive':'price-negative'}" style="font-size:15px;font-weight:bold;">${totalPL>=0?'+':''}$${fmtNum(totalPL)} (${formatPercent(totalPLPercent)})</span>
+                        </div>
+                    </div>
                 </div>
             </div>
         `;
 
         if (APP.holdings.length > 0) {
             const regions = ['全部', ...new Set(APP.holdings.map(h => h.region).filter(Boolean))];
+            const ss = APP.holdingsSort;
+            const sIco = (k) => ss.key===k ? (ss.dir==='asc'?' ▲':' ▼') : ' ↕';
+            const sHd = (k) => `onclick="sortHoldings('${k}')" style="cursor:pointer;user-select:none;white-space:nowrap;"`;
+
+            // Enrich data
+            let enriched = APP.holdings.map(h => {
+                const currentPrice = APP.prices[h.symbol]?.price || h.avg_cost;
+                const priceChange = APP.prices[h.symbol]?.change || 0;
+                const rate = APP.FX_RATES[h.currency] || 1;
+                const mv = h.qty * currentPrice * rate;
+                const cv = h.qty * h.avg_cost * rate;
+                const pl = mv - cv;
+                const plPct = cv > 0 ? (pl / cv * 100) : 0;
+                return { ...h, currentPrice, priceChange, mv, cv, pl, plPct };
+            });
+
+            // Total for weight calc
+            const grandTotal = enriched.reduce((s, d) => s + d.mv, 0);
+
+            // Region filter
+            if (APP.regionFilter !== '全部') enriched = enriched.filter(d => d.region === APP.regionFilter);
+
+            // Sort
+            if (ss.key) {
+                const dir = ss.dir === 'asc' ? 1 : -1;
+                enriched.sort((a, b) => ((a[ss.key]||0) - (b[ss.key]||0)) * dir);
+            }
+
             html += `
                 <div class="chart-card">
                     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
@@ -1561,74 +1650,76 @@
                             ${regions.map(r => `<button onclick="filterRegion('${r}')" style="padding:6px 16px;border-radius:20px;border:1px solid ${APP.regionFilter===r?'#6366f1':'#334155'};background:${APP.regionFilter===r?'#6366f1':'transparent'};color:${APP.regionFilter===r?'#fff':'#94a3b8'};cursor:pointer;font-size:13px;transition:all 0.2s;">${r}${r!=='全部'?' ('+APP.holdings.filter(h=>h.region===r).length+')':''}</button>`).join('')}
                         </div>
                     </div>
-                    <table class="holdings-table">
+                    <div style="overflow-x:auto;">
+                    <table class="holdings-table" style="font-size:13px;">
                         <thead>
                             <tr>
                                 <th>代码</th>
                                 <th>名称</th>
                                 <th>地区</th>
+                                <th>货币</th>
                                 <th>属性</th>
-                                <th>当前价</th>
-                                <th>涨跌%</th>
                                 <th>持股数</th>
-                                <th>成本价</th>
-                                <th>市值</th>
-                                <th>收益</th>
-                                <th>收益%</th>
+                                <th>平均成本</th>
+                                <th>当前价</th>
+                                <th ${sHd('priceChange')}>涨跌%${sIco('priceChange')}</th>
+                                <th ${sHd('mv')}>市值(USD)${sIco('mv')}</th>
+                                <th ${sHd('pl')}>收益(USD)${sIco('pl')}</th>
+                                <th ${sHd('plPct')}>收益%${sIco('plPct')}</th>
+                                <th>设计权重</th>
+                                <th>当前权重</th>
+                                <th>差异</th>
                             </tr>
                         </thead>
                         <tbody>
             `;
 
-            const filteredHoldings = APP.regionFilter === '全部' ? APP.holdings : APP.holdings.filter(h => h.region === APP.regionFilter);
-            filteredHoldings.forEach(h => {
-                const currentPrice = APP.prices[h.symbol]?.price || h.avg_cost;
-                const priceChange = APP.prices[h.symbol]?.change || 0;
-                const rate = APP.FX_RATES[h.currency] || 1;
-                const marketValue = h.qty * currentPrice * rate;
-                const costValue = h.qty * h.avg_cost * rate;
-                const pl = marketValue - costValue;
-                const plPercent = costValue > 0 ? (pl / costValue) * 100 : 0;
+            let filteredValue = 0, filteredCost = 0;
+            enriched.forEach(d => {
+                const curSym = d.currency==='CNY'?'¥':d.currency==='JPY'?'¥':d.currency==='HKD'?'HK$':'$';
+                const tw = d.target_weight || 0;
+                const cw = grandTotal > 0 ? (d.mv / grandTotal * 100) : 0;
+                const diff = cw - tw;
+                filteredValue += d.mv;
+                filteredCost += d.cv;
 
                 html += `
                     <tr>
-                        <td class="symbol-cell">${h.symbol}</td>
-                        <td>${h.name}</td>
-                        <td><span class="region-badge">${h.region}</span></td>
-                        <td>${h.attribute || '-'}</td>
-                        <td>${fmtNum(currentPrice)}</td>
-                        <td class="${priceChange >= 0 ? 'price-positive' : 'price-negative'}">${formatPercent(priceChange)}</td>
-                        <td>${fmtNum(h.qty, 0)}</td>
-                        <td>${fmtNum(h.avg_cost)}</td>
-                        <td>$${fmtNum(marketValue)}</td>
-                        <td class="${pl >= 0 ? 'price-positive' : 'price-negative'}">${pl >= 0 ? '+' : ''}$${fmtNum(pl)}</td>
-                        <td class="${plPercent >= 0 ? 'price-positive' : 'price-negative'}">${formatPercent(plPercent)}</td>
+                        <td class="symbol-cell">${d.symbol}</td>
+                        <td>${d.name}</td>
+                        <td><span class="region-badge">${d.region}</span></td>
+                        <td>${d.currency}</td>
+                        <td>${d.attribute || '-'}</td>
+                        <td style="text-align:right;">${fmtNum(d.qty, 0)}</td>
+                        <td style="text-align:right;">${curSym}${fmtNum(d.avg_cost)}</td>
+                        <td style="text-align:right;">${curSym}${fmtNum(d.currentPrice)}</td>
+                        <td class="${d.priceChange>=0?'price-positive':'price-negative'}" style="text-align:right;">${formatPercent(d.priceChange)}</td>
+                        <td style="text-align:right;">$${fmtNum(d.mv)}</td>
+                        <td class="${d.pl>=0?'price-positive':'price-negative'}" style="text-align:right;">${d.pl>=0?'+':''}$${fmtNum(d.pl)}</td>
+                        <td class="${d.plPct>=0?'price-positive':'price-negative'}" style="text-align:right;">${formatPercent(d.plPct)}</td>
+                        <td style="text-align:right;">${tw > 0 ? fmtNum(tw,1)+'%' : '-'}</td>
+                        <td style="text-align:right;">${fmtNum(cw,1)}%</td>
+                        <td style="text-align:right;color:${Math.abs(diff)<1?'#94a3b8':diff>0?'#4ade80':'#f87171'}">${diff>=0?'+':''}${fmtNum(diff,1)}%</td>
                     </tr>
                 `;
             });
 
-            // 计算筛选后的小计
-            let filteredValue = 0, filteredCost = 0;
-            filteredHoldings.forEach(h => {
-                const cp = APP.prices[h.symbol]?.price || h.avg_cost;
-                const rt = APP.FX_RATES[h.currency] || 1;
-                filteredValue += h.qty * cp * rt;
-                filteredCost += h.qty * h.avg_cost * rt;
-            });
             const filteredPL = filteredValue - filteredCost;
-            const filteredPLPct = filteredCost > 0 ? (filteredPL / filteredCost) * 100 : 0;
+            const filteredPLPct = filteredCost > 0 ? (filteredPL / filteredCost * 100) : 0;
             html += `
                         </tbody>
                         <tfoot>
                             <tr style="border-top:2px solid #334155;font-weight:bold;">
-                                <td colspan="4">${APP.regionFilter === '全部' ? '全部' : APP.regionFilter} 合计 (${filteredHoldings.length}只)</td>
+                                <td colspan="5">${APP.regionFilter==='全部'?'全部':APP.regionFilter} 合计 (${enriched.length}只)</td>
                                 <td></td><td></td><td></td><td></td>
-                                <td>$${fmtNum(filteredValue)}</td>
-                                <td class="${filteredPL >= 0 ? 'price-positive' : 'price-negative'}">${filteredPL >= 0 ? '+' : ''}$${fmtNum(filteredPL)}</td>
-                                <td class="${filteredPLPct >= 0 ? 'price-positive' : 'price-negative'}">${formatPercent(filteredPLPct)}</td>
+                                <td style="text-align:right;">$${fmtNum(filteredValue)}</td>
+                                <td class="${filteredPL>=0?'price-positive':'price-negative'}" style="text-align:right;">${filteredPL>=0?'+':''}$${fmtNum(filteredPL)}</td>
+                                <td class="${filteredPLPct>=0?'price-positive':'price-negative'}" style="text-align:right;">${formatPercent(filteredPLPct)}</td>
+                                <td colspan="3"></td>
                             </tr>
                         </tfoot>
                     </table>
+                    </div>
                 </div>
 
                 <div style="margin-top: 20px;">
@@ -1663,123 +1754,106 @@
 
         container.innerHTML = html;
 
-        // Draw charts
+        // Draw pie chart based on selected dimension
         if (APP.holdings.length > 0) {
-            const pieData = APP.holdings.map((h, i) => {
-                const price = APP.prices[h.symbol]?.price || h.avg_cost;
-                const value = h.qty * price * (APP.FX_RATES[h.currency] || 1);
-                const colors = ['#6366f1', '#4ade80', '#f87171', '#fbbf24', '#ec4899', '#14b8a6'];
-                return {
-                    label: h.symbol,
-                    value,
-                    color: colors[i % colors.length]
-                };
+            const dim = APP._pieDim || 'region';
+            const grouped = {};
+            APP.holdings.forEach(h => {
+                const key = dim==='region'?h.region:dim==='currency'?h.currency:(h.sector||'未分类');
+                const p = APP.prices[h.symbol]?.price || h.avg_cost;
+                grouped[key] = (grouped[key]||0) + h.qty * p * (APP.FX_RATES[h.currency]||1);
             });
-
+            const colors = ['#6366f1','#4ade80','#f87171','#fbbf24','#ec4899','#14b8a6','#f97316','#8b5cf6','#06b6d4','#84cc16'];
+            const pieData = Object.entries(grouped).map(([label, value], i) => ({
+                label, value, color: colors[i % colors.length]
+            }));
             drawPie('chart-pie', pieData);
-
-            // Generate 60-day performance data
-            const lineData = [];
-            for (let i = 0; i < 60; i++) {
-                const val = Math.random() * 200 - 100;
-                lineData.push({ label: '', v: 1000 + val });
-            }
-            drawLine('chart-line', lineData, '#6366f1');
         }
     }
 
     function renderTab1() {
         const container = document.getElementById('tab-1');
+        if (!APP._tab1State) APP._tab1State = { region: '全部', currency: '全部', sortDir: 'desc' };
+        const st = APP._tab1State;
 
-        let html = `
-            <div class="search-box">
-                <input type="text" id="searchInput" class="search-input" placeholder="搜索股票代码或名称...">
-            </div>
-        `;
+        // Build enriched list
+        let list = APP.holdings.map(h => {
+            const pd = APP.prices[h.symbol] || {};
+            return { ...h, price: pd.price || h.avg_cost, change: pd.change || 0, prevClose: pd.prevClose || h.avg_cost };
+        });
 
-        if (APP.selectedStock) {
-            const stock = APP.selectedStock;
-            const priceData = APP.prices[stock.symbol] || {};
+        // Filters
+        if (st.region !== '全部') list = list.filter(d => d.region === st.region);
+        if (st.currency !== '全部') list = list.filter(d => d.currency === st.currency);
 
-            html += `
-                <div class="stock-detail-panel">
-                    <div class="stock-detail-header">
-                        <div class="stock-detail-info">
-                            <h2>${stock.symbol}</h2>
-                            <p>${stock.name}</p>
-                        </div>
-                        <div class="stock-detail-price">
-                            <div class="stock-detail-price-value">$${(priceData.price || stock.avg_cost).toFixed(2)}</div>
-                            <div class="stat-change ${(priceData.change || 0) >= 0 ? '' : 'negative'}">
-                                ${formatPercent(priceData.change || 0)}
-                            </div>
-                        </div>
-                    </div>
-                    <div style="position: relative; height: 200px;">
-                        <canvas id="stock-detail-chart"></canvas>
-                    </div>
-                </div>
-            `;
+        // Sort by change
+        list.sort((a, b) => st.sortDir === 'desc' ? b.change - a.change : a.change - b.change);
 
-            // Draw stock chart
-            setTimeout(() => {
-                const chartData = [];
-                for (let i = 0; i < 30; i++) {
-                    const val = Math.random() * 10 - 5;
-                    chartData.push({ label: '', v: (priceData.price || 100) + val });
-                }
-                drawLine('stock-detail-chart', chartData, '#6366f1');
-            }, 0);
-        }
+        const regions = ['全部', '中国', '日本', '美国'];
+        const currencies = ['全部', 'USD', 'CNY', 'HKD', 'JPY'];
 
-        if (APP.holdings.length > 0) {
-            html += `
-                <div class="stock-cards">
-            `;
+        let html = '';
+        // Search
+        html += `<div style="margin-bottom:12px;"><input type="text" id="tab1Search" class="form-input" style="width:100%;max-width:400px;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:8px 12px;border-radius:8px;" placeholder="搜索股票代码或名称..."></div>`;
 
-            APP.holdings.forEach(h => {
-                const priceData = APP.prices[h.symbol] || {};
-                const change = priceData.change || 0;
-                const price = priceData.price || h.avg_cost;
+        // Region filter
+        html += `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">`;
+        html += `<span style="color:#94a3b8;font-size:13px;line-height:32px;">属地:</span>`;
+        regions.forEach(r => {
+            const active = st.region === r;
+            html += `<button onclick="APP._tab1State.region='${r}';renderTab1()" style="padding:4px 14px;border-radius:16px;border:1px solid ${active?'#6366f1':'#334155'};background:${active?'#6366f1':'transparent'};color:${active?'#fff':'#94a3b8'};cursor:pointer;font-size:12px;">${r}</button>`;
+        });
+        html += `</div>`;
 
-                html += `
-                    <div class="stock-card" onclick="selectStock({symbol: '${h.symbol}', name: '${h.name}'})">
-                        <div class="stock-card-header">
-                            <div class="stock-card-symbol">${h.symbol}</div>
-                            <div class="stock-card-change ${change >= 0 ? 'price-positive' : 'price-negative'}">
-                                ${change >= 0 ? '+' : ''}${change.toFixed(2)}%
-                            </div>
-                        </div>
-                        <div class="stock-card-name">${h.name}</div>
-                        <div class="stock-card-price">$${price.toFixed(2)}</div>
-                    </div>
-                `;
+        // Currency filter
+        html += `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">`;
+        html += `<span style="color:#94a3b8;font-size:13px;line-height:32px;">币种:</span>`;
+        currencies.forEach(c => {
+            const active = st.currency === c;
+            html += `<button onclick="APP._tab1State.currency='${c}';renderTab1()" style="padding:4px 14px;border-radius:16px;border:1px solid ${active?'#6366f1':'#334155'};background:${active?'#6366f1':'transparent'};color:${active?'#fff':'#94a3b8'};cursor:pointer;font-size:12px;">${c}</button>`;
+        });
+        html += `</div>`;
+
+        if (list.length === 0) {
+            html += `<div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-title">没有匹配的股票</div></div>`;
+        } else {
+            const sortArrow = st.sortDir === 'desc' ? '▼' : '▲';
+            html += `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;">`;
+            html += `<thead><tr style="border-bottom:1px solid #334155;color:#94a3b8;font-size:12px;">`;
+            html += `<th style="text-align:left;padding:8px 6px;">代码</th>`;
+            html += `<th style="text-align:left;padding:8px 6px;">名称</th>`;
+            html += `<th style="text-align:left;padding:8px 6px;">属地</th>`;
+            html += `<th style="text-align:left;padding:8px 6px;">币种</th>`;
+            html += `<th style="text-align:right;padding:8px 6px;">现价</th>`;
+            html += `<th style="text-align:right;padding:8px 6px;cursor:pointer;user-select:none;" onclick="APP._tab1State.sortDir=APP._tab1State.sortDir==='desc'?'asc':'desc';renderTab1()">涨跌% ${sortArrow}</th>`;
+            html += `</tr></thead><tbody>`;
+
+            list.forEach(d => {
+                const color = d.change >= 0 ? '#22c55e' : '#ef4444';
+                const sign = d.change >= 0 ? '+' : '';
+                html += `<tr style="border-bottom:1px solid #1e293b;" class="tab1-row">`;
+                html += `<td style="padding:10px 6px;color:#e2e8f0;font-weight:600;">${d.symbol}</td>`;
+                html += `<td style="padding:10px 6px;color:#cbd5e1;">${d.name}</td>`;
+                html += `<td style="padding:10px 6px;color:#94a3b8;">${d.region}</td>`;
+                html += `<td style="padding:10px 6px;color:#94a3b8;">${d.currency}</td>`;
+                html += `<td style="padding:10px 6px;text-align:right;color:#e2e8f0;">${fmtNum(d.price, 2)}</td>`;
+                html += `<td style="padding:10px 6px;text-align:right;color:${color};font-weight:600;">${sign}${d.change.toFixed(2)}%</td>`;
+                html += `</tr>`;
             });
 
-            html += `
-                </div>
-            `;
-        } else {
-            html += `
-                <div class="empty-state">
-                    <div class="empty-icon">🔍</div>
-                    <div class="empty-title">没有股票数据</div>
-                    <div class="empty-text">添加持仓后可以查看行情</div>
-                </div>
-            `;
+            html += `</tbody></table></div>`;
+            html += `<div style="color:#64748b;font-size:11px;margin-top:8px;text-align:right;">共 ${list.length} 只股票</div>`;
         }
 
         container.innerHTML = html;
 
-        // Search functionality
-        const searchInput = document.getElementById('searchInput');
-        if (searchInput) {
-            searchInput.addEventListener('input', (e) => {
-                const query = e.target.value.toLowerCase();
-                const cards = document.querySelectorAll('.stock-card');
-                cards.forEach(card => {
-                    const text = card.textContent.toLowerCase();
-                    card.style.display = text.includes(query) ? '' : 'none';
+        // Search filter
+        const si = document.getElementById('tab1Search');
+        if (si) {
+            si.addEventListener('input', (e) => {
+                const q = e.target.value.toLowerCase();
+                document.querySelectorAll('.tab1-row').forEach(row => {
+                    row.style.display = row.textContent.toLowerCase().includes(q) ? '' : 'none';
                 });
             });
         }
@@ -2199,6 +2273,10 @@
                             <label class="form-label">新密码</label>
                             <input type="password" id="newPwd" class="form-input" style="width:160px;" placeholder="新密码(至少4位)">
                         </div>
+                        <div class="form-group" style="margin-bottom:0;">
+                            <label class="form-label">确认新密码</label>
+                            <input type="password" id="confirmPwd" class="form-input" style="width:160px;" placeholder="再次输入新密码">
+                        </div>
                         <button class="btn-primary" onclick="changePassword()">确认修改</button>
                     </div>
                 </div>
@@ -2220,13 +2298,16 @@
     async function changePassword() {
         const oldPwd = document.getElementById('oldPwd').value;
         const newPwd = document.getElementById('newPwd').value;
+        const confirmPwd = document.getElementById('confirmPwd').value;
         if (!oldPwd || !newPwd) return alert('请输入旧密码和新密码');
         if (newPwd.length < 4) return alert('新密码至少4位');
+        if (newPwd !== confirmPwd) return alert('两次输入的新密码不一致，请重新输入');
         try {
             await apiCall('/change-password', 'POST', { oldPassword: oldPwd, newPassword: newPwd });
             alert('密码修改成功！');
             document.getElementById('oldPwd').value = '';
             document.getElementById('newPwd').value = '';
+            document.getElementById('confirmPwd').value = '';
         } catch(e) { alert('修改失败，请检查旧密码是否正确'); }
     }
 
