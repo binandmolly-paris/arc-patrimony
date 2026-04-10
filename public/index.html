@@ -1272,12 +1272,12 @@
 
                     <div class="form-group">
                         <label class="form-label">用户名</label>
-                        <input type="text" id="loginUsername" class="form-input" placeholder="输入用户名">
+                        <input type="text" id="loginUsername" class="form-input" placeholder="输入用户名" tabindex="1" onkeydown="if(event.key==='Enter'||event.key==='Tab'){event.preventDefault();document.getElementById('loginPassword').focus();}">
                     </div>
 
                     <div class="form-group">
                         <label class="form-label">密码</label>
-                        <input type="password" id="loginPassword" class="form-input" placeholder="输入密码">
+                        <input type="password" id="loginPassword" class="form-input" placeholder="输入密码" tabindex="2" onkeydown="if(event.key==='Enter'){event.preventDefault();handleLogin();}">
                     </div>
 
                     <div class="form-error" id="loginError"></div>
@@ -1296,11 +1296,7 @@
             if (input) input.focus();
         }, 100);
 
-        document.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter' && document.getElementById('loginUsername')) {
-                handleLogin();
-            }
-        }, { once: true });
+        // Tab/Enter handling is now on the input elements directly
     }
 
     async function showApp() {
@@ -2331,10 +2327,13 @@
         if (newPwd !== confirmPwd) return alert('两次输入的新密码不一致，请重新输入');
         try {
             await apiCall('/change-password', 'POST', { oldPassword: oldPwd, newPassword: newPwd });
-            alert('密码修改成功！');
-            document.getElementById('oldPwd').value = '';
-            document.getElementById('newPwd').value = '';
-            document.getElementById('confirmPwd').value = '';
+            alert('密码修改成功！请使用新密码重新登录。');
+            // Force logout and re-login with new password
+            APP.token = null;
+            APP.username = null;
+            localStorage.removeItem('kxm_token');
+            localStorage.removeItem('kxm_user');
+            showLogin();
         } catch(e) { alert('修改失败，请检查旧密码是否正确'); }
     }
 
