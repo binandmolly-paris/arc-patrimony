@@ -184,6 +184,12 @@ app.post("/api/login", async (req, res) => {
   }
 });
 
+app.get("/api/verify", async (req, res) => {
+  const token = req.headers["x-token"];
+  if (!token || !sessions[token]) return res.json({ valid: false });
+  res.json({ valid: true });
+});
+
 app.post("/api/logout", (req, res) => {
   const token = req.headers["x-token"];
   if (token) delete sessions[token];
