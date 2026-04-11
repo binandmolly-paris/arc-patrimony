@@ -1313,8 +1313,8 @@
         await loadHoldings();
         await loadTrades();
         await loadAlerts();
-        // If no alerts exist, seed the target price alerts
-        if (APP.alerts.length === 0) {
+        // Seed target alerts only for LiuBin on first use
+        if (APP.alerts.length === 0 && APP.username === 'LiuBin') {
             await seedTargetAlerts();
             await loadAlerts();
         }
@@ -2141,7 +2141,8 @@
                             <button class="alert-card-close" onclick="deleteAlert('${a.id}')">×</button>
                         </div>
                         <div class="alert-card-condition">${a.name}</div>
-                        <div class="alert-card-condition">当价格${typeText} $${a.price.toFixed(2)}时</div>
+                        <div style="font-size:22px;font-weight:bold;color:#4ade80;margin:8px 0;">$${fmtNum(a.price, 2)}</div>
+                        <div class="alert-card-condition">当价格${typeText}此价时提醒</div>
                         <div style="display: flex; justify-content: space-between; align-items: center;">
                             <div class="text-sm text-muted">状态: ${a.active ? '启用' : '禁用'}</div>
                             <div class="toggle-switch ${a.active ? 'active' : ''}" onclick="toggleAlert('${a.id}', ${!a.active})">
