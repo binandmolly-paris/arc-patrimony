@@ -2939,7 +2939,30 @@
     // ============ Init ============
     window.addEventListener('load', async () => {
         if (APP.token) {
-            showApp();
+            // 验证token是否仍然有效（服务器重启后session会清空）
+            try {
+                const resp = await fetch(API_BASE + '/verify', {
+                    headers: { 'x-token': APP.token }
+                });
+                const data = await resp.json();
+                if (data.valid) {
+                    showApp();
+                } else {
+                    // token无效，清除本地存储，显示登录页
+                    localStorage.removeItem('kxm_token');
+                    localStorage.removeItem('kxm_user');
+                    APP.token = null;
+                    APP.username = null;
+                    showLogin();
+                }
+            } catch (e) {
+                // 网络错误，显示登录页
+                localStorage.removeItem('kxm_token');
+                localStorage.removeItem('kxm_user');
+                APP.token = null;
+                APP.username = null;
+                showLogin();
+            }
         } else {
             showLogin();
         }
