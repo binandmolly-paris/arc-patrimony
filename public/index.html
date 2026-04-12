@@ -1,15 +1,27 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Arc Patrimony - 云端版本">
+    <meta name="description" content="Arc Patrimony - Cloud Version">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Arc Patrimony">
     <meta name="theme-color" content="#060b18">
     <title>Arc Patrimony</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=Montserrat:wght@300;400;500&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --gold: #C1A673;
+            --gold-light: #EADDBC;
+            --gold-dark: #96845E;
+            --gold-glow: rgba(193,166,115,0.15);
+            --gold-border: rgba(193,166,115,0.2);
+            --gold-border-hover: rgba(193,166,115,0.4);
+            --bg-deep: #0B0F12;
+            --bg-card: rgba(20,25,32,0.6);
+        }
         * {
             margin: 0;
             padding: 0;
@@ -18,8 +30,8 @@
 
         html, body {
             height: 100%;
-            font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
-            background-color: #060b18;
+            font-family: 'Montserrat', 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            background-color: var(--bg-deep);
             color: #e2e8f0;
         }
 
@@ -33,8 +45,8 @@
             position: fixed;
             top: 0; left: 0; right: 0; bottom: 0;
             background-image:
-                linear-gradient(rgba(99,102,241,0.03) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(99,102,241,0.03) 1px, transparent 1px);
+                linear-gradient(rgba(193,166,115,0.02) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(193,166,115,0.02) 1px, transparent 1px);
             background-size: 60px 60px;
             pointer-events: none;
             z-index: 0;
@@ -43,8 +55,8 @@
             content: '';
             position: fixed;
             top: -50%; left: -50%; width: 200%; height: 200%;
-            background: radial-gradient(ellipse at 20% 20%, rgba(99,102,241,0.08) 0%, transparent 50%),
-                        radial-gradient(ellipse at 80% 80%, rgba(74,222,128,0.05) 0%, transparent 50%);
+            background: radial-gradient(ellipse at 20% 20%, rgba(193,166,115,0.05) 0%, transparent 50%),
+                        radial-gradient(ellipse at 80% 80%, rgba(150,132,94,0.03) 0%, transparent 50%);
             pointer-events: none;
             z-index: 0;
         }
@@ -52,21 +64,21 @@
 
         /* ===== Glassmorphism base ===== */
         .glass {
-            background: rgba(30, 41, 59, 0.5) !important;
+            background: var(--bg-card) !important;
             backdrop-filter: blur(16px);
             -webkit-backdrop-filter: blur(16px);
-            border: 1px solid rgba(99, 102, 241, 0.15) !important;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255,255,255,0.05);
+            border: 1px solid var(--gold-border) !important;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255,255,255,0.03);
         }
 
         /* ===== Breathing glow animation ===== */
         @keyframes breathe {
-            0%, 100% { box-shadow: 0 0 8px rgba(99,102,241,0.15), 0 4px 15px rgba(0,0,0,0.2); }
-            50% { box-shadow: 0 0 20px rgba(99,102,241,0.3), 0 4px 20px rgba(0,0,0,0.3); }
+            0%, 100% { box-shadow: 0 0 8px rgba(193,166,115,0.1), 0 4px 15px rgba(0,0,0,0.2); }
+            50% { box-shadow: 0 0 20px rgba(193,166,115,0.2), 0 4px 20px rgba(0,0,0,0.3); }
         }
         @keyframes breatheActive {
-            0%, 100% { box-shadow: 0 0 12px rgba(99,102,241,0.4), 0 4px 20px rgba(0,0,0,0.3); }
-            50% { box-shadow: 0 0 28px rgba(99,102,241,0.6), 0 4px 25px rgba(0,0,0,0.4); }
+            0%, 100% { box-shadow: 0 0 12px rgba(193,166,115,0.3), 0 4px 20px rgba(0,0,0,0.3); }
+            50% { box-shadow: 0 0 28px rgba(234,221,188,0.4), 0 4px 25px rgba(0,0,0,0.4); }
         }
 
         /* ===== Brand loading screen ===== */
@@ -75,8 +87,12 @@
             to { opacity: 1; transform: translateY(0); }
         }
         @keyframes logoGlow {
-            0%, 100% { filter: drop-shadow(0 0 8px rgba(99,102,241,0.3)); }
-            50% { filter: drop-shadow(0 0 20px rgba(99,102,241,0.6)); }
+            0%, 100% { filter: drop-shadow(0 0 8px rgba(193,166,115,0.2)); }
+            50% { filter: drop-shadow(0 0 20px rgba(234,221,188,0.5)); }
+        }
+        @keyframes starPulse {
+            0%, 100% { opacity: 0.8; }
+            50% { opacity: 1; filter: drop-shadow(0px 0px 8px rgba(234,221,188,0.8)); }
         }
         @keyframes slideIn {
             from { transform: translateX(-100%); }
@@ -89,10 +105,10 @@
             align-items: center;
             justify-content: center;
             min-height: 100vh;
-            background: #060b18;
+            background: var(--bg-deep);
             background-image:
-                linear-gradient(rgba(99,102,241,0.04) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(99,102,241,0.04) 1px, transparent 1px);
+                linear-gradient(rgba(193,166,115,0.025) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(193,166,115,0.025) 1px, transparent 1px);
             background-size: 60px 60px;
             padding: 20px;
             position: relative;
@@ -102,21 +118,21 @@
             content: '';
             position: absolute;
             top: -30%; left: -30%; width: 160%; height: 160%;
-            background: radial-gradient(ellipse at 30% 30%, rgba(99,102,241,0.12) 0%, transparent 50%),
-                        radial-gradient(ellipse at 70% 70%, rgba(74,222,128,0.06) 0%, transparent 50%);
+            background: radial-gradient(ellipse at 30% 30%, rgba(193,166,115,0.06) 0%, transparent 50%),
+                        radial-gradient(ellipse at 70% 70%, rgba(150,132,94,0.04) 0%, transparent 50%);
             pointer-events: none;
         }
 
         .login-card {
-            background: rgba(30, 41, 59, 0.6);
+            background: rgba(20, 25, 32, 0.75);
             backdrop-filter: blur(20px);
             -webkit-backdrop-filter: blur(20px);
-            border: 1px solid rgba(99, 102, 241, 0.2);
+            border: 1px solid var(--gold-border);
             border-radius: 16px;
             padding: 40px;
             width: 100%;
             max-width: 420px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255,255,255,0.05);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(234,221,188,0.03);
             position: relative;
             z-index: 1;
             animation: fadeIn 0.6s ease-out;
@@ -129,27 +145,33 @@
         }
 
         .login-brand-icon {
-            width: 72px;
-            height: 72px;
-            margin: 0 auto 16px;
+            width: 100px;
+            height: 100px;
+            margin: 0 auto 20px;
             animation: logoGlow 3s ease-in-out infinite;
         }
 
         .login-title {
-            font-size: 28px;
-            font-weight: 700;
+            font-family: 'Cinzel', 'Times New Roman', serif;
+            font-size: 26px;
+            font-weight: 500;
             text-align: center;
-            margin-bottom: 6px;
-            color: #e2e8f0;
-            letter-spacing: 2px;
+            margin-bottom: 4px;
+            background: linear-gradient(135deg, #C1A673, #EADDBC, #96845E);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: 6px;
         }
 
         .login-subtitle {
-            font-size: 13px;
+            font-family: 'Montserrat', sans-serif;
+            font-size: 11px;
+            font-weight: 300;
             text-align: center;
-            color: #64748b;
+            color: var(--gold-dark);
             margin-bottom: 30px;
-            letter-spacing: 1px;
+            letter-spacing: 6px;
         }
 
         .form-group {
@@ -167,8 +189,8 @@
         .form-input {
             width: 100%;
             padding: 12px 14px;
-            background: rgba(6, 11, 24, 0.6);
-            border: 1px solid rgba(51, 65, 85, 0.5);
+            background: rgba(11, 15, 18, 0.6);
+            border: 1px solid rgba(150,132,94,0.25);
             border-radius: 10px;
             color: #e2e8f0;
             font-size: 14px;
@@ -177,8 +199,8 @@
 
         .form-input:focus {
             outline: none;
-            border-color: rgba(99,102,241,0.5);
-            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1), 0 0 15px rgba(99,102,241,0.08);
+            border-color: var(--gold);
+            box-shadow: 0 0 0 3px rgba(193,166,115,0.1), 0 0 15px rgba(193,166,115,0.08);
         }
 
         .form-error {
@@ -210,14 +232,15 @@
         }
 
         .btn-primary {
-            background: linear-gradient(135deg, #6366f1, #4f46e5);
-            color: white;
+            background: linear-gradient(135deg, #C1A673, #96845E);
+            color: #0B0F12;
             border-radius: 10px;
+            font-weight: 500;
         }
 
         .btn-primary:hover {
-            background: linear-gradient(135deg, #818cf8, #6366f1);
-            box-shadow: 0 4px 20px rgba(99, 102, 241, 0.4);
+            background: linear-gradient(135deg, #EADDBC, #C1A673);
+            box-shadow: 0 4px 20px rgba(193,166,115,0.4);
         }
 
         .btn-primary:active {
@@ -225,15 +248,15 @@
         }
 
         .btn-secondary {
-            background: rgba(51, 65, 85, 0.5);
-            border: 1px solid rgba(99,102,241,0.12);
-            color: #e2e8f0;
+            background: rgba(30, 35, 40, 0.5);
+            border: 1px solid var(--gold-border);
+            color: var(--gold-light);
             border-radius: 10px;
         }
 
         .btn-secondary:hover {
-            background: rgba(71, 85, 105, 0.5);
-            border-color: rgba(99,102,241,0.25);
+            background: rgba(40, 45, 50, 0.5);
+            border-color: var(--gold-border-hover);
         }
 
         .btn-secondary:active {
@@ -252,13 +275,13 @@
 
         /* Market status light bar */
         .market-light-bar {
-            height: 3px;
-            background: linear-gradient(90deg, transparent, #4ade80, #6366f1, #4ade80, transparent);
+            height: 2px;
+            background: linear-gradient(90deg, transparent, #4ade80, var(--gold), #4ade80, transparent);
             background-size: 200% 100%;
             animation: lightBarFlow 4s linear infinite;
         }
         .market-light-bar.negative {
-            background: linear-gradient(90deg, transparent, #f87171, #6366f1, #f87171, transparent);
+            background: linear-gradient(90deg, transparent, #f87171, var(--gold), #f87171, transparent);
             background-size: 200% 100%;
         }
         @keyframes lightBarFlow {
@@ -267,10 +290,10 @@
         }
 
         .app-header {
-            background: rgba(15, 23, 42, 0.8);
+            background: rgba(11, 15, 18, 0.85);
             backdrop-filter: blur(20px);
             -webkit-backdrop-filter: blur(20px);
-            border-bottom: 1px solid rgba(99,102,241,0.1);
+            border-bottom: 1px solid rgba(193,166,115,0.1);
             padding: 12px 24px;
             display: flex;
             justify-content: space-between;
@@ -289,13 +312,14 @@
         }
 
         .app-title {
-            font-size: 20px;
-            font-weight: 700;
-            background: linear-gradient(135deg, #818cf8, #6366f1, #4f46e5);
+            font-family: 'Cinzel', 'Times New Roman', serif;
+            font-size: 18px;
+            font-weight: 500;
+            background: linear-gradient(135deg, #C1A673, #EADDBC, #96845E);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
-            letter-spacing: 1px;
+            letter-spacing: 3px;
         }
 
         .header-user {
@@ -306,19 +330,19 @@
         }
 
         .header-user-badge {
-            background: rgba(99,102,241,0.15);
-            border: 1px solid rgba(99,102,241,0.25);
+            background: rgba(193,166,115,0.1);
+            border: 1px solid rgba(193,166,115,0.2);
             padding: 6px 14px;
             border-radius: 20px;
-            color: #a5b4fc;
-            font-weight: 500;
+            color: var(--gold-light);
+            font-weight: 400;
             font-size: 13px;
         }
 
         .btn-logout {
             padding: 7px 14px;
-            background: rgba(248,113,113,0.1);
-            border: 1px solid rgba(248,113,113,0.25);
+            background: rgba(248,113,113,0.08);
+            border: 1px solid rgba(248,113,113,0.2);
             color: #fca5a5;
             border-radius: 8px;
             cursor: pointer;
@@ -327,54 +351,54 @@
         }
 
         .btn-logout:hover {
-            background: rgba(248,113,113,0.2);
-            border-color: rgba(248,113,113,0.4);
+            background: rgba(248,113,113,0.15);
+            border-color: rgba(248,113,113,0.35);
         }
 
         /* ===== Floating breathing tab buttons ===== */
         .tabs {
             display: flex;
             gap: 8px;
-            background: rgba(15, 23, 42, 0.6);
+            background: rgba(11, 15, 18, 0.7);
             backdrop-filter: blur(12px);
             -webkit-backdrop-filter: blur(12px);
             overflow-x: auto;
             padding: 12px 20px;
-            border-bottom: 1px solid rgba(99,102,241,0.06);
+            border-bottom: 1px solid rgba(193,166,115,0.06);
         }
 
         .tab {
             padding: 10px 20px;
             cursor: pointer;
-            border: 1px solid rgba(99,102,241,0.12);
+            border: 1px solid rgba(193,166,115,0.1);
             border-radius: 12px;
             color: #64748b;
             font-size: 13px;
             font-weight: 500;
             white-space: nowrap;
             transition: all 0.4s ease;
-            background: rgba(30, 41, 59, 0.3);
+            background: rgba(20, 25, 32, 0.4);
             position: relative;
             animation: breathe 4s ease-in-out infinite;
         }
 
         .tab:hover {
-            color: #c7d2fe;
-            background: rgba(99, 102, 241, 0.1);
-            border-color: rgba(99,102,241,0.3);
+            color: var(--gold-light);
+            background: rgba(193,166,115,0.06);
+            border-color: rgba(193,166,115,0.25);
         }
 
         .tab.active {
-            color: #fff;
-            background: linear-gradient(135deg, rgba(99,102,241,0.3), rgba(99,102,241,0.15));
-            border-color: rgba(99,102,241,0.5);
+            color: var(--gold-light);
+            background: linear-gradient(135deg, rgba(193,166,115,0.15), rgba(193,166,115,0.06));
+            border-color: rgba(193,166,115,0.4);
             animation: breatheActive 3s ease-in-out infinite;
         }
 
         .tab-badge {
             display: inline-block;
-            background: linear-gradient(135deg, #f87171, #ef4444);
-            color: white;
+            background: linear-gradient(135deg, var(--gold), var(--gold-dark));
+            color: #0B0F12;
             font-size: 10px;
             padding: 2px 6px;
             border-radius: 10px;
@@ -401,23 +425,23 @@
         }
 
         .stat-card {
-            background: rgba(30, 41, 59, 0.45);
+            background: var(--bg-card);
             backdrop-filter: blur(16px);
             -webkit-backdrop-filter: blur(16px);
-            border: 1px solid rgba(99,102,241,0.12);
+            border: 1px solid var(--gold-border);
             border-radius: 12px;
             padding: 20px;
             transition: all 0.3s ease;
             box-shadow: 0 4px 20px rgba(0,0,0,0.2);
         }
         .stat-card:hover {
-            border-color: rgba(99,102,241,0.3);
-            box-shadow: 0 8px 30px rgba(0,0,0,0.3), 0 0 15px rgba(99,102,241,0.1);
+            border-color: var(--gold-border-hover);
+            box-shadow: 0 8px 30px rgba(0,0,0,0.3), 0 0 15px var(--gold-glow);
         }
 
         .stat-label {
             font-size: 11px;
-            color: #64748b;
+            color: var(--gold-dark);
             text-transform: uppercase;
             letter-spacing: 1px;
             margin-bottom: 8px;
@@ -426,7 +450,7 @@
         .stat-value {
             font-size: 24px;
             font-weight: 700;
-            color: #a5b4fc;
+            color: var(--gold-light);
         }
 
         .stat-change {
@@ -447,17 +471,17 @@
         }
 
         .chart-card {
-            background: rgba(30, 41, 59, 0.45);
+            background: var(--bg-card);
             backdrop-filter: blur(16px);
             -webkit-backdrop-filter: blur(16px);
-            border: 1px solid rgba(99,102,241,0.12);
+            border: 1px solid var(--gold-border);
             border-radius: 12px;
             padding: 20px;
             box-shadow: 0 4px 20px rgba(0,0,0,0.2);
             transition: all 0.3s ease;
         }
         .chart-card:hover {
-            border-color: rgba(99,102,241,0.25);
+            border-color: var(--gold-border-hover);
         }
 
         .chart-title {
@@ -509,19 +533,19 @@
         }
 
         .holdings-table tbody tr:hover {
-            background: rgba(99, 102, 241, 0.06);
+            background: rgba(193, 166, 115, 0.04);
         }
 
         .symbol-cell {
             font-weight: 600;
-            color: #818cf8;
+            color: var(--gold);
         }
 
         .region-badge {
             display: inline-block;
-            background: rgba(99,102,241,0.1);
-            border: 1px solid rgba(99,102,241,0.15);
-            color: #a5b4fc;
+            background: rgba(193,166,115,0.08);
+            border: 1px solid rgba(193,166,115,0.15);
+            color: var(--gold-light);
             padding: 3px 8px;
             border-radius: 6px;
             font-size: 11px;
@@ -567,7 +591,7 @@
             width: 100%;
             padding: 12px 16px;
             background: rgba(30, 41, 59, 0.4);
-            border: 1px solid rgba(99,102,241,0.12);
+            border: 1px solid var(--gold-border);
             border-radius: 10px;
             color: #e2e8f0;
             font-size: 14px;
@@ -576,8 +600,8 @@
 
         .search-input:focus {
             outline: none;
-            border-color: rgba(99,102,241,0.4);
-            box-shadow: 0 0 15px rgba(99,102,241,0.1);
+            border-color: var(--gold-border-hover);
+            box-shadow: 0 0 15px var(--gold-glow);
         }
 
         .stock-cards {
@@ -590,7 +614,7 @@
             background: rgba(30, 41, 59, 0.4);
             backdrop-filter: blur(12px);
             -webkit-backdrop-filter: blur(12px);
-            border: 1px solid rgba(99,102,241,0.1);
+            border: 1px solid rgba(193,166,115,0.12);
             border-radius: 12px;
             padding: 15px;
             cursor: pointer;
@@ -598,7 +622,7 @@
         }
 
         .stock-card:hover {
-            border-color: rgba(99,102,241,0.4);
+            border-color: var(--gold-border-hover);
             box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3), 0 0 15px rgba(99, 102, 241, 0.15);
             transform: translateY(-2px);
         }
@@ -612,7 +636,7 @@
 
         .stock-card-symbol {
             font-weight: 600;
-            color: #818cf8;
+            color: var(--gold);
             font-size: 16px;
         }
 
@@ -638,7 +662,7 @@
             background: rgba(30, 41, 59, 0.45);
             backdrop-filter: blur(16px);
             -webkit-backdrop-filter: blur(16px);
-            border: 1px solid rgba(99,102,241,0.12);
+            border: 1px solid var(--gold-border);
             border-radius: 12px;
             padding: 20px;
             margin-bottom: 20px;
@@ -669,7 +693,7 @@
         .stock-detail-price-value {
             font-size: 24px;
             font-weight: bold;
-            color: #a5b4fc;
+            color: var(--gold-light);
         }
 
         .stock-detail-chart canvas {
@@ -762,13 +786,13 @@
             background: rgba(30, 41, 59, 0.4);
             backdrop-filter: blur(12px);
             -webkit-backdrop-filter: blur(12px);
-            border: 1px solid rgba(99,102,241,0.1);
+            border: 1px solid rgba(193,166,115,0.12);
             border-radius: 12px;
             padding: 15px;
             transition: all 0.3s;
         }
         .alert-card:hover {
-            border-color: rgba(99,102,241,0.3);
+            border-color: var(--gold-border-hover);
             box-shadow: 0 4px 20px rgba(0,0,0,0.25);
         }
 
@@ -781,7 +805,7 @@
 
         .alert-card-symbol {
             font-weight: 600;
-            color: #818cf8;
+            color: var(--gold);
             font-size: 14px;
         }
 
@@ -803,7 +827,7 @@
         .alert-card-price {
             font-size: 16px;
             font-weight: bold;
-            color: #6366f1;
+            color: var(--gold);
             margin-bottom: 12px;
         }
 
@@ -898,7 +922,7 @@
         .fx-rate {
             background: rgba(30, 41, 59, 0.4);
             backdrop-filter: blur(12px);
-            border: 1px solid rgba(99,102,241,0.1);
+            border: 1px solid rgba(193,166,115,0.12);
             border-radius: 10px;
             padding: 12px;
             text-align: center;
@@ -913,7 +937,7 @@
         .fx-rate-value {
             font-size: 16px;
             font-weight: bold;
-            color: #a5b4fc;
+            color: var(--gold-light);
         }
 
         /* Data Management */
@@ -926,7 +950,7 @@
         .data-section {
             background: rgba(30, 41, 59, 0.45);
             backdrop-filter: blur(16px);
-            border: 1px solid rgba(99,102,241,0.12);
+            border: 1px solid var(--gold-border);
             border-radius: 12px;
             padding: 20px;
         }
@@ -962,7 +986,7 @@
             width: 14px;
             height: 14px;
             border: 2px solid rgba(99,102,241,0.2);
-            border-top-color: #818cf8;
+            border-top-color: var(--gold);
             border-radius: 50%;
             animation: spin 0.8s linear infinite;
         }
@@ -1123,7 +1147,7 @@
 
     function getRegionColor(region) {
         const colors = {
-            'US': '#6366f1',
+            'US': '#C1A673',
             'HK': '#4ade80',
             'JP': '#f87171',
             'CN': '#fbbf24'
@@ -1176,7 +1200,7 @@
         ctx.fillText(`$${Number(total.toFixed(0)).toLocaleString('en-US')}`, centerX, centerY);
     }
 
-    function drawLine(canvasId, data, color = '#6366f1') {
+    function drawLine(canvasId, data, color = '#C1A673') {
         const canvas = document.getElementById(canvasId);
         if (!canvas) return;
 
@@ -1319,7 +1343,7 @@
             const y = padding + i * barHeight;
             const barWidth = (item.value / maxVal) * width;
 
-            ctx.fillStyle = item.color || '#6366f1';
+            ctx.fillStyle = item.color || '#C1A673';
             ctx.fillRect(padding, y, barWidth, barHeight - 5);
 
             // Label
@@ -1344,7 +1368,7 @@
         const errorEl = document.getElementById('loginError');
 
         if (!username || !password) {
-            errorEl.textContent = '请输入用户名和密码';
+            errorEl.textContent = 'Please enter username and password';
             errorEl.classList.add('show');
             return;
         }
@@ -1360,7 +1384,7 @@
 
             showApp();
         } catch (error) {
-            errorEl.textContent = APP.isRegister ? '注册失败，用户名可能已存在' : '登录失败，用户名或密码错误';
+            errorEl.textContent = APP.isRegister ? 'Registration failed, username may already exist' : 'Sign in failed, invalid username or password';
             errorEl.classList.add('show');
         }
     }
@@ -1383,15 +1407,15 @@
         const loginBtn = document.querySelector('button[data-action="login"]');
 
         if (APP.isRegister) {
-            title.textContent = '创建账户';
+            title.textContent = 'Create Account';
             subtitle.textContent = 'Create Your Account';
-            loginBtn.textContent = '注册';
-            btn.textContent = '已有账户？登录';
+            loginBtn.textContent = 'Sign Up';
+            btn.textContent = 'Have account? Sign In';
         } else {
             title.textContent = 'Arc Patrimony';
             subtitle.textContent = 'Value Beyond Generations';
-            loginBtn.textContent = '登录';
-            btn.textContent = '创建新账户';
+            loginBtn.textContent = 'Sign In';
+            btn.textContent = 'Create Account';
         }
 
         document.getElementById('loginError').classList.remove('show');
@@ -1532,36 +1556,44 @@
             <div class="login-screen">
                 <div class="login-card">
                     <div class="login-brand-icon">
-                        <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                        <svg viewBox="300 160 400 500" xmlns="http://www.w3.org/2000/svg">
                             <defs>
-                                <linearGradient id="arcGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                                    <stop offset="0%" style="stop-color:#818cf8"/>
-                                    <stop offset="100%" style="stop-color:#4f46e5"/>
+                                <linearGradient id="goldGrad" x1="20%" y1="0%" x2="80%" y2="100%">
+                                    <stop offset="0%" stop-color="#C1A673"/>
+                                    <stop offset="50%" stop-color="#EADDBC"/>
+                                    <stop offset="100%" stop-color="#96845E"/>
                                 </linearGradient>
                             </defs>
-                            <path d="M50 8 L30 45 L20 45 L20 88 L32 88 L32 55 L40 55 L40 88 L60 88 L60 55 L68 55 L68 88 L80 88 L80 45 L70 45 Z" fill="url(#arcGrad)" opacity="0.9"/>
-                            <path d="M50 8 L30 45 L70 45 Z" fill="none" stroke="#a5b4fc" stroke-width="1.5" opacity="0.4"/>
-                            <rect x="34" y="48" width="32" height="3" rx="1.5" fill="#a5b4fc" opacity="0.5"/>
+                            <path d="M340,195 L660,195 L660,375 A320,320 0 0,1 500,655 A320,320 0 0,1 340,375 Z" fill="none" stroke="url(#goldGrad)" stroke-width="4"/>
+                            <path d="M355,210 L645,210 L645,375 A305,305 0 0,1 500,630 A305,305 0 0,1 355,375 Z" fill="none" stroke="url(#goldGrad)" stroke-width="1.5"/>
+                            <rect x="395" y="295" width="210" height="20" fill="url(#goldGrad)"/>
+                            <rect x="405" y="320" width="190" height="12" fill="url(#goldGrad)"/>
+                            <path d="M405,337 L405,525 L465,525 L465,425 A35,35 0 0,1 535,425 L535,525 L595,525 L595,337 Z" fill="url(#goldGrad)"/>
+                            <line x1="405" y1="425" x2="465" y2="425" stroke="#0B0F12" stroke-width="2"/>
+                            <line x1="535" y1="425" x2="595" y2="425" stroke="#0B0F12" stroke-width="2"/>
+                            <rect x="380" y="530" width="240" height="4" fill="url(#goldGrad)"/>
+                            <rect x="390" y="539" width="220" height="2" fill="url(#goldGrad)"/>
+                            <path d="M500,230 L504,246 L520,250 L504,254 L500,270 L496,254 L480,250 L496,246 Z" fill="url(#goldGrad)" style="animation:starPulse 4s infinite ease-in-out;transform-origin:500px 250px;"/>
                         </svg>
                     </div>
                     <div class="login-title">ARC PATRIMONY</div>
-                    <div class="login-subtitle">VALUE BEYOND GENERATIONS</div>
+                    <div class="login-subtitle">FAMILY OFFICE</div>
 
                     <div class="form-group">
-                        <label class="form-label">用户名</label>
-                        <input type="text" id="loginUsername" class="form-input" placeholder="输入用户名" tabindex="1" onkeydown="if(event.key==='Enter'||event.key==='Tab'){event.preventDefault();document.getElementById('loginPassword').focus();}">
+                        <label class="form-label">Username</label>
+                        <input type="text" id="loginUsername" class="form-input" placeholder="Enter username" tabindex="1" onkeydown="if(event.key==='Enter'||event.key==='Tab'){event.preventDefault();document.getElementById('loginPassword').focus();}">
                     </div>
 
                     <div class="form-group">
-                        <label class="form-label">密码</label>
-                        <input type="password" id="loginPassword" class="form-input" placeholder="输入密码" tabindex="2" onkeydown="if(event.key==='Enter'){event.preventDefault();handleLogin();}">
+                        <label class="form-label">Password</label>
+                        <input type="password" id="loginPassword" class="form-input" placeholder="Enter password" tabindex="2" onkeydown="if(event.key==='Enter'){event.preventDefault();handleLogin();}">
                     </div>
 
                     <div class="form-error" id="loginError"></div>
 
                     <div class="button-group">
-                        <button class="btn-primary" data-action="login" onclick="handleLogin()">登录</button>
-                        <button class="btn-secondary" id="toggleRegisterBtn" onclick="toggleRegister()">创建新账户</button>
+                        <button class="btn-primary" data-action="login" onclick="handleLogin()">Sign In</button>
+                        <button class="btn-secondary" id="toggleRegisterBtn" onclick="toggleRegister()">Create Account</button>
                     </div>
                 </div>
             </div>
@@ -1585,32 +1617,35 @@
                 <div class="market-light-bar" id="marketLightBar"></div>
                 <div class="app-header">
                     <div class="app-title-group">
-                        <svg class="app-logo-mini" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                        <svg class="app-logo-mini" viewBox="300 160 400 500" xmlns="http://www.w3.org/2000/svg">
                             <defs>
-                                <linearGradient id="arcGradMini" x1="0%" y1="0%" x2="100%" y2="100%">
-                                    <stop offset="0%" style="stop-color:#818cf8"/>
-                                    <stop offset="100%" style="stop-color:#4f46e5"/>
+                                <linearGradient id="goldGradMini" x1="20%" y1="0%" x2="80%" y2="100%">
+                                    <stop offset="0%" stop-color="#C1A673"/>
+                                    <stop offset="50%" stop-color="#EADDBC"/>
+                                    <stop offset="100%" stop-color="#96845E"/>
                                 </linearGradient>
                             </defs>
-                            <path d="M50 8 L30 45 L20 45 L20 88 L32 88 L32 55 L40 55 L40 88 L60 88 L60 55 L68 55 L68 88 L80 88 L80 45 L70 45 Z" fill="url(#arcGradMini)" opacity="0.9"/>
-                            <rect x="34" y="48" width="32" height="3" rx="1.5" fill="#a5b4fc" opacity="0.5"/>
+                            <path d="M340,195 L660,195 L660,375 A320,320 0 0,1 500,655 A320,320 0 0,1 340,375 Z" fill="none" stroke="url(#goldGradMini)" stroke-width="6"/>
+                            <rect x="395" y="295" width="210" height="20" fill="url(#goldGradMini)"/>
+                            <path d="M405,337 L405,525 L465,525 L465,425 A35,35 0 0,1 535,425 L535,525 L595,525 L595,337 Z" fill="url(#goldGradMini)"/>
+                            <path d="M500,230 L504,246 L520,250 L504,254 L500,270 L496,254 L480,250 L496,246 Z" fill="url(#goldGradMini)"/>
                         </svg>
                         <div class="app-title">ARC PATRIMONY</div>
                     </div>
                     <div class="header-user">
                         <div class="header-user-badge">${APP.username}</div>
-                        <button class="btn-logout" onclick="handleLogout()">登出</button>
+                        <button class="btn-logout" onclick="handleLogout()">Logout</button>
                     </div>
                 </div>
 
                 <div class="tabs">
-                    <div class="tab active" onclick="switchTab(0)">投资总览 <span class="tab-badge" id="holdingsBadge"></span></div>
-                    <div class="tab" onclick="switchTab(1)">行情</div>
-                    <div class="tab" onclick="switchTab(2)">交易记录</div>
-                    <div class="tab" onclick="switchTab(3)">价格提醒</div>
-                    <div class="tab" onclick="switchTab(4)">分析</div>
-                    <div class="tab" onclick="switchTab(5)">投资组合</div>
-                    <div class="tab" onclick="switchTab(6)">数据管理</div>
+                    <div class="tab active" onclick="switchTab(0)">Portfolio <span class="tab-badge" id="holdingsBadge"></span></div>
+                    <div class="tab" onclick="switchTab(1)">Market</div>
+                    <div class="tab" onclick="switchTab(2)">Trades</div>
+                    <div class="tab" onclick="switchTab(3)">Alerts</div>
+                    <div class="tab" onclick="switchTab(4)">Analysis</div>
+                    <div class="tab" onclick="switchTab(5)">Allocation</div>
+                    <div class="tab" onclick="switchTab(6)">Settings</div>
                 </div>
 
                 <div class="tab-content">
@@ -1627,46 +1662,46 @@
             <div class="modal" id="tradeModal">
                 <div class="modal-content" style="position: relative;">
                     <button class="modal-close" onclick="closeModal('tradeModal')">×</button>
-                    <div class="modal-header">新交易</div>
+                    <div class="modal-header">New Trade</div>
                     <div class="form-group">
-                        <label class="form-label">股票代码</label>
-                        <input type="text" id="tradeSymbol" class="form-input" placeholder="美股:AAPL 港股:0700.HK A股:600036.SS 日股:7203.T" onblur="autoFillTrade()" style="text-transform:uppercase;">
+                        <label class="form-label">Stock Symbol</label>
+                        <input type="text" id="tradeSymbol" class="form-input" placeholder="US:AAPL HK:0700.HK A:600036.SS JP:7203.T" onblur="autoFillTrade()" style="text-transform:uppercase;">
                     </div>
                     <div class="form-group">
-                        <label class="form-label">股票名称</label>
-                        <input type="text" id="tradeName" class="form-input" placeholder="例如: Apple Inc">
+                        <label class="form-label">Stock Name</label>
+                        <input type="text" id="tradeName" class="form-input" placeholder="e.g.: Apple Inc">
                     </div>
                     <div class="form-grid">
                         <div class="form-group">
-                            <label class="form-label">操作类型</label>
+                            <label class="form-label">Trade Type</label>
                             <select id="tradeType" class="form-input" style="appearance: none; padding-right: 30px;">
-                                <option value="买入">买入</option>
-                                <option value="卖出">卖出</option>
-                                <option value="分红">分红</option>
+                                <option value="买入">Buy</option>
+                                <option value="卖出">Sell</option>
+                                <option value="分红">Dividend</option>
                             </select>
                         </div>
                         <div class="form-group">
-                            <label class="form-label">数量</label>
+                            <label class="form-label">Quantity</label>
                             <input type="number" id="tradeQty" class="form-input" placeholder="0" step="0.01">
                         </div>
                     </div>
                     <div class="form-grid">
                         <div class="form-group">
-                            <label class="form-label">单价 (USD)</label>
+                            <label class="form-label">Unit Price (USD)</label>
                             <input type="number" id="tradePrice" class="form-input" placeholder="0.00" step="0.01">
                         </div>
                         <div class="form-group">
-                            <label class="form-label">费用 (USD)</label>
+                            <label class="form-label">Fee (USD)</label>
                             <input type="number" id="tradeFee" class="form-input" placeholder="0.00" step="0.01">
                         </div>
                     </div>
                     <div class="form-group">
-                        <label class="form-label">交易日期</label>
+                        <label class="form-label">Trade Date</label>
                         <input type="date" id="tradeDate" class="form-input">
                     </div>
                     <div class="form-grid">
                         <div class="form-group">
-                            <label class="form-label">货币</label>
+                            <label class="form-label">Currency</label>
                             <select id="tradeCurrency" class="form-input" style="appearance: none; padding-right: 30px;">
                                 <option value="USD">USD</option>
                                 <option value="CNY">CNY</option>
@@ -1675,34 +1710,34 @@
                             </select>
                         </div>
                         <div class="form-group">
-                            <label class="form-label">市场</label>
+                            <label class="form-label">Market</label>
                             <select id="tradeMarket" class="form-input" style="appearance: none; padding-right: 30px;">
-                                <option value="STOCK">股票</option>
+                                <option value="STOCK">Stock</option>
                                 <option value="ETF">ETF</option>
                             </select>
                         </div>
                     </div>
                     <div class="form-grid">
                         <div class="form-group">
-                            <label class="form-label">地区</label>
+                            <label class="form-label">Region</label>
                             <select id="tradeRegion" class="form-input" style="appearance: none; padding-right: 30px;">
-                                <option value="美国">美国</option>
-                                <option value="中国">中国</option>
-                                <option value="日本">日本</option>
+                                <option value="美国">US</option>
+                                <option value="中国">China</option>
+                                <option value="日本">Japan</option>
                             </select>
                         </div>
                         <div class="form-group">
-                            <label class="form-label">属性</label>
-                            <input type="text" id="tradeAttribute" class="form-input" placeholder="例如: 科技">
+                            <label class="form-label">Type</label>
+                            <input type="text" id="tradeAttribute" class="form-input" placeholder="e.g.: Tech">
                         </div>
                     </div>
                     <div class="form-group">
-                        <label class="form-label">行业</label>
-                        <input type="text" id="tradeSector" class="form-input" placeholder="例如: 科技">
+                        <label class="form-label">Sector</label>
+                        <input type="text" id="tradeSector" class="form-input" placeholder="e.g.: Tech">
                     </div>
                     <div class="modal-buttons">
-                        <button class="btn-secondary" onclick="closeModal('tradeModal')">取消</button>
-                        <button class="btn-primary" onclick="submitTrade()">保存交易</button>
+                        <button class="btn-secondary" onclick="closeModal('tradeModal')">Cancel</button>
+                        <button class="btn-primary" onclick="submitTrade()">Save Trade</button>
                     </div>
                 </div>
             </div>
@@ -1710,31 +1745,31 @@
             <div class="modal" id="alertModal">
                 <div class="modal-content" style="position: relative;">
                     <button class="modal-close" onclick="closeModal('alertModal')">×</button>
-                    <div class="modal-header">新提醒</div>
+                    <div class="modal-header">New Alert</div>
                     <div class="form-group">
-                        <label class="form-label">股票代码</label>
-                        <input type="text" id="alertSymbol" class="form-input" placeholder="例如: AAPL" onblur="autoFillAlert()" style="text-transform:uppercase;">
+                        <label class="form-label">Stock Symbol</label>
+                        <input type="text" id="alertSymbol" class="form-input" placeholder="e.g.: AAPL" onblur="autoFillAlert()" style="text-transform:uppercase;">
                     </div>
                     <div class="form-group">
-                        <label class="form-label">股票名称</label>
-                        <input type="text" id="alertName" class="form-input" placeholder="例如: Apple Inc">
+                        <label class="form-label">Stock Name</label>
+                        <input type="text" id="alertName" class="form-input" placeholder="e.g.: Apple Inc">
                     </div>
                     <div class="form-grid">
                         <div class="form-group">
-                            <label class="form-label">条件</label>
+                            <label class="form-label">Condition</label>
                             <select id="alertCondition" class="form-input" style="appearance: none; padding-right: 30px;">
-                                <option value="ABOVE">高于</option>
-                                <option value="BELOW">低于</option>
+                                <option value="ABOVE">Above</option>
+                                <option value="BELOW">Below</option>
                             </select>
                         </div>
                         <div class="form-group">
-                            <label class="form-label">价格 (USD)</label>
+                            <label class="form-label">Price (USD)</label>
                             <input type="number" id="alertPrice" class="form-input" placeholder="0.00" step="0.01">
                         </div>
                     </div>
                     <div class="modal-buttons">
-                        <button class="btn-secondary" onclick="closeModal('alertModal')">取消</button>
-                        <button class="btn-primary" onclick="submitAlert()">创建提醒</button>
+                        <button class="btn-secondary" onclick="closeModal('alertModal')">Cancel</button>
+                        <button class="btn-primary" onclick="submitAlert()">Submit</button>
                     </div>
                 </div>
             </div>
@@ -1815,13 +1850,10 @@
             lightBar.className = totalPL >= 0 ? 'market-light-bar' : 'market-light-bar negative';
         }
 
-        // Find best and worst performing stocks today
-        let bestStock = null, worstStock = null;
-        activeHoldings.forEach(h => {
-            const chg = APP.prices[h.symbol]?.change || 0;
-            if (!bestStock || chg > (APP.prices[bestStock.symbol]?.change || 0)) bestStock = h;
-            if (!worstStock || chg < (APP.prices[worstStock.symbol]?.change || 0)) worstStock = h;
-        });
+        // Find top 3 best and worst performing stocks today
+        const sortedByChange = [...activeHoldings].sort((a, b) => (APP.prices[b.symbol]?.change || 0) - (APP.prices[a.symbol]?.change || 0));
+        const top3Best = sortedByChange.slice(0, 3);
+        const top3Worst = sortedByChange.slice(-3).reverse();
 
         // Regional breakdowns (active only)
         const regionStats = {};
@@ -1845,32 +1877,40 @@
         let html = `
             <div class="stat-cards">
                 <div class="stat-card">
-                    <div class="stat-label">总市值</div>
+                    <div class="stat-label">Total Value</div>
                     <div class="stat-value" style="color:#e2e8f0;">$${fmtNum(totalValue)}</div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-label">总成本</div>
+                    <div class="stat-label">Total Cost</div>
                     <div class="stat-value" style="color:#94a3b8;">$${fmtNum(totalCost)}</div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-label">浮盈亏</div>
+                    <div class="stat-label">Unrealized P&L</div>
                     <div class="stat-value ${totalPL >= 0 ? 'price-positive' : 'price-negative'}">${totalPL >= 0 ? '+' : ''}$${fmtNum(totalPL)}</div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-label">收益率</div>
+                    <div class="stat-label">Return Rate</div>
                     <div class="stat-value ${totalPLPercent >= 0 ? 'price-positive' : 'price-negative'}">${formatPercent(totalPLPercent)}</div>
                 </div>
             </div>
-            ${bestStock && worstStock ? `<div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
-                <div style="flex:1;min-width:200px;padding:8px 16px;border-radius:10px;background:rgba(74,222,128,0.06);border:1px solid rgba(74,222,128,0.15);display:flex;align-items:center;gap:10px;">
-                    <span style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:1px;">今日最佳</span>
-                    <span style="color:#818cf8;font-weight:600;font-size:13px;">${bestStock.symbol}</span>
-                    <span class="price-positive" style="font-weight:600;font-size:13px;">${formatPercent(APP.prices[bestStock.symbol]?.change||0)}</span>
+            ${top3Best.length > 0 ? `<div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
+                <div style="flex:1;min-width:300px;padding:10px 16px;border-radius:10px;background:rgba(74,222,128,0.06);border:1px solid rgba(74,222,128,0.15);">
+                    <div style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Top Performers</div>
+                    <div style="display:flex;gap:14px;flex-wrap:wrap;">
+                        ${top3Best.map(h => `<span style="display:inline-flex;align-items:center;gap:6px;">
+                            <span style="color:#cbd5e1;font-size:12px;">${h.name}</span>
+                            <span class="price-positive" style="font-weight:600;font-size:12px;">${formatPercent(APP.prices[h.symbol]?.change||0)}</span>
+                        </span>`).join('<span style="color:#1e293b;">|</span>')}
+                    </div>
                 </div>
-                <div style="flex:1;min-width:200px;padding:8px 16px;border-radius:10px;background:rgba(248,113,113,0.06);border:1px solid rgba(248,113,113,0.15);display:flex;align-items:center;gap:10px;">
-                    <span style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:1px;">今日最弱</span>
-                    <span style="color:#818cf8;font-weight:600;font-size:13px;">${worstStock.symbol}</span>
-                    <span class="price-negative" style="font-weight:600;font-size:13px;">${formatPercent(APP.prices[worstStock.symbol]?.change||0)}</span>
+                <div style="flex:1;min-width:300px;padding:10px 16px;border-radius:10px;background:rgba(248,113,113,0.06);border:1px solid rgba(248,113,113,0.15);">
+                    <div style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Worst Performers</div>
+                    <div style="display:flex;gap:14px;flex-wrap:wrap;">
+                        ${top3Worst.map(h => `<span style="display:inline-flex;align-items:center;gap:6px;">
+                            <span style="color:#cbd5e1;font-size:12px;">${h.name}</span>
+                            <span class="price-negative" style="font-weight:600;font-size:12px;">${formatPercent(APP.prices[h.symbol]?.change||0)}</span>
+                        </span>`).join('<span style="color:#1e293b;">|</span>')}
+                    </div>
                 </div>
             </div>` : ''}
 
@@ -1879,7 +1919,7 @@
                     const pl = s.value - s.cost;
                     const pct = s.cost > 0 ? (pl / s.cost * 100) : 0;
                     const flag = r==='美国'?'🇺🇸':r==='中国'?'🇨🇳':r==='日本'?'🇯🇵':'🌐';
-                    const barColor = r==='美国'?'#818cf8':r==='中国'?'#fbbf24':'#f87171';
+                    const barColor = r==='美国'?'#C1A673':r==='中国'?'#fbbf24':'#f87171';
                     // Best/worst stock in this region
                     const regionHoldings = activeHoldings.filter(h => h.region === r);
                     let rBest = null, rWorst = null;
@@ -1888,23 +1928,23 @@
                         if (!rBest || chg > (APP.prices[rBest.symbol]?.change || 0)) rBest = h;
                         if (!rWorst || chg < (APP.prices[rWorst.symbol]?.change || 0)) rWorst = h;
                     });
-                    const bestInfo = rBest ? rBest.symbol+' '+formatPercent(APP.prices[rBest.symbol]?.change||0) : '';
-                    const worstInfo = rWorst ? rWorst.symbol+' '+formatPercent(APP.prices[rWorst.symbol]?.change||0) : '';
+                    const bestInfo = rBest ? (rBest.name||rBest.symbol)+' '+formatPercent(APP.prices[rBest.symbol]?.change||0) : '';
+                    const worstInfo = rWorst ? (rWorst.name||rWorst.symbol)+' '+formatPercent(APP.prices[rWorst.symbol]?.change||0) : '';
                     return `<div class="stat-card" style="position:relative;">
                         <div style="display:flex;justify-content:space-between;align-items:flex-start;">
-                            <div class="stat-label">${flag} ${r}资产 (${s.count}只)</div>
+                            <div class="stat-label">${flag} ${r} Assets (${s.count} stocks)</div>
                             <div style="text-align:right;">
                                 <div class="${pct>=0?'price-positive':'price-negative'}" style="font-size:22px;font-weight:bold;line-height:1.1;">${formatPercent(pct)}</div>
                                 <div class="${pl>=0?'price-positive':'price-negative'}" style="font-size:12px;margin-top:2px;">${pl>=0?'+':''}$${fmtNum(pl)}</div>
                             </div>
                         </div>
                         <div class="stat-value" style="font-size:18px;margin-top:4px;">$${fmtNum(s.value)}</div>
-                        <div style="font-size:12px;color:#64748b;margin-top:2px;">成本 $${fmtNum(s.cost)}</div>
+                        <div style="font-size:12px;color:#64748b;margin-top:2px;">Cost $${fmtNum(s.cost)}</div>
                         <div style="margin-top:6px;background:rgba(30,41,59,0.6);border-radius:4px;height:4px;overflow:hidden;">
                             <div style="width:${Math.min(100, s.value/totalValue*100)}%;height:100%;background:${barColor};border-radius:4px;"></div>
                         </div>
                         <div style="display:flex;justify-content:space-between;font-size:10px;margin-top:6px;color:#475569;">
-                            <span>占比 ${fmtNum(totalValue>0?s.value/totalValue*100:0,1)}%</span>
+                            <span>Weight ${fmtNum(totalValue>0?s.value/totalValue*100:0,1)}%</span>
                             <span>${rBest && rWorst && rBest.symbol !== rWorst.symbol ? '<span class="price-positive">▲'+bestInfo+'</span> <span class="price-negative">▼'+worstInfo+'</span>' : (rBest ? '<span class="price-positive">▲'+bestInfo+'</span>' : '')}</span>
                         </div>
                     </div>`;
@@ -1913,14 +1953,14 @@
 
             <div class="charts-row">
                 <div class="chart-card">
-                    <div class="chart-title">持仓占比（按地区）</div>
+                    <div class="chart-title">Holdings by Region</div>
                     <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
                         <canvas id="chart-pie-region" width="280" height="260"></canvas>
                         <div id="legend-region" style="flex:1;min-width:140px;"></div>
                     </div>
                 </div>
                 <div class="chart-card">
-                    <div class="chart-title">投资占比（按币种）</div>
+                    <div class="chart-title">Holdings by Currency</div>
                     <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
                         <canvas id="chart-pie-currency" width="280" height="260"></canvas>
                         <div id="legend-currency" style="flex:1;min-width:140px;"></div>
@@ -1975,34 +2015,34 @@
             html += `
                 <div class="chart-card">
                     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
-                        <div class="chart-title" style="margin-bottom:0;">持仓明细</div>
+                        <div class="chart-title" style="margin-bottom:0;">Holdings Detail</div>
                         <div style="display:flex;gap:6px;flex-wrap:wrap;">
-                            ${regions.map(r => `<button onclick="filterRegion('${r}')" style="padding:6px 16px;border-radius:20px;border:1px solid ${APP.regionFilter===r?'#6366f1':'#334155'};background:${APP.regionFilter===r?'#6366f1':'transparent'};color:${APP.regionFilter===r?'#fff':'#94a3b8'};cursor:pointer;font-size:13px;transition:all 0.2s;">${r}${r!=='全部'?' ('+APP.holdings.filter(h=>h.region===r).length+')':''}</button>`).join('')}
+                            ${regions.map(r => `<button onclick="filterRegion('${r}')" style="padding:6px 16px;border-radius:20px;border:1px solid ${APP.regionFilter===r?'#C1A673':'#334155'};background:${APP.regionFilter===r?'#C1A673':'transparent'};color:${APP.regionFilter===r?'#fff':'#94a3b8'};cursor:pointer;font-size:13px;transition:all 0.2s;">${r}${r!=='全部'?' ('+APP.holdings.filter(h=>h.region===r).length+')':''}</button>`).join('')}
                         </div>
                     </div>
                     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;align-items:center;">
-                        <span style="color:#94a3b8;font-size:13px;">币种:</span>
-                        ${allCurrencies.map(c => `<button onclick="filterCurrency('${c}')" style="padding:4px 14px;border-radius:16px;border:1px solid ${APP.currencyFilter===c?'#6366f1':'#334155'};background:${APP.currencyFilter===c?'#6366f1':'transparent'};color:${APP.currencyFilter===c?'#fff':'#94a3b8'};cursor:pointer;font-size:12px;">${c}</button>`).join('')}
+                        <span style="color:#94a3b8;font-size:13px;">Currency:</span>
+                        ${allCurrencies.map(c => `<button onclick="filterCurrency('${c}')" style="padding:4px 14px;border-radius:16px;border:1px solid ${APP.currencyFilter===c?'#C1A673':'#334155'};background:${APP.currencyFilter===c?'#C1A673':'transparent'};color:${APP.currencyFilter===c?'#fff':'#94a3b8'};cursor:pointer;font-size:12px;">${c}</button>`).join('')}
                     </div>
                     <div style="overflow:auto;max-height:70vh;">
                     <table class="holdings-table" style="font-size:13px;">
                         <thead>
                             <tr>
-                                <th>代码</th>
-                                <th>名称</th>
-                                <th>地区</th>
-                                <th>货币</th>
-                                <th>属性</th>
-                                <th>持股数</th>
-                                <th>平均成本</th>
-                                <th>当前价</th>
-                                <th ${sHd('priceChange')}>涨跌%${sIco('priceChange')}</th>
-                                <th ${sHd(isLocalCur0?'mvLocal':'mv')}>市值(${curLabel0})${sIco(isLocalCur0?'mvLocal':'mv')}</th>
-                                <th ${sHd(isLocalCur0?'plLocal':'pl')}>收益(${curLabel0})${sIco(isLocalCur0?'plLocal':'pl')}</th>
-                                <th ${sHd('plPct')}>收益%${sIco('plPct')}</th>
-                                <th>设计权重</th>
-                                <th>当前权重</th>
-                                <th>差异</th>
+                                <th>Symbol</th>
+                                <th>Name</th>
+                                <th>Region</th>
+                                <th>Currency</th>
+                                <th>Type</th>
+                                <th>Shares</th>
+                                <th>Avg Cost</th>
+                                <th>Price</th>
+                                <th ${sHd('priceChange')}>Change%${sIco('priceChange')}</th>
+                                <th ${sHd(isLocalCur0?'mvLocal':'mv')}>Mkt Value(${curLabel0})${sIco(isLocalCur0?'mvLocal':'mv')}</th>
+                                <th ${sHd(isLocalCur0?'plLocal':'pl')}>P&L(${curLabel0})${sIco(isLocalCur0?'plLocal':'pl')}</th>
+                                <th ${sHd('plPct')}>P&L%${sIco('plPct')}</th>
+                                <th>Target Wt</th>
+                                <th>Current Wt</th>
+                                <th>Diff</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -2059,7 +2099,7 @@
             html += `</tbody><tfoot>`;
             if (isLocalCur0) {
                 html += `<tr style="border-top:2px solid #334155;font-weight:bold;">
-                    <td colspan="5">${filterLabel} 合计 (${activeList.length}只) — ${curLabel0}</td>
+                    <td colspan="5">${filterLabel} Total (${activeList.length} stocks) — ${curLabel0}</td>
                     <td></td><td></td><td></td><td></td>
                     <td style="text-align:right;">${dispSym0}${fmtNum(filteredLocalValue)}</td>
                     <td class="${filteredLocalPL>=0?'price-positive':'price-negative'}" style="text-align:right;">${filteredLocalPL>=0?'+':''}${dispSym0}${fmtNum(filteredLocalPL)}</td>
@@ -2067,7 +2107,7 @@
                     <td colspan="3"></td>
                 </tr>
                 <tr style="font-weight:bold;color:#64748b;">
-                    <td colspan="5">折合 USD</td>
+                    <td colspan="5">USD Equivalent</td>
                     <td></td><td></td><td></td><td></td>
                     <td style="text-align:right;">$${fmtNum(filteredValue)}</td>
                     <td class="${filteredPL>=0?'price-positive':'price-negative'}" style="text-align:right;">${filteredPL>=0?'+':''}$${fmtNum(filteredPL)}</td>
@@ -2076,7 +2116,7 @@
                 </tr>`;
             } else {
                 html += `<tr style="border-top:2px solid #334155;font-weight:bold;">
-                    <td colspan="5">${filterLabel} 合计 (${activeList.length}只)</td>
+                    <td colspan="5">${filterLabel} Total (${activeList.length} stocks)</td>
                     <td></td><td></td><td></td><td></td>
                     <td style="text-align:right;">$${fmtNum(filteredValue)}</td>
                     <td class="${filteredPL>=0?'price-positive':'price-negative'}" style="text-align:right;">${filteredPL>=0?'+':''}$${fmtNum(filteredPL)}</td>
@@ -2089,11 +2129,11 @@
             <!-- 已清仓股票 -->
             ${soldList.length > 0 ? `
             <div class="chart-card" style="margin-top:16px;border-left:3px solid #f97316;">
-                <div class="chart-title" style="color:#f97316;">已清仓股票 (${soldList.length}只) — 已实现盈亏: <span class="${soldTotalPL>=0?'price-positive':'price-negative'}">${soldTotalPL>=0?'+':''}$${fmtNum(soldTotalPL)}</span></div>
+                <div class="chart-title" style="color:#f97316;">Closed Positions (${soldList.length} stocks) — Realized P&L: <span class="${soldTotalPL>=0?'price-positive':'price-negative'}">${soldTotalPL>=0?'+':''}$${fmtNum(soldTotalPL)}</span></div>
                 <table class="holdings-table" style="font-size:13px;background:#1a1520;">
                     <thead><tr>
-                        <th>代码</th><th>名称</th><th>地区</th><th>货币</th><th>属性</th>
-                        <th>持股数</th><th>平均成本</th><th>已实现收益</th><th>收益率</th>
+                        <th>Symbol</th><th>Name</th><th>Region</th><th>Currency</th><th>Type</th>
+                        <th>Shares</th><th>Avg Cost</th><th>Realized P&L</th><th>P&L%</th>
                     </tr></thead><tbody>
                     ${soldList.map(d => {
                         const curSym = curSym0fn(d.currency);
@@ -2116,18 +2156,18 @@
 
                 <div style="margin-top: 20px;">
                     <div class="chart-card">
-                        <div class="chart-title">外汇汇率</div>
+                        <div class="chart-title">FX Rates</div>
                         <div class="fx-rates">
                             <div class="fx-rate">
-                                <div class="fx-rate-label">美元/日元</div>
+                                <div class="fx-rate-label">USD/JPY</div>
                                 <div class="fx-rate-value">1 USD = ${fmtNum(1 / APP.FX_RATES.JPY, 2)} JPY</div>
                             </div>
                             <div class="fx-rate">
-                                <div class="fx-rate-label">美元/人民币</div>
+                                <div class="fx-rate-label">USD/CNY</div>
                                 <div class="fx-rate-value">1 USD = ${fmtNum(1 / APP.FX_RATES.CNY, 2)} CNY</div>
                             </div>
                             <div class="fx-rate">
-                                <div class="fx-rate-label">美元/港币</div>
+                                <div class="fx-rate-label">USD/HKD</div>
                                 <div class="fx-rate-value">1 USD = ${fmtNum(1 / APP.FX_RATES.HKD, 2)} HKD</div>
                             </div>
                         </div>
@@ -2138,8 +2178,8 @@
             html += `
                 <div class="empty-state">
                     <div class="empty-icon">📈</div>
-                    <div class="empty-title">还没有持仓</div>
-                    <div class="empty-text">开始添加您的第一笔交易</div>
+                    <div class="empty-title">No Holdings Yet</div>
+                    <div class="empty-text">Start by adding your first trade</div>
                 </div>
             `;
         }
@@ -2148,7 +2188,7 @@
 
         // Draw two pie charts: region + currency
         if (activeHoldings.length > 0) {
-            const colors = ['#6366f1','#4ade80','#f87171','#fbbf24','#ec4899','#14b8a6','#f97316','#8b5cf6','#06b6d4','#84cc16'];
+            const colors = ['#C1A673','#4ade80','#f87171','#fbbf24','#ec4899','#14b8a6','#f97316','#8b5cf6','#06b6d4','#84cc16'];
 
             // Region pie (active only)
             const regionGrouped = {};
@@ -2227,40 +2267,40 @@
 
         let html = '';
         // Search
-        html += `<div style="margin-bottom:12px;"><input type="text" id="tab1Search" class="form-input" style="width:100%;max-width:400px;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:8px 12px;border-radius:8px;" placeholder="搜索股票代码或名称..."></div>`;
+        html += `<div style="margin-bottom:12px;"><input type="text" id="tab1Search" class="form-input" style="width:100%;max-width:400px;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:8px 12px;border-radius:8px;" placeholder="Search stock symbol or name..."></div>`;
 
         // Region filter
         html += `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">`;
-        html += `<span style="color:#94a3b8;font-size:13px;line-height:32px;">属地:</span>`;
+        html += `<span style="color:#94a3b8;font-size:13px;line-height:32px;">Region:</span>`;
         regions.forEach(r => {
             const active = st.region === r;
-            html += `<button onclick="APP._tab1State.region='${r}';renderTab1()" style="padding:4px 14px;border-radius:16px;border:1px solid ${active?'#6366f1':'#334155'};background:${active?'#6366f1':'transparent'};color:${active?'#fff':'#94a3b8'};cursor:pointer;font-size:12px;">${r}</button>`;
+            html += `<button onclick="APP._tab1State.region='${r}';renderTab1()" style="padding:4px 14px;border-radius:16px;border:1px solid ${active?'#C1A673':'#334155'};background:${active?'#C1A673':'transparent'};color:${active?'#fff':'#94a3b8'};cursor:pointer;font-size:12px;">${r}</button>`;
         });
         html += `</div>`;
 
         // Currency filter
         html += `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">`;
-        html += `<span style="color:#94a3b8;font-size:13px;line-height:32px;">币种:</span>`;
+        html += `<span style="color:#94a3b8;font-size:13px;line-height:32px;">Currency:</span>`;
         currencies.forEach(c => {
             const active = st.currency === c;
-            html += `<button onclick="APP._tab1State.currency='${c}';renderTab1()" style="padding:4px 14px;border-radius:16px;border:1px solid ${active?'#6366f1':'#334155'};background:${active?'#6366f1':'transparent'};color:${active?'#fff':'#94a3b8'};cursor:pointer;font-size:12px;">${c}</button>`;
+            html += `<button onclick="APP._tab1State.currency='${c}';renderTab1()" style="padding:4px 14px;border-radius:16px;border:1px solid ${active?'#C1A673':'#334155'};background:${active?'#C1A673':'transparent'};color:${active?'#fff':'#94a3b8'};cursor:pointer;font-size:12px;">${c}</button>`;
         });
         html += `</div>`;
 
         if (list.length === 0) {
-            html += `<div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-title">没有匹配的股票</div></div>`;
+            html += `<div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-title">No matching stocks</div></div>`;
         } else {
             const sortArrow = st.sortDir === 'desc' ? '▼' : '▲';
             const thSticky = 'position:sticky;top:0;background:#0f172a;z-index:10;';
             html += `<div style="overflow:auto;max-height:70vh;"><table style="width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed;">`;
             html += `<thead><tr style="border-bottom:1px solid #334155;color:#94a3b8;font-size:12px;">`;
-            html += `<th style="${thSticky}text-align:left;padding:8px 6px;width:12%;">代码</th>`;
-            html += `<th style="${thSticky}text-align:left;padding:8px 6px;width:12%;">名称</th>`;
-            html += `<th style="${thSticky}text-align:right;padding:8px 2px;width:14%;">现价</th>`;
-            html += `<th style="${thSticky}text-align:right;padding:8px 2px;width:11%;cursor:pointer;user-select:none;" onclick="APP._tab1State.sortDir=APP._tab1State.sortDir==='desc'?'asc':'desc';renderTab1()">涨跌% ${sortArrow}</th>`;
-            html += `<th style="${thSticky}text-align:left;padding:8px 6px;width:10%;">属地</th>`;
-            html += `<th style="${thSticky}text-align:left;padding:8px 6px;width:9%;">币种</th>`;
-            html += `<th style="${thSticky}text-align:left;padding:8px 6px;width:10%;">属性</th>`;
+            html += `<th style="${thSticky}text-align:left;padding:8px 6px;width:12%;">Symbol</th>`;
+            html += `<th style="${thSticky}text-align:left;padding:8px 6px;width:12%;">Name</th>`;
+            html += `<th style="${thSticky}text-align:right;padding:8px 2px;width:14%;">Price</th>`;
+            html += `<th style="${thSticky}text-align:right;padding:8px 2px;width:11%;cursor:pointer;user-select:none;" onclick="APP._tab1State.sortDir=APP._tab1State.sortDir==='desc'?'asc':'desc';renderTab1()">Change% ${sortArrow}</th>`;
+            html += `<th style="${thSticky}text-align:left;padding:8px 6px;width:10%;">Region</th>`;
+            html += `<th style="${thSticky}text-align:left;padding:8px 6px;width:9%;">Currency</th>`;
+            html += `<th style="${thSticky}text-align:left;padding:8px 6px;width:10%;">Type</th>`;
             html += `</tr></thead><tbody>`;
 
             list.forEach(d => {
@@ -2279,7 +2319,7 @@
             });
 
             html += `</tbody></table></div>`;
-            html += `<div style="color:#64748b;font-size:11px;margin-top:8px;text-align:right;">共 ${list.length} 只股票</div>`;
+            html += `<div style="color:#64748b;font-size:11px;margin-top:8px;text-align:right;">Total ${list.length} stocks</div>`;
         }
 
         container.innerHTML = html;
@@ -2300,7 +2340,7 @@
         const container = document.getElementById('tab-2');
 
         let html = `
-            <button class="btn-primary" onclick="openModal('tradeModal')" style="margin-bottom: 20px; padding: 10px 20px;">+ 新交易</button>
+            <button class="btn-primary" onclick="openModal('tradeModal')" style="margin-bottom: 20px; padding: 10px 20px;">+ New Trade</button>
         `;
 
         if (APP.trades.length > 0) {
@@ -2308,14 +2348,14 @@
                 <table class="trades-table">
                     <thead>
                         <tr>
-                            <th>日期</th>
-                            <th>代码</th>
-                            <th>名称</th>
-                            <th>类型</th>
-                            <th>数量</th>
-                            <th>单价</th>
-                            <th>费用</th>
-                            <th>总额</th>
+                            <th>Date</th>
+                            <th>Symbol</th>
+                            <th>Name</th>
+                            <th>Type</th>
+                            <th>Quantity</th>
+                            <th>Price</th>
+                            <th>Fee</th>
+                            <th>Total</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -2329,7 +2369,7 @@
                 const isBuy = t.type === 'BUY' || t.type === '买入';
                 const isDividend = t.type === '分红' || t.type === 'DIVIDEND';
                 const typeClass = isDividend ? 'trade-type-dividend' : (isBuy ? 'trade-type-buy' : 'trade-type-sell');
-                const typeText = isDividend ? '分红' : (isBuy ? '买入' : '卖出');
+                const typeText = isDividend ? 'Dividend' : (isBuy ? 'Buy' : 'Sell');
 
                 html += `
                     <tr>
@@ -2353,8 +2393,8 @@
             html += `
                 <div class="empty-state">
                     <div class="empty-icon">📊</div>
-                    <div class="empty-title">还没有交易记录</div>
-                    <div class="empty-text">点击"新交易"添加您的第一笔交易</div>
+                    <div class="empty-title">No Trades Yet</div>
+                    <div class="empty-text">Click "+ New Trade" to add your first trade</div>
                 </div>
             `;
         }
@@ -2366,7 +2406,7 @@
         const container = document.getElementById('tab-3');
 
         let html = `
-            <button class="btn-primary" onclick="openModal('alertModal')" style="margin-bottom: 20px; padding: 10px 20px;">+ 新提醒</button>
+            <button class="btn-primary" onclick="openModal('alertModal')" style="margin-bottom: 20px; padding: 10px 20px;">+ New Alert</button>
         `;
 
         if (APP.alerts.length > 0) {
@@ -2375,7 +2415,7 @@
             `;
 
             APP.alerts.forEach(a => {
-                const typeText = a.condition === 'ABOVE' ? '高于' : '低于';
+                const typeText = a.condition === 'ABOVE' ? 'Above' : 'Below';
                 html += `
                     <div class="alert-card">
                         <div class="alert-card-header">
@@ -2384,9 +2424,9 @@
                         </div>
                         <div class="alert-card-condition">${a.name}</div>
                         <div style="font-size:22px;font-weight:bold;color:#4ade80;margin:8px 0;">$${fmtNum(a.price, 2)}</div>
-                        <div class="alert-card-condition">当价格${typeText}此价时提醒</div>
+                        <div class="alert-card-condition">When price ${typeText} reaches this level</div>
                         <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <div class="text-sm text-muted">状态: ${a.active ? '启用' : '禁用'}</div>
+                            <div class="text-sm text-muted">Status: ${a.active ? 'Active' : 'Inactive'}</div>
                             <div class="toggle-switch ${a.active ? 'active' : ''}" onclick="toggleAlert('${a.id}', ${!a.active})">
                                 <div class="toggle-slider"></div>
                             </div>
@@ -2402,8 +2442,8 @@
             html += `
                 <div class="empty-state">
                     <div class="empty-icon">🔔</div>
-                    <div class="empty-title">还没有价格提醒</div>
-                    <div class="empty-text">点击"新提醒"创建您的第一个价格提醒</div>
+                    <div class="empty-title">No Price Alerts</div>
+                    <div class="empty-text">Click "+ New Alert" to create your first price alert</div>
                 </div>
             `;
         }
@@ -2417,7 +2457,7 @@
     function renderTab4() {
         const container = document.getElementById('tab-4');
         if (APP.holdings.length === 0) {
-            container.innerHTML = `<div class="empty-state"><div class="empty-icon">📈</div><div class="empty-title">无数据可分析</div></div>`;
+            container.innerHTML = `<div class="empty-state"><div class="empty-icon">📈</div><div class="empty-title">No data to analyze</div></div>`;
             return;
         }
 
@@ -2478,32 +2518,32 @@
         let html = `
         <div class="chart-card" style="margin-bottom:16px;">
             <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
-                <div class="chart-title" style="margin-bottom:0;">持仓分析</div>
-                <button class="btn-primary" onclick="copyAnalysisTable()" style="font-size:13px;padding:6px 14px;">📋 复制表格到剪贴板</button>
+                <div class="chart-title" style="margin-bottom:0;">Holdings Analysis</div>
+                <button class="btn-primary" onclick="copyAnalysisTable()" style="font-size:13px;padding:6px 14px;">📋 Copy to Clipboard</button>
             </div>
             <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center;">
-                <span style="color:#94a3b8;font-size:13px;">地区:</span>
-                ${regions.map(r => `<button onclick="setAnalysisFilter('region','${r}')" style="padding:4px 12px;border-radius:16px;border:1px solid ${st.regionFilter===r?'#6366f1':'#334155'};background:${st.regionFilter===r?'#6366f1':'transparent'};color:${st.regionFilter===r?'#fff':'#94a3b8'};cursor:pointer;font-size:12px;">${r}</button>`).join('')}
-                <span style="color:#94a3b8;font-size:13px;margin-left:12px;">货币:</span>
-                ${currencies.map(c => `<button onclick="setAnalysisFilter('currency','${c}')" style="padding:4px 12px;border-radius:16px;border:1px solid ${st.currencyFilter===c?'#6366f1':'#334155'};background:${st.currencyFilter===c?'#6366f1':'transparent'};color:${st.currencyFilter===c?'#fff':'#94a3b8'};cursor:pointer;font-size:12px;">${c}</button>`).join('')}
+                <span style="color:#94a3b8;font-size:13px;">Region:</span>
+                ${regions.map(r => `<button onclick="setAnalysisFilter('region','${r}')" style="padding:4px 12px;border-radius:16px;border:1px solid ${st.regionFilter===r?'#C1A673':'#334155'};background:${st.regionFilter===r?'#C1A673':'transparent'};color:${st.regionFilter===r?'#fff':'#94a3b8'};cursor:pointer;font-size:12px;">${r}</button>`).join('')}
+                <span style="color:#94a3b8;font-size:13px;margin-left:12px;">Currency:</span>
+                ${currencies.map(c => `<button onclick="setAnalysisFilter('currency','${c}')" style="padding:4px 12px;border-radius:16px;border:1px solid ${st.currencyFilter===c?'#C1A673':'#334155'};background:${st.currencyFilter===c?'#C1A673':'transparent'};color:${st.currencyFilter===c?'#fff':'#94a3b8'};cursor:pointer;font-size:12px;">${c}</button>`).join('')}
             </div>
             <div style="overflow:auto;max-height:70vh;">
             <table class="holdings-table" id="analysisTable" style="font-size:13px;">
                 <thead><tr>
-                    <th ${thClick('symbol')}>代码${sortIcon('symbol')}</th>
-                    <th ${thClick('name')}>名称${sortIcon('name')}</th>
-                    <th ${thClick('region')}>地区${sortIcon('region')}</th>
-                    <th ${thClick('currency')}>货币${sortIcon('currency')}</th>
-                    <th ${thClick('attribute')}>属性${sortIcon('attribute')}</th>
-                    <th ${thClick('sector')}>行业${sortIcon('sector')}</th>
-                    <th ${thClick('qty')}>持股数${sortIcon('qty')}</th>
-                    <th ${thClick('avg_cost')}>成本价${sortIcon('avg_cost')}</th>
-                    <th ${thClick('currentPrice')}>当前价${sortIcon('currentPrice')}</th>
-                    <th ${thClick('priceChange')}>涨跌%${sortIcon('priceChange')}</th>
-                    <th ${thClick(isLocalCur?'costLocal':'costUSD')}>成本(${curLabel})${sortIcon(isLocalCur?'costLocal':'costUSD')}</th>
-                    <th ${thClick(isLocalCur?'marketValueLocal':'marketValueUSD')}>市值(${curLabel})${sortIcon(isLocalCur?'marketValueLocal':'marketValueUSD')}</th>
-                    <th ${thClick(isLocalCur?'plLocal':'plUSD')}>收益(${curLabel})${sortIcon(isLocalCur?'plLocal':'plUSD')}</th>
-                    <th ${thClick('plPct')}>收益%${sortIcon('plPct')}</th>
+                    <th ${thClick('symbol')}>Symbol${sortIcon('symbol')}</th>
+                    <th ${thClick('name')}>Name${sortIcon('name')}</th>
+                    <th ${thClick('region')}>Region${sortIcon('region')}</th>
+                    <th ${thClick('currency')}>Currency${sortIcon('currency')}</th>
+                    <th ${thClick('attribute')}>Type${sortIcon('attribute')}</th>
+                    <th ${thClick('sector')}>Sector${sortIcon('sector')}</th>
+                    <th ${thClick('qty')}>Shares${sortIcon('qty')}</th>
+                    <th ${thClick('avg_cost')}>Avg Cost${sortIcon('avg_cost')}</th>
+                    <th ${thClick('currentPrice')}>Price${sortIcon('currentPrice')}</th>
+                    <th ${thClick('priceChange')}>Change%${sortIcon('priceChange')}</th>
+                    <th ${thClick(isLocalCur?'costLocal':'costUSD')}>Cost(${curLabel})${sortIcon(isLocalCur?'costLocal':'costUSD')}</th>
+                    <th ${thClick(isLocalCur?'marketValueLocal':'marketValueUSD')}>Mkt Value(${curLabel})${sortIcon(isLocalCur?'marketValueLocal':'marketValueUSD')}</th>
+                    <th ${thClick(isLocalCur?'plLocal':'plUSD')}>P&L(${curLabel})${sortIcon(isLocalCur?'plLocal':'plUSD')}</th>
+                    <th ${thClick('plPct')}>P&L%${sortIcon('plPct')}</th>
                 </tr></thead><tbody>`;
 
         data.forEach(d => {
@@ -2534,7 +2574,7 @@
         if (isLocalCur) {
             html += `</tbody><tfoot>
                 <tr style="border-top:2px solid #334155;font-weight:bold;">
-                    <td colspan="6">合计 (${data.length}只) — ${curLabel}</td>
+                    <td colspan="6">Total (${data.length} stocks) — ${curLabel}</td>
                     <td></td><td></td><td></td><td></td>
                     <td style="text-align:right;">${displaySym}${fmtNum(totalLocalCost)}</td>
                     <td style="text-align:right;">${displaySym}${fmtNum(totalLocalMV)}</td>
@@ -2542,7 +2582,7 @@
                     <td class="${totalLocalPLPct>=0?'price-positive':'price-negative'}" style="text-align:right;">${formatPercent(totalLocalPLPct)}</td>
                 </tr>
                 <tr style="font-weight:bold;color:#64748b;">
-                    <td colspan="6">折合 USD</td>
+                    <td colspan="6">USD Equivalent</td>
                     <td></td><td></td><td></td><td></td>
                     <td style="text-align:right;">$${fmtNum(totalCost)}</td>
                     <td style="text-align:right;">$${fmtNum(totalMV)}</td>
@@ -2552,7 +2592,7 @@
             </tfoot>`;
         } else {
             html += `</tbody><tfoot><tr style="border-top:2px solid #334155;font-weight:bold;">
-                <td colspan="6">合计 (${data.length}只)</td>
+                <td colspan="6">Total (${data.length} stocks)</td>
                 <td></td><td></td><td></td><td></td>
                 <td style="text-align:right;">$${fmtNum(totalCost)}</td>
                 <td style="text-align:right;">$${fmtNum(totalMV)}</td>
@@ -2565,16 +2605,16 @@
 
         <div class="charts-row">
             <div class="chart-card">
-                <div class="chart-title">按行业分布</div>
+                <div class="chart-title">Distribution by Sector</div>
                 <canvas id="chart-sector" width="400" height="300"></canvas>
             </div>
             <div class="chart-card">
-                <div class="chart-title">按地区分布</div>
+                <div class="chart-title">Distribution by Region</div>
                 <canvas id="chart-region" width="400" height="300"></canvas>
             </div>
         </div>
         <div class="chart-card">
-            <div class="chart-title">收益排名 (Top 10)</div>
+            <div class="chart-title">P&L Ranking (Top 10)</div>
             <canvas id="chart-pl" width="800" height="400"></canvas>
         </div>`;
 
@@ -2584,11 +2624,11 @@
             const ds4 = isLocalCur ? displaySym : '$';
             html += `
             <div class="chart-card" style="margin-top:16px;border-left:3px solid #f97316;">
-                <div class="chart-title" style="color:#f97316;">已清仓股票 (${soldData.length}只) — 已实现盈亏: <span class="${soldTotalPL>=0?'price-positive':'price-negative'}">${soldTotalPL>=0?'+':''}$${fmtNum(soldTotalPL)}</span></div>
+                <div class="chart-title" style="color:#f97316;">Closed Positions (${soldData.length} stocks) — Realized P&L: <span class="${soldTotalPL>=0?'price-positive':'price-negative'}">${soldTotalPL>=0?'+':''}$${fmtNum(soldTotalPL)}</span></div>
                 <table class="holdings-table" style="font-size:13px;background:#1a1520;">
                     <thead><tr>
-                        <th>代码</th><th>名称</th><th>地区</th><th>货币</th><th>属性</th><th>行业</th>
-                        <th>平均成本</th><th>已实现收益</th><th>收益率</th>
+                        <th>Symbol</th><th>Name</th><th>Region</th><th>Currency</th><th>Type</th><th>Sector</th>
+                        <th>Avg Cost</th><th>Realized P&L</th><th>P&L%</th>
                     </tr></thead><tbody>
                     ${soldData.map(d => {
                         const cs = curSym4(d.currency);
@@ -2622,7 +2662,7 @@
         });
         const sectorBars = Object.entries(sectorData).map(([label, value]) => ({ label: label.substring(0,8), value }));
         const regionPie = Object.entries(regionData).map(([label, value]) => {
-            const colors = { '美国':'#6366f1','中国':'#fbbf24','日本':'#f87171' };
+            const colors = { '美国':'#C1A673','中国':'#fbbf24','日本':'#f87171' };
             return { label, value, color: colors[label] || '#64748b' };
         });
         const topPL = plBars.sort((a, b) => Math.abs(b.value) - Math.abs(a.value)).slice(0, 10);
@@ -2659,14 +2699,14 @@
             tsv += vals.join('\t') + '\n';
         });
         navigator.clipboard.writeText(tsv).then(() => {
-            alert('表格已复制到剪贴板！可直接粘贴到 Excel');
+            alert('Table copied to clipboard! You can paste it directly into Excel');
         }).catch(() => {
             // Fallback
             const ta = document.createElement('textarea');
             ta.value = tsv; document.body.appendChild(ta);
             ta.select(); document.execCommand('copy');
             document.body.removeChild(ta);
-            alert('表格已复制到剪贴板！');
+            alert('Table copied to clipboard!');
         });
     }
 
@@ -2675,7 +2715,7 @@
         const holding = APP.holdings.find(h => h.symbol === symbol);
         if (!holding) return;
         const trades = APP.trades.filter(t => t.symbol === symbol).sort((a, b) => new Date(a.date) - new Date(b.date));
-        if (trades.length === 0) { alert('暂无该股票的交易记录'); return; }
+        if (trades.length === 0) { alert('No trades found for this stock'); return; }
 
         const rate = APP.FX_RATES[holding.currency] || 1;
         const curSym = holding.currency==='CNY'?'¥':holding.currency==='JPY'?'¥':holding.currency==='HKD'?'HK$':'$';
@@ -2716,7 +2756,7 @@
                 <button class="modal-close" onclick="document.getElementById('stockDetailModal').classList.remove('show')">×</button>
                 <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;">
                     <div>
-                        <h2 style="color:#6366f1;margin-bottom:4px;">${holding.symbol}</h2>
+                        <h2 style="color:#C1A673;margin-bottom:4px;">${holding.symbol}</h2>
                         <div style="color:#cbd5e1;font-size:16px;">${holding.name}</div>
                         <div style="color:#94a3b8;font-size:13px;margin-top:4px;">${holding.region} · ${holding.currency} · ${holding.attribute||''}</div>
                     </div>
@@ -2792,10 +2832,10 @@
         const regions = [...new Set(APP.holdings.map(h => h.region).filter(Boolean))];
 
         let html = `<div class="chart-card" style="margin-bottom:16px;">
-            <div class="chart-title">投资组合设计</div>
+            <div class="chart-title">Portfolio Allocation</div>
             <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">
-                <label style="color:#94a3b8;">总预算 (USD):</label>
-                <input type="number" id="totalBudget" class="form-input" style="width:200px;" value="${APP.portfolioBudget||0}" onchange="saveBudget(this.value)" placeholder="总投资预算">
+                <label style="color:#94a3b8;">Total Budget (USD):</label>
+                <input type="number" id="totalBudget" class="form-input" style="width:200px;" value="${APP.portfolioBudget||0}" onchange="saveBudget(this.value)" placeholder="Total investment budget">
             </div>
         </div>`;
 
@@ -2811,13 +2851,13 @@
             let regionCurrentUSD = 0;
 
             html += `<div class="chart-card" style="margin-bottom:16px;">
-                <div class="chart-title" style="margin-bottom:12px;">🏴 ${region} 组合 (${cur})</div>
+                <div class="chart-title" style="margin-bottom:12px;">🏴 ${region} Allocation (${cur})</div>
                 <table class="holdings-table" style="font-size:13px;">
                     <thead><tr>
-                        <th>代码</th><th>名称</th><th>币种</th>
-                        <th>目标权重</th><th>目标金额(${cur})</th>
-                        <th>当前市值(${cur})</th><th>已达成%</th>
-                        <th>还须购入(${cur})</th><th>折合USD</th>
+                        <th>Symbol</th><th>Name</th><th>Currency</th>
+                        <th>Target Wt</th><th>Target Amount(${cur})</th>
+                        <th>Current Value(${cur})</th><th>Achievement%</th>
+                        <th>Need to Buy(${cur})</th><th>USD Equivalent</th>
                     </tr></thead><tbody>`;
 
             regionHoldings.forEach(h => {
@@ -2850,7 +2890,7 @@
 
             const regionToBuyUSD = Math.max(0, regionTargetUSD - regionCurrentUSD);
             html += `</tbody><tfoot><tr style="border-top:2px solid #334155;font-weight:bold;">
-                <td colspan="3">${region} 小计</td>
+                <td colspan="3">${region} Subtotal</td>
                 <td style="text-align:right;">${fmtNum(regionTotalWeight,1)}%</td>
                 <td></td><td></td><td></td><td></td>
                 <td style="text-align:right;">$${fmtNum(regionToBuyUSD, 0)}</td>
@@ -2880,39 +2920,39 @@
         const html = `
             <div class="data-management">
                 <div class="data-section">
-                    <div class="data-section-title">用户信息</div>
+                    <div class="data-section-title">User Info</div>
                     <div class="user-info">
-                        <div><strong>用户名:</strong> ${APP.username}</div>
-                        <div><strong>持仓数:</strong> ${APP.holdings.length}</div>
-                        <div><strong>交易数:</strong> ${APP.trades.length}</div>
-                        <div><strong>提醒数:</strong> ${APP.alerts.length}</div>
+                        <div><strong>Username:</strong> ${APP.username}</div>
+                        <div><strong>Holdings:</strong> ${APP.holdings.length}</div>
+                        <div><strong>Trades:</strong> ${APP.trades.length}</div>
+                        <div><strong>Alerts:</strong> ${APP.alerts.length}</div>
                     </div>
                 </div>
 
                 <div class="data-section">
-                    <div class="data-section-title">修改密码</div>
+                    <div class="data-section-title">Change Password</div>
                     <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
                         <div class="form-group" style="margin-bottom:0;">
-                            <label class="form-label">旧密码</label>
-                            <input type="password" id="oldPwd" class="form-input" style="width:160px;" placeholder="当前密码">
+                            <label class="form-label">Current Password</label>
+                            <input type="password" id="oldPwd" class="form-input" style="width:160px;" placeholder="Current password">
                         </div>
                         <div class="form-group" style="margin-bottom:0;">
-                            <label class="form-label">新密码</label>
-                            <input type="password" id="newPwd" class="form-input" style="width:160px;" placeholder="新密码(至少4位)">
+                            <label class="form-label">New Password</label>
+                            <input type="password" id="newPwd" class="form-input" style="width:160px;" placeholder="New password (min 4 chars)">
                         </div>
                         <div class="form-group" style="margin-bottom:0;">
-                            <label class="form-label">确认新密码</label>
-                            <input type="password" id="confirmPwd" class="form-input" style="width:160px;" placeholder="再次输入新密码">
+                            <label class="form-label">Confirm Password</label>
+                            <input type="password" id="confirmPwd" class="form-input" style="width:160px;" placeholder="Confirm new password">
                         </div>
-                        <button class="btn-primary" onclick="changePassword()">确认修改</button>
+                        <button class="btn-primary" onclick="changePassword()">Update</button>
                     </div>
                 </div>
 
                 <div class="data-section">
-                    <div class="data-section-title">数据操作</div>
+                    <div class="data-section-title">Data Management</div>
                     <div class="data-buttons">
-                        <button class="btn-primary" onclick="exportData()">导出数据</button>
-                        <button class="btn-primary" onclick="document.getElementById('importFile').click()">导入数据</button>
+                        <button class="btn-primary" onclick="exportData()">Export Data</button>
+                        <button class="btn-primary" onclick="document.getElementById('importFile').click()">Import Data</button>
                         <input type="file" id="importFile" accept=".json" onchange="importData(event)">
                     </div>
                 </div>
@@ -2926,19 +2966,19 @@
         const oldPwd = document.getElementById('oldPwd').value;
         const newPwd = document.getElementById('newPwd').value;
         const confirmPwd = document.getElementById('confirmPwd').value;
-        if (!oldPwd || !newPwd) return alert('请输入旧密码和新密码');
-        if (newPwd.length < 4) return alert('新密码至少4位');
-        if (newPwd !== confirmPwd) return alert('两次输入的新密码不一致，请重新输入');
+        if (!oldPwd || !newPwd) return alert('Please enter old and new password');
+        if (newPwd.length < 4) return alert('New password must be at least 4 characters');
+        if (newPwd !== confirmPwd) return alert('Passwords do not match, please try again');
         try {
             await apiCall('/change-password', 'POST', { oldPassword: oldPwd, newPassword: newPwd });
-            alert('密码修改成功！请使用新密码重新登录。');
+            alert('Password changed successfully! Please sign in again with your new password.');
             // Force logout and re-login with new password
             APP.token = null;
             APP.username = null;
             localStorage.removeItem('kxm_token');
             localStorage.removeItem('kxm_user');
             showLogin();
-        } catch(e) { alert('修改失败，请检查旧密码是否正确'); }
+        } catch(e) { alert('Change failed, please check if old password is correct'); }
     }
 
     function openModal(modalId) {
@@ -3042,7 +3082,7 @@
         const sector = document.getElementById('tradeSector').value;
 
         if (!symbol || !name || !qty || !price || !date) {
-            alert('请填写所有必填字段');
+            alert('Please fill all required fields');
             return;
         }
 
@@ -3077,7 +3117,7 @@
             const today = new Date().toISOString().split('T')[0];
             document.getElementById('tradeDate').value = today;
         } catch (error) {
-            alert('保存交易失败: ' + error.message);
+            alert('Failed to save trade: ' + error.message);
         }
     }
 
@@ -3088,7 +3128,7 @@
         const price = parseFloat(document.getElementById('alertPrice').value);
 
         if (!symbol || !name || !price) {
-            alert('请填写所有必填字段');
+            alert('Please fill all required fields');
             return;
         }
 
@@ -3105,7 +3145,7 @@
             document.getElementById('alertName').value = '';
             document.getElementById('alertPrice').value = '';
         } catch (error) {
-            alert('创建提醒失败: ' + error.message);
+            alert('Failed to create alert: ' + error.message);
         }
     }
 
@@ -3115,7 +3155,7 @@
             await loadAlerts();
             renderTab3();
         } catch (error) {
-            alert('更新提醒失败: ' + error.message);
+            alert('Failed to update alert: ' + error.message);
         }
     }
 
@@ -3127,7 +3167,7 @@
             await loadAlerts();
             renderTab3();
         } catch (error) {
-            alert('删除提醒失败: ' + error.message);
+            alert('Failed to delete alert: ' + error.message);
         }
     }
 
@@ -3148,7 +3188,7 @@
             a.click();
             URL.revokeObjectURL(url);
         } catch (error) {
-            alert('导出数据失败: ' + error.message);
+            alert('Failed to export data: ' + error.message);
         }
     }
 
@@ -3161,7 +3201,7 @@
             const data = JSON.parse(json);
 
             if (!data.holdings || !Array.isArray(data.holdings)) {
-                alert('无效的数据格式');
+                alert('Invalid data format');
                 return;
             }
 
@@ -3170,9 +3210,9 @@
             await updatePrices();
             renderTab0();
 
-            alert('导入成功');
+            alert('Import successful');
         } catch (error) {
-            alert('导入失败: ' + error.message);
+            alert('Import failed: ' + error.message);
         }
 
         event.target.value = '';
