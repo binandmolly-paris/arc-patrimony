@@ -7,7 +7,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Arc Patrimony">
-    <meta name="theme-color" content="#0f172a">
+    <meta name="theme-color" content="#060b18">
     <title>Arc Patrimony</title>
     <style>
         * {
@@ -18,13 +18,69 @@
 
         html, body {
             height: 100%;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
-            background-color: #0f172a;
+            font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            background-color: #060b18;
             color: #e2e8f0;
         }
 
         #root {
             height: 100%;
+        }
+
+        /* ===== Sci-fi Grid Background ===== */
+        .app-container::before {
+            content: '';
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-image:
+                linear-gradient(rgba(99,102,241,0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(99,102,241,0.03) 1px, transparent 1px);
+            background-size: 60px 60px;
+            pointer-events: none;
+            z-index: 0;
+        }
+        .app-container::after {
+            content: '';
+            position: fixed;
+            top: -50%; left: -50%; width: 200%; height: 200%;
+            background: radial-gradient(ellipse at 20% 20%, rgba(99,102,241,0.08) 0%, transparent 50%),
+                        radial-gradient(ellipse at 80% 80%, rgba(74,222,128,0.05) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: 0;
+        }
+        .app-container > * { position: relative; z-index: 1; }
+
+        /* ===== Glassmorphism base ===== */
+        .glass {
+            background: rgba(30, 41, 59, 0.5) !important;
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(99, 102, 241, 0.15) !important;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255,255,255,0.05);
+        }
+
+        /* ===== Breathing glow animation ===== */
+        @keyframes breathe {
+            0%, 100% { box-shadow: 0 0 8px rgba(99,102,241,0.15), 0 4px 15px rgba(0,0,0,0.2); }
+            50% { box-shadow: 0 0 20px rgba(99,102,241,0.3), 0 4px 20px rgba(0,0,0,0.3); }
+        }
+        @keyframes breatheActive {
+            0%, 100% { box-shadow: 0 0 12px rgba(99,102,241,0.4), 0 4px 20px rgba(0,0,0,0.3); }
+            50% { box-shadow: 0 0 28px rgba(99,102,241,0.6), 0 4px 25px rgba(0,0,0,0.4); }
+        }
+
+        /* ===== Brand loading screen ===== */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes logoGlow {
+            0%, 100% { filter: drop-shadow(0 0 8px rgba(99,102,241,0.3)); }
+            50% { filter: drop-shadow(0 0 20px rgba(99,102,241,0.6)); }
+        }
+        @keyframes slideIn {
+            from { transform: translateX(-100%); }
+            to { transform: translateX(0); }
         }
 
         /* Login Screen */
@@ -33,39 +89,67 @@
             align-items: center;
             justify-content: center;
             min-height: 100vh;
-            background: linear-gradient(135deg, #0f172a 0%, #1a1f3a 100%);
+            background: #060b18;
+            background-image:
+                linear-gradient(rgba(99,102,241,0.04) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(99,102,241,0.04) 1px, transparent 1px);
+            background-size: 60px 60px;
             padding: 20px;
+            position: relative;
+            overflow: hidden;
+        }
+        .login-screen::before {
+            content: '';
+            position: absolute;
+            top: -30%; left: -30%; width: 160%; height: 160%;
+            background: radial-gradient(ellipse at 30% 30%, rgba(99,102,241,0.12) 0%, transparent 50%),
+                        radial-gradient(ellipse at 70% 70%, rgba(74,222,128,0.06) 0%, transparent 50%);
+            pointer-events: none;
         }
 
         .login-card {
-            background-color: #1e293b;
-            border: 1px solid #334155;
-            border-radius: 12px;
+            background: rgba(30, 41, 59, 0.6);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(99, 102, 241, 0.2);
+            border-radius: 16px;
             padding: 40px;
             width: 100%;
-            max-width: 400px;
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
+            max-width: 420px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255,255,255,0.05);
+            position: relative;
+            z-index: 1;
+            animation: fadeIn 0.6s ease-out;
         }
 
         .login-logo {
             font-size: 48px;
             text-align: center;
-            margin-bottom: 20px;
+            margin-bottom: 12px;
+        }
+
+        .login-brand-icon {
+            width: 72px;
+            height: 72px;
+            margin: 0 auto 16px;
+            animation: logoGlow 3s ease-in-out infinite;
         }
 
         .login-title {
             font-size: 28px;
-            font-weight: bold;
+            font-weight: 700;
             text-align: center;
-            margin-bottom: 30px;
-            color: #6366f1;
+            margin-bottom: 6px;
+            color: #e2e8f0;
+            letter-spacing: 2px;
         }
 
         .login-subtitle {
-            font-size: 14px;
+            font-size: 13px;
             text-align: center;
-            color: #94a3b8;
-            margin-bottom: 25px;
+            color: #64748b;
+            margin-bottom: 30px;
+            letter-spacing: 1px;
         }
 
         .form-group {
@@ -83,18 +167,18 @@
         .form-input {
             width: 100%;
             padding: 12px 14px;
-            background-color: #0f172a;
-            border: 1px solid #334155;
-            border-radius: 8px;
+            background: rgba(6, 11, 24, 0.6);
+            border: 1px solid rgba(51, 65, 85, 0.5);
+            border-radius: 10px;
             color: #e2e8f0;
             font-size: 14px;
-            transition: border-color 0.2s, box-shadow 0.2s;
+            transition: all 0.3s;
         }
 
         .form-input:focus {
             outline: none;
-            border-color: #6366f1;
-            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+            border-color: rgba(99,102,241,0.5);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1), 0 0 15px rgba(99,102,241,0.08);
         }
 
         .form-error {
@@ -126,13 +210,14 @@
         }
 
         .btn-primary {
-            background-color: #6366f1;
+            background: linear-gradient(135deg, #6366f1, #4f46e5);
             color: white;
+            border-radius: 10px;
         }
 
         .btn-primary:hover {
-            background-color: #4f46e5;
-            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+            background: linear-gradient(135deg, #818cf8, #6366f1);
+            box-shadow: 0 4px 20px rgba(99, 102, 241, 0.4);
         }
 
         .btn-primary:active {
@@ -140,12 +225,15 @@
         }
 
         .btn-secondary {
-            background-color: #334155;
+            background: rgba(51, 65, 85, 0.5);
+            border: 1px solid rgba(99,102,241,0.12);
             color: #e2e8f0;
+            border-radius: 10px;
         }
 
         .btn-secondary:hover {
-            background-color: #475569;
+            background: rgba(71, 85, 105, 0.5);
+            border-color: rgba(99,102,241,0.25);
         }
 
         .btn-secondary:active {
@@ -157,89 +245,141 @@
             display: flex;
             flex-direction: column;
             height: 100vh;
-            background-color: #0f172a;
+            background-color: #060b18;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Market status light bar */
+        .market-light-bar {
+            height: 3px;
+            background: linear-gradient(90deg, transparent, #4ade80, #6366f1, #4ade80, transparent);
+            background-size: 200% 100%;
+            animation: lightBarFlow 4s linear infinite;
+        }
+        .market-light-bar.negative {
+            background: linear-gradient(90deg, transparent, #f87171, #6366f1, #f87171, transparent);
+            background-size: 200% 100%;
+        }
+        @keyframes lightBarFlow {
+            0% { background-position: 0% 0%; }
+            100% { background-position: 200% 0%; }
         }
 
         .app-header {
-            background-color: #1e293b;
-            border-bottom: 1px solid #334155;
-            padding: 16px 20px;
+            background: rgba(15, 23, 42, 0.8);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-bottom: 1px solid rgba(99,102,241,0.1);
+            padding: 12px 24px;
             display: flex;
             justify-content: space-between;
             align-items: center;
         }
 
+        .app-title-group {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .app-logo-mini {
+            width: 32px;
+            height: 32px;
+        }
+
         .app-title {
             font-size: 20px;
-            font-weight: bold;
-            color: #6366f1;
+            font-weight: 700;
+            background: linear-gradient(135deg, #818cf8, #6366f1, #4f46e5);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: 1px;
         }
 
         .header-user {
             display: flex;
             align-items: center;
-            gap: 15px;
+            gap: 12px;
             font-size: 14px;
         }
 
         .header-user-badge {
-            background-color: #334155;
-            padding: 6px 12px;
+            background: rgba(99,102,241,0.15);
+            border: 1px solid rgba(99,102,241,0.25);
+            padding: 6px 14px;
             border-radius: 20px;
-            color: #cbd5e1;
+            color: #a5b4fc;
+            font-weight: 500;
+            font-size: 13px;
         }
 
         .btn-logout {
-            padding: 8px 16px;
-            background-color: #64748b;
-            color: white;
-            border: none;
-            border-radius: 6px;
+            padding: 7px 14px;
+            background: rgba(248,113,113,0.1);
+            border: 1px solid rgba(248,113,113,0.25);
+            color: #fca5a5;
+            border-radius: 8px;
             cursor: pointer;
-            font-size: 13px;
-            transition: background-color 0.2s;
+            font-size: 12px;
+            transition: all 0.3s;
         }
 
         .btn-logout:hover {
-            background-color: #475569;
+            background: rgba(248,113,113,0.2);
+            border-color: rgba(248,113,113,0.4);
         }
 
+        /* ===== Floating breathing tab buttons ===== */
         .tabs {
             display: flex;
-            border-bottom: 1px solid #334155;
-            background-color: #1e293b;
+            gap: 8px;
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
             overflow-x: auto;
-            padding: 0 20px;
+            padding: 12px 20px;
+            border-bottom: 1px solid rgba(99,102,241,0.06);
         }
 
         .tab {
-            padding: 12px 20px;
+            padding: 10px 20px;
             cursor: pointer;
-            border-bottom: 3px solid transparent;
-            color: #94a3b8;
-            font-size: 14px;
+            border: 1px solid rgba(99,102,241,0.12);
+            border-radius: 12px;
+            color: #64748b;
+            font-size: 13px;
             font-weight: 500;
             white-space: nowrap;
-            transition: all 0.2s;
+            transition: all 0.4s ease;
+            background: rgba(30, 41, 59, 0.3);
+            position: relative;
+            animation: breathe 4s ease-in-out infinite;
         }
 
         .tab:hover {
-            color: #cbd5e1;
+            color: #c7d2fe;
+            background: rgba(99, 102, 241, 0.1);
+            border-color: rgba(99,102,241,0.3);
         }
 
         .tab.active {
-            color: #6366f1;
-            border-bottom-color: #6366f1;
+            color: #fff;
+            background: linear-gradient(135deg, rgba(99,102,241,0.3), rgba(99,102,241,0.15));
+            border-color: rgba(99,102,241,0.5);
+            animation: breatheActive 3s ease-in-out infinite;
         }
 
         .tab-badge {
             display: inline-block;
-            background-color: #f87171;
+            background: linear-gradient(135deg, #f87171, #ef4444);
             color: white;
-            font-size: 11px;
+            font-size: 10px;
             padding: 2px 6px;
             border-radius: 10px;
             margin-left: 6px;
+            font-weight: 600;
         }
 
         .tab-content {
@@ -261,24 +401,32 @@
         }
 
         .stat-card {
-            background-color: #1e293b;
-            border: 1px solid #334155;
-            border-radius: 10px;
+            background: rgba(30, 41, 59, 0.45);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(99,102,241,0.12);
+            border-radius: 12px;
             padding: 20px;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+        }
+        .stat-card:hover {
+            border-color: rgba(99,102,241,0.3);
+            box-shadow: 0 8px 30px rgba(0,0,0,0.3), 0 0 15px rgba(99,102,241,0.1);
         }
 
         .stat-label {
-            font-size: 12px;
-            color: #94a3b8;
+            font-size: 11px;
+            color: #64748b;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
+            letter-spacing: 1px;
             margin-bottom: 8px;
         }
 
         .stat-value {
             font-size: 24px;
-            font-weight: bold;
-            color: #6366f1;
+            font-weight: 700;
+            color: #a5b4fc;
         }
 
         .stat-change {
@@ -299,10 +447,17 @@
         }
 
         .chart-card {
-            background-color: #1e293b;
-            border: 1px solid #334155;
-            border-radius: 10px;
+            background: rgba(30, 41, 59, 0.45);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(99,102,241,0.12);
+            border-radius: 12px;
             padding: 20px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+            transition: all 0.3s ease;
+        }
+        .chart-card:hover {
+            border-color: rgba(99,102,241,0.25);
         }
 
         .chart-title {
@@ -320,33 +475,33 @@
         .holdings-table {
             width: 100%;
             border-collapse: collapse;
-            background-color: #1e293b;
-            border: 1px solid #334155;
+            background: rgba(15, 23, 42, 0.4);
+            border: none;
         }
 
         .holdings-table thead {
-            background-color: #0f172a;
-            border-bottom: 1px solid #334155;
+            background: rgba(6, 11, 24, 0.8);
+            border-bottom: 1px solid rgba(99,102,241,0.1);
         }
 
         .holdings-table th {
             padding: 12px 16px;
             text-align: left;
-            font-size: 12px;
+            font-size: 11px;
             font-weight: 600;
-            color: #94a3b8;
+            color: #64748b;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
+            letter-spacing: 0.8px;
             position: sticky;
             top: 0;
-            background-color: #0f172a;
+            background: rgba(6, 11, 24, 0.95);
             z-index: 10;
         }
 
         .holdings-table td {
             padding: 12px 16px;
             font-size: 13px;
-            border-bottom: 1px solid #334155;
+            border-bottom: 1px solid rgba(51, 65, 85, 0.3);
         }
 
         .holdings-table tbody tr:last-child td {
@@ -354,20 +509,21 @@
         }
 
         .holdings-table tbody tr:hover {
-            background-color: #0f172a;
+            background: rgba(99, 102, 241, 0.06);
         }
 
         .symbol-cell {
             font-weight: 600;
-            color: #6366f1;
+            color: #818cf8;
         }
 
         .region-badge {
             display: inline-block;
-            background-color: #334155;
-            color: #cbd5e1;
-            padding: 4px 8px;
-            border-radius: 4px;
+            background: rgba(99,102,241,0.1);
+            border: 1px solid rgba(99,102,241,0.15);
+            color: #a5b4fc;
+            padding: 3px 8px;
+            border-radius: 6px;
             font-size: 11px;
         }
 
@@ -410,16 +566,18 @@
         .search-input {
             width: 100%;
             padding: 12px 16px;
-            background-color: #1e293b;
-            border: 1px solid #334155;
-            border-radius: 8px;
+            background: rgba(30, 41, 59, 0.4);
+            border: 1px solid rgba(99,102,241,0.12);
+            border-radius: 10px;
             color: #e2e8f0;
             font-size: 14px;
+            transition: all 0.3s;
         }
 
         .search-input:focus {
             outline: none;
-            border-color: #6366f1;
+            border-color: rgba(99,102,241,0.4);
+            box-shadow: 0 0 15px rgba(99,102,241,0.1);
         }
 
         .stock-cards {
@@ -429,17 +587,20 @@
         }
 
         .stock-card {
-            background-color: #1e293b;
-            border: 1px solid #334155;
-            border-radius: 10px;
+            background: rgba(30, 41, 59, 0.4);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(99,102,241,0.1);
+            border-radius: 12px;
             padding: 15px;
             cursor: pointer;
-            transition: all 0.2s;
+            transition: all 0.3s;
         }
 
         .stock-card:hover {
-            border-color: #6366f1;
-            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
+            border-color: rgba(99,102,241,0.4);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3), 0 0 15px rgba(99, 102, 241, 0.15);
+            transform: translateY(-2px);
         }
 
         .stock-card-header {
@@ -451,7 +612,7 @@
 
         .stock-card-symbol {
             font-weight: 600;
-            color: #6366f1;
+            color: #818cf8;
             font-size: 16px;
         }
 
@@ -474,9 +635,11 @@
         }
 
         .stock-detail-panel {
-            background-color: #1e293b;
-            border: 1px solid #334155;
-            border-radius: 10px;
+            background: rgba(30, 41, 59, 0.45);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(99,102,241,0.12);
+            border-radius: 12px;
             padding: 20px;
             margin-bottom: 20px;
         }
@@ -506,7 +669,7 @@
         .stock-detail-price-value {
             font-size: 24px;
             font-weight: bold;
-            color: #6366f1;
+            color: #a5b4fc;
         }
 
         .stock-detail-chart canvas {
@@ -522,7 +685,8 @@
             left: 0;
             right: 0;
             bottom: 0;
-            background-color: rgba(0, 0, 0, 0.5);
+            background-color: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(4px);
             z-index: 1000;
             align-items: center;
             justify-content: center;
@@ -534,14 +698,18 @@
         }
 
         .modal-content {
-            background-color: #1e293b;
-            border: 1px solid #334155;
-            border-radius: 12px;
+            background: rgba(30, 41, 59, 0.85);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(99,102,241,0.2);
+            border-radius: 16px;
             padding: 30px;
             max-width: 500px;
             width: 100%;
             max-height: 90vh;
             overflow-y: auto;
+            box-shadow: 0 25px 50px rgba(0,0,0,0.5);
+            animation: fadeIn 0.3s ease-out;
         }
 
         .modal-header {
@@ -591,10 +759,17 @@
         }
 
         .alert-card {
-            background-color: #1e293b;
-            border: 1px solid #334155;
-            border-radius: 10px;
+            background: rgba(30, 41, 59, 0.4);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(99,102,241,0.1);
+            border-radius: 12px;
             padding: 15px;
+            transition: all 0.3s;
+        }
+        .alert-card:hover {
+            border-color: rgba(99,102,241,0.3);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.25);
         }
 
         .alert-card-header {
@@ -606,7 +781,7 @@
 
         .alert-card-symbol {
             font-weight: 600;
-            color: #6366f1;
+            color: #818cf8;
             font-size: 14px;
         }
 
@@ -665,31 +840,31 @@
         .trades-table {
             width: 100%;
             border-collapse: collapse;
-            background-color: #1e293b;
-            border-radius: 10px;
+            background: rgba(15, 23, 42, 0.4);
+            border-radius: 12px;
             overflow: hidden;
-            border: 1px solid #334155;
+            border: none;
         }
 
         .trades-table thead {
-            background-color: #0f172a;
-            border-bottom: 1px solid #334155;
+            background: rgba(6, 11, 24, 0.8);
+            border-bottom: 1px solid rgba(99,102,241,0.1);
         }
 
         .trades-table th {
             padding: 12px 16px;
             text-align: left;
-            font-size: 12px;
+            font-size: 11px;
             font-weight: 600;
-            color: #94a3b8;
+            color: #64748b;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
+            letter-spacing: 0.8px;
         }
 
         .trades-table td {
             padding: 12px 16px;
             font-size: 13px;
-            border-bottom: 1px solid #334155;
+            border-bottom: 1px solid rgba(51,65,85,0.3);
         }
 
         .trades-table tbody tr:last-child td {
@@ -697,7 +872,7 @@
         }
 
         .trades-table tbody tr:hover {
-            background-color: #0f172a;
+            background: rgba(99,102,241,0.06);
         }
 
         .trade-type-buy {
@@ -721,9 +896,10 @@
         }
 
         .fx-rate {
-            background-color: #1e293b;
-            border: 1px solid #334155;
-            border-radius: 8px;
+            background: rgba(30, 41, 59, 0.4);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(99,102,241,0.1);
+            border-radius: 10px;
             padding: 12px;
             text-align: center;
         }
@@ -737,7 +913,7 @@
         .fx-rate-value {
             font-size: 16px;
             font-weight: bold;
-            color: #6366f1;
+            color: #a5b4fc;
         }
 
         /* Data Management */
@@ -748,9 +924,10 @@
         }
 
         .data-section {
-            background-color: #1e293b;
-            border: 1px solid #334155;
-            border-radius: 10px;
+            background: rgba(30, 41, 59, 0.45);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(99,102,241,0.12);
+            border-radius: 12px;
             padding: 20px;
         }
 
@@ -784,8 +961,8 @@
             display: inline-block;
             width: 14px;
             height: 14px;
-            border: 2px solid #334155;
-            border-top-color: #6366f1;
+            border: 2px solid rgba(99,102,241,0.2);
+            border-top-color: #818cf8;
             border-radius: 50%;
             animation: spin 0.8s linear infinite;
         }
@@ -797,11 +974,12 @@
         /* Responsive */
         @media (max-width: 768px) {
             .tabs {
-                padding: 0 10px;
+                padding: 8px 10px;
+                gap: 6px;
             }
 
             .tab {
-                padding: 10px 12px;
+                padding: 8px 14px;
                 font-size: 12px;
             }
 
@@ -1353,9 +1531,21 @@
         root.innerHTML = `
             <div class="login-screen">
                 <div class="login-card">
-                    <div class="login-logo">🌐</div>
-                    <div class="login-title">Arc Patrimony</div>
-                    <div class="login-subtitle">Value Beyond Generations</div>
+                    <div class="login-brand-icon">
+                        <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                            <defs>
+                                <linearGradient id="arcGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                    <stop offset="0%" style="stop-color:#818cf8"/>
+                                    <stop offset="100%" style="stop-color:#4f46e5"/>
+                                </linearGradient>
+                            </defs>
+                            <path d="M50 8 L30 45 L20 45 L20 88 L32 88 L32 55 L40 55 L40 88 L60 88 L60 55 L68 55 L68 88 L80 88 L80 45 L70 45 Z" fill="url(#arcGrad)" opacity="0.9"/>
+                            <path d="M50 8 L30 45 L70 45 Z" fill="none" stroke="#a5b4fc" stroke-width="1.5" opacity="0.4"/>
+                            <rect x="34" y="48" width="32" height="3" rx="1.5" fill="#a5b4fc" opacity="0.5"/>
+                        </svg>
+                    </div>
+                    <div class="login-title">ARC PATRIMONY</div>
+                    <div class="login-subtitle">VALUE BEYOND GENERATIONS</div>
 
                     <div class="form-group">
                         <label class="form-label">用户名</label>
@@ -1392,8 +1582,21 @@
         const root = document.getElementById('root');
         root.innerHTML = `
             <div class="app-container">
+                <div class="market-light-bar" id="marketLightBar"></div>
                 <div class="app-header">
-                    <div class="app-title">Arc Patrimony</div>
+                    <div class="app-title-group">
+                        <svg class="app-logo-mini" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                            <defs>
+                                <linearGradient id="arcGradMini" x1="0%" y1="0%" x2="100%" y2="100%">
+                                    <stop offset="0%" style="stop-color:#818cf8"/>
+                                    <stop offset="100%" style="stop-color:#4f46e5"/>
+                                </linearGradient>
+                            </defs>
+                            <path d="M50 8 L30 45 L20 45 L20 88 L32 88 L32 55 L40 55 L40 88 L60 88 L60 55 L68 55 L68 88 L80 88 L80 45 L70 45 Z" fill="url(#arcGradMini)" opacity="0.9"/>
+                            <rect x="34" y="48" width="32" height="3" rx="1.5" fill="#a5b4fc" opacity="0.5"/>
+                        </svg>
+                        <div class="app-title">ARC PATRIMONY</div>
+                    </div>
                     <div class="header-user">
                         <div class="header-user-badge">${APP.username}</div>
                         <button class="btn-logout" onclick="handleLogout()">登出</button>
@@ -1606,6 +1809,20 @@
         const totalPL = totalValue - totalCost;
         const totalPLPercent = totalCost > 0 ? (totalPL / totalCost) * 100 : 0;
 
+        // Update market light bar color
+        const lightBar = document.getElementById('marketLightBar');
+        if (lightBar) {
+            lightBar.className = totalPL >= 0 ? 'market-light-bar' : 'market-light-bar negative';
+        }
+
+        // Find best and worst performing stocks today
+        let bestStock = null, worstStock = null;
+        activeHoldings.forEach(h => {
+            const chg = APP.prices[h.symbol]?.change || 0;
+            if (!bestStock || chg > (APP.prices[bestStock.symbol]?.change || 0)) bestStock = h;
+            if (!worstStock || chg < (APP.prices[worstStock.symbol]?.change || 0)) worstStock = h;
+        });
+
         // Regional breakdowns (active only)
         const regionStats = {};
         activeHoldings.forEach(h => {
@@ -1629,11 +1846,11 @@
             <div class="stat-cards">
                 <div class="stat-card">
                     <div class="stat-label">总市值</div>
-                    <div class="stat-value">$${fmtNum(totalValue)}</div>
+                    <div class="stat-value" style="color:#e2e8f0;">$${fmtNum(totalValue)}</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-label">总成本</div>
-                    <div class="stat-value">$${fmtNum(totalCost)}</div>
+                    <div class="stat-value" style="color:#94a3b8;">$${fmtNum(totalCost)}</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-label">浮盈亏</div>
@@ -1644,13 +1861,35 @@
                     <div class="stat-value ${totalPLPercent >= 0 ? 'price-positive' : 'price-negative'}">${formatPercent(totalPLPercent)}</div>
                 </div>
             </div>
+            ${bestStock && worstStock ? `<div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
+                <div style="flex:1;min-width:200px;padding:8px 16px;border-radius:10px;background:rgba(74,222,128,0.06);border:1px solid rgba(74,222,128,0.15);display:flex;align-items:center;gap:10px;">
+                    <span style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:1px;">今日最佳</span>
+                    <span style="color:#818cf8;font-weight:600;font-size:13px;">${bestStock.symbol}</span>
+                    <span class="price-positive" style="font-weight:600;font-size:13px;">${formatPercent(APP.prices[bestStock.symbol]?.change||0)}</span>
+                </div>
+                <div style="flex:1;min-width:200px;padding:8px 16px;border-radius:10px;background:rgba(248,113,113,0.06);border:1px solid rgba(248,113,113,0.15);display:flex;align-items:center;gap:10px;">
+                    <span style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:1px;">今日最弱</span>
+                    <span style="color:#818cf8;font-weight:600;font-size:13px;">${worstStock.symbol}</span>
+                    <span class="price-negative" style="font-weight:600;font-size:13px;">${formatPercent(APP.prices[worstStock.symbol]?.change||0)}</span>
+                </div>
+            </div>` : ''}
 
             <div class="stat-cards" style="margin-top:12px;">
                 ${Object.entries(regionStats).map(([r, s]) => {
                     const pl = s.value - s.cost;
                     const pct = s.cost > 0 ? (pl / s.cost * 100) : 0;
                     const flag = r==='美国'?'🇺🇸':r==='中国'?'🇨🇳':r==='日本'?'🇯🇵':'🌐';
-                    const barColor = r==='美国'?'#6366f1':r==='中国'?'#fbbf24':'#f87171';
+                    const barColor = r==='美国'?'#818cf8':r==='中国'?'#fbbf24':'#f87171';
+                    // Best/worst stock in this region
+                    const regionHoldings = activeHoldings.filter(h => h.region === r);
+                    let rBest = null, rWorst = null;
+                    regionHoldings.forEach(h => {
+                        const chg = APP.prices[h.symbol]?.change || 0;
+                        if (!rBest || chg > (APP.prices[rBest.symbol]?.change || 0)) rBest = h;
+                        if (!rWorst || chg < (APP.prices[rWorst.symbol]?.change || 0)) rWorst = h;
+                    });
+                    const bestInfo = rBest ? rBest.symbol+' '+formatPercent(APP.prices[rBest.symbol]?.change||0) : '';
+                    const worstInfo = rWorst ? rWorst.symbol+' '+formatPercent(APP.prices[rWorst.symbol]?.change||0) : '';
                     return `<div class="stat-card" style="position:relative;">
                         <div style="display:flex;justify-content:space-between;align-items:flex-start;">
                             <div class="stat-label">${flag} ${r}资产 (${s.count}只)</div>
@@ -1660,11 +1899,14 @@
                             </div>
                         </div>
                         <div class="stat-value" style="font-size:18px;margin-top:4px;">$${fmtNum(s.value)}</div>
-                        <div style="font-size:12px;color:#94a3b8;margin-top:2px;">成本 $${fmtNum(s.cost)}</div>
-                        <div style="margin-top:6px;background:#1e293b;border-radius:4px;height:4px;overflow:hidden;">
+                        <div style="font-size:12px;color:#64748b;margin-top:2px;">成本 $${fmtNum(s.cost)}</div>
+                        <div style="margin-top:6px;background:rgba(30,41,59,0.6);border-radius:4px;height:4px;overflow:hidden;">
                             <div style="width:${Math.min(100, s.value/totalValue*100)}%;height:100%;background:${barColor};border-radius:4px;"></div>
                         </div>
-                        <div style="text-align:right;font-size:11px;color:#64748b;margin-top:2px;">占比 ${fmtNum(totalValue>0?s.value/totalValue*100:0,1)}%</div>
+                        <div style="display:flex;justify-content:space-between;font-size:10px;margin-top:6px;color:#475569;">
+                            <span>占比 ${fmtNum(totalValue>0?s.value/totalValue*100:0,1)}%</span>
+                            <span>${rBest && rWorst && rBest.symbol !== rWorst.symbol ? '<span class="price-positive">▲'+bestInfo+'</span> <span class="price-negative">▼'+worstInfo+'</span>' : (rBest ? '<span class="price-positive">▲'+bestInfo+'</span>' : '')}</span>
+                        </div>
                     </div>`;
                 }).join('')}
             </div>
