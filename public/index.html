@@ -2253,8 +2253,8 @@
             const regionViz = document.getElementById('region-viz');
             if (regionViz) {
                 regionViz.innerHTML = '<style>@keyframes ringFadeIn{from{opacity:0;transform:scale(0.85);}to{opacity:1;transform:scale(1);}}</style>'
-                    + '<div style="min-width:110px;max-width:200px;display:flex;flex-direction:column;justify-content:center;padding-right:30px;">'+legendList+'</div>'
-                    + '<div style="flex:1;display:flex;align-items:center;justify-content:flex-end;padding-left:10px;">'
+                    + '<div style="min-width:110px;max-width:200px;display:flex;flex-direction:column;justify-content:center;margin-left:auto;padding-right:16px;">'+legendList+'</div>'
+                    + '<div style="flex-shrink:0;display:flex;align-items:center;justify-content:center;">'
                     + '<svg viewBox="0 0 240 240" style="width:100%;max-width:300px;height:auto;overflow:visible;">'
                     + '<circle cx="'+CX+'" cy="'+CY+'" r="'+R+'" fill="none" stroke="rgba(193,166,115,0.04)" stroke-width="'+SW+'"/>'
                     + ringSegments
@@ -2283,14 +2283,13 @@
                     const best3 = rHoldings.slice(0, 3);
                     const worst3 = rHoldings.slice(-3).reverse();
 
-                    blocksHtml += '<div style="display:flex;align-items:center;gap:0;'+(ri>0?'margin-top:6px;':'')+'">'
-                        // Flag + country outside the border box, pushed right
-                        + '<div style="display:flex;align-items:center;gap:4px;flex-shrink:0;width:70px;justify-content:center;">'
+                    blocksHtml += '<div style="padding:8px 10px;border:1px solid rgba(193,166,115,0.10);border-radius:10px;'+(ri>0?'margin-top:6px;':'')+'">'
+                        + '<div style="display:flex;align-items:stretch;gap:0;">'
+                        // Flag + country INSIDE box, between left border and stocks
+                        + '<div style="display:flex;align-items:center;gap:4px;flex-shrink:0;padding:0 12px 0 4px;">'
                         + '<span style="font-size:13px;">'+flag+'</span>'
                         + '<span style="color:'+rColor+';font-weight:600;font-size:11px;font-family:Montserrat,sans-serif;">'+r+'</span>'
                         + '</div>'
-                        + '<div style="flex:1;padding:8px 10px;border:1px solid rgba(193,166,115,0.10);border-radius:10px;">'
-                        + '<div style="display:flex;align-items:stretch;gap:0;">'
                         // Best 3: right-aligned against the up arrow
                         + '<div style="flex:1;display:flex;flex-direction:column;align-items:flex-end;justify-content:center;padding:0 6px;min-width:0;">'
                         + best3.map(s => '<div style="display:flex;align-items:center;gap:4px;margin-bottom:1px;">'
@@ -2307,7 +2306,7 @@
                             + '<span class="price-negative" style="font-size:11px;font-weight:600;white-space:nowrap;font-family:Montserrat,sans-serif;">'+formatPercent(s.change)+'</span>'
                             + '</div>').join('')
                         + '</div>'
-                        + '</div></div></div>';
+                        + '</div></div>';
                 });
 
                 moversViz.innerHTML = blocksHtml;
