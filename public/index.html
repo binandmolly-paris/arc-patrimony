@@ -1955,7 +1955,7 @@
                         <svg width="18" height="18" viewBox="0 0 18 18"><path d="M3,3 L8,3 L8,8 L3,8Z" fill="#4ade80" opacity="0.7" rx="1"/><path d="M10,3 L15,3 L15,7 L10,7Z" fill="#f87171" opacity="0.7" rx="1"/><path d="M3,10 L8,10 L8,15 L3,15Z" fill="#4ade80" opacity="0.5" rx="1"/><path d="M10,9 L15,9 L15,15 L10,15Z" fill="#f87171" opacity="0.5" rx="1"/></svg>
                         Today's Movers by Region
                     </div>
-                    <div id="movers-viz" style="overflow-x:auto;padding-top:6px;"></div>
+                    <div id="movers-viz" style="overflow-x:auto;padding-top:16px;"></div>
                 </div>
             </div>
         `;
@@ -2253,7 +2253,7 @@
             const regionViz = document.getElementById('region-viz');
             if (regionViz) {
                 regionViz.innerHTML = '<style>@keyframes ringFadeIn{from{opacity:0;transform:scale(0.85);}to{opacity:1;transform:scale(1);}}</style>'
-                    + '<div style="min-width:110px;max-width:200px;display:flex;flex-direction:column;justify-content:center;padding-right:20px;">'+legendList+'</div>'
+                    + '<div style="min-width:110px;max-width:200px;display:flex;flex-direction:column;justify-content:center;padding-right:30px;">'+legendList+'</div>'
                     + '<div style="flex:1;display:flex;align-items:center;justify-content:flex-end;padding-left:10px;">'
                     + '<svg viewBox="0 0 240 240" style="width:100%;max-width:300px;height:auto;overflow:visible;">'
                     + '<circle cx="'+CX+'" cy="'+CY+'" r="'+R+'" fill="none" stroke="rgba(193,166,115,0.04)" stroke-width="'+SW+'"/>'
@@ -2283,13 +2283,14 @@
                     const best3 = rHoldings.slice(0, 3);
                     const worst3 = rHoldings.slice(-3).reverse();
 
-                    blocksHtml += '<div style="padding:8px 10px 8px 14px;border:1px solid rgba(193,166,115,0.10);border-radius:10px;margin-left:10px;'+(ri>0?'margin-top:6px;':'')+'">'
-                        + '<div style="display:flex;align-items:stretch;gap:0;">'
-                        // Left: flag + region name (vertical center)
-                        + '<div style="display:flex;align-items:center;gap:5px;flex-shrink:0;padding-right:10px;border-right:1px solid rgba(193,166,115,0.08);margin-left:8px;">'
+                    blocksHtml += '<div style="display:flex;align-items:center;gap:0;'+(ri>0?'margin-top:6px;':'')+'">'
+                        // Flag + country outside the border box, pushed right
+                        + '<div style="display:flex;align-items:center;gap:4px;flex-shrink:0;width:70px;justify-content:center;">'
                         + '<span style="font-size:13px;">'+flag+'</span>'
                         + '<span style="color:'+rColor+';font-weight:600;font-size:11px;font-family:Montserrat,sans-serif;">'+r+'</span>'
                         + '</div>'
+                        + '<div style="flex:1;padding:8px 10px;border:1px solid rgba(193,166,115,0.10);border-radius:10px;">'
+                        + '<div style="display:flex;align-items:stretch;gap:0;">'
                         // Best 3: right-aligned against the up arrow
                         + '<div style="flex:1;display:flex;flex-direction:column;align-items:flex-end;justify-content:center;padding:0 6px;min-width:0;">'
                         + best3.map(s => '<div style="display:flex;align-items:center;gap:4px;margin-bottom:1px;">'
@@ -2306,7 +2307,7 @@
                             + '<span class="price-negative" style="font-size:11px;font-weight:600;white-space:nowrap;font-family:Montserrat,sans-serif;">'+formatPercent(s.change)+'</span>'
                             + '</div>').join('')
                         + '</div>'
-                        + '</div></div>';
+                        + '</div></div></div>';
                 });
 
                 moversViz.innerHTML = blocksHtml;
