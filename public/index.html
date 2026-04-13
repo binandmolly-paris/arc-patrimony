@@ -2025,24 +2025,41 @@
                         ${allCurrencies.map(c => `<button onclick="filterCurrency('${c}')" style="padding:4px 14px;border-radius:16px;border:1px solid ${APP.currencyFilter===c?'#C1A673':'#334155'};background:${APP.currencyFilter===c?'#C1A673':'transparent'};color:${APP.currencyFilter===c?'#fff':'#94a3b8'};cursor:pointer;font-size:12px;">${c}</button>`).join('')}
                     </div>
                     <div style="overflow:auto;max-height:70vh;">
-                    <table class="holdings-table" style="font-size:13px;">
+                    <table class="holdings-table" style="font-size:13px;table-layout:fixed;width:100%;">
+                        <colgroup>
+                            <col style="width:80px;">
+                            <col style="width:160px;">
+                            <col style="width:58px;">
+                            <col style="width:52px;">
+                            <col style="width:52px;">
+                            <col style="width:62px;">
+                            <col style="width:82px;">
+                            <col style="width:82px;">
+                            <col style="width:72px;">
+                            <col style="width:95px;">
+                            <col style="width:90px;">
+                            <col style="width:62px;">
+                            <col style="width:55px;">
+                            <col style="width:55px;">
+                            <col style="width:50px;">
+                        </colgroup>
                         <thead>
                             <tr>
                                 <th>Symbol</th>
                                 <th>Name</th>
                                 <th>Region</th>
-                                <th>Currency</th>
+                                <th>Ccy</th>
                                 <th>Type</th>
-                                <th>Shares</th>
-                                <th>Avg Cost</th>
-                                <th>Price</th>
-                                <th ${sHd('priceChange')}>Change%${sIco('priceChange')}</th>
-                                <th ${sHd(isLocalCur0?'mvLocal':'mv')}>Mkt Value(${curLabel0})${sIco(isLocalCur0?'mvLocal':'mv')}</th>
-                                <th ${sHd(isLocalCur0?'plLocal':'pl')}>P&L(${curLabel0})${sIco(isLocalCur0?'plLocal':'pl')}</th>
-                                <th ${sHd('plPct')}>P&L%${sIco('plPct')}</th>
-                                <th>Target Wt</th>
-                                <th>Current Wt</th>
-                                <th>Diff</th>
+                                <th style="text-align:right;">Shares</th>
+                                <th style="text-align:right;">Avg Cost</th>
+                                <th style="text-align:right;">Price</th>
+                                <th ${sHd('priceChange')} style="text-align:right;">Chg%${sIco('priceChange')}</th>
+                                <th ${sHd('mvLocal')} style="text-align:right;">Mkt Value${sIco('mvLocal')}</th>
+                                <th ${sHd('plLocal')} style="text-align:right;">P&L${sIco('plLocal')}</th>
+                                <th ${sHd('plPct')} style="text-align:right;">P&L%${sIco('plPct')}</th>
+                                <th style="text-align:right;">Target</th>
+                                <th style="text-align:right;">Weight</th>
+                                <th style="text-align:right;">Diff</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -2062,13 +2079,11 @@
                 filteredCost += d.cv;
                 filteredLocalValue += d.mvLocal;
                 filteredLocalCost += d.cvLocal;
-                const dMV = isLocalCur0 ? d.mvLocal : d.mv;
-                const dPL = isLocalCur0 ? d.plLocal : d.pl;
 
                 html += `
                     <tr style="cursor:pointer;" onclick="showStockDetail('${d.symbol}')">
                         <td class="symbol-cell">${d.symbol}</td>
-                        <td>${d.name}</td>
+                        <td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${d.name}">${d.name}</td>
                         <td><span class="region-badge">${d.region}</span></td>
                         <td>${d.currency}</td>
                         <td>${d.attribute || '-'}</td>
@@ -2076,8 +2091,8 @@
                         <td style="text-align:right;">${curSym}${fmtNum(d.avg_cost)}</td>
                         <td style="text-align:right;">${curSym}${fmtNum(d.currentPrice)}</td>
                         <td class="${d.priceChange>=0?'price-positive':'price-negative'}" style="text-align:right;">${formatPercent(d.priceChange)}</td>
-                        <td style="text-align:right;">${dispSym0}${fmtNum(dMV)}</td>
-                        <td class="${dPL>=0?'price-positive':'price-negative'}" style="text-align:right;">${dPL>=0?'+':''}${dispSym0}${fmtNum(dPL)}</td>
+                        <td style="text-align:right;">${curSym}${fmtNum(d.mvLocal)}</td>
+                        <td class="${d.plLocal>=0?'price-positive':'price-negative'}" style="text-align:right;">${d.plLocal>=0?'+':''}${curSym}${fmtNum(d.plLocal)}</td>
                         <td class="${d.plPct>=0?'price-positive':'price-negative'}" style="text-align:right;">${formatPercent(d.plPct)}</td>
                         <td style="text-align:right;">${tw > 0 ? fmtNum(tw,1)+'%' : '-'}</td>
                         <td style="text-align:right;">${fmtNum(cw,1)}%</td>
@@ -2097,33 +2112,14 @@
             soldList.forEach(d => { soldTotalPL += (d.pl || 0); });
 
             html += `</tbody><tfoot>`;
-            if (isLocalCur0) {
-                html += `<tr style="border-top:2px solid #334155;font-weight:bold;">
-                    <td colspan="5">${filterLabel} Total (${activeList.length} stocks) — ${curLabel0}</td>
-                    <td></td><td></td><td></td><td></td>
-                    <td style="text-align:right;">${dispSym0}${fmtNum(filteredLocalValue)}</td>
-                    <td class="${filteredLocalPL>=0?'price-positive':'price-negative'}" style="text-align:right;">${filteredLocalPL>=0?'+':''}${dispSym0}${fmtNum(filteredLocalPL)}</td>
-                    <td class="${filteredLocalPLPct>=0?'price-positive':'price-negative'}" style="text-align:right;">${formatPercent(filteredLocalPLPct)}</td>
-                    <td colspan="3"></td>
-                </tr>
-                <tr style="font-weight:bold;color:#64748b;">
-                    <td colspan="5">USD Equivalent</td>
-                    <td></td><td></td><td></td><td></td>
-                    <td style="text-align:right;">$${fmtNum(filteredValue)}</td>
-                    <td class="${filteredPL>=0?'price-positive':'price-negative'}" style="text-align:right;">${filteredPL>=0?'+':''}$${fmtNum(filteredPL)}</td>
-                    <td class="${filteredPLPct>=0?'price-positive':'price-negative'}" style="text-align:right;">${formatPercent(filteredPLPct)}</td>
-                    <td colspan="3"></td>
-                </tr>`;
-            } else {
-                html += `<tr style="border-top:2px solid #334155;font-weight:bold;">
-                    <td colspan="5">${filterLabel} Total (${activeList.length} stocks)</td>
-                    <td></td><td></td><td></td><td></td>
-                    <td style="text-align:right;">$${fmtNum(filteredValue)}</td>
-                    <td class="${filteredPL>=0?'price-positive':'price-negative'}" style="text-align:right;">${filteredPL>=0?'+':''}$${fmtNum(filteredPL)}</td>
-                    <td class="${filteredPLPct>=0?'price-positive':'price-negative'}" style="text-align:right;">${formatPercent(filteredPLPct)}</td>
-                    <td colspan="3"></td>
-                </tr>`;
-            }
+            html += `<tr style="border-top:2px solid rgba(193,166,115,0.3);font-weight:bold;">
+                <td colspan="5">${filterLabel} Total (${activeList.length} stocks) — USD</td>
+                <td></td><td></td><td></td><td></td>
+                <td style="text-align:right;">$${fmtNum(filteredValue)}</td>
+                <td class="${filteredPL>=0?'price-positive':'price-negative'}" style="text-align:right;">${filteredPL>=0?'+':''}$${fmtNum(filteredPL)}</td>
+                <td class="${filteredPLPct>=0?'price-positive':'price-negative'}" style="text-align:right;">${formatPercent(filteredPLPct)}</td>
+                <td colspan="3"></td>
+            </tr>`;
             html += `</tfoot></table></div></div>
 
             <!-- 已清仓股票 -->
@@ -2137,7 +2133,6 @@
                     </tr></thead><tbody>
                     ${soldList.map(d => {
                         const curSym = curSym0fn(d.currency);
-                        const dPL = isLocalCur0 ? d.plLocal : d.pl;
                         return `<tr style="cursor:pointer;opacity:0.85;" onclick="showStockDetail('${d.symbol}')">
                             <td class="symbol-cell" style="color:#f97316;">${d.symbol}</td>
                             <td>${d.name}</td>
@@ -2146,7 +2141,7 @@
                             <td>${d.attribute||'-'}</td>
                             <td style="text-align:right;">0</td>
                             <td style="text-align:right;">${curSym}${fmtNum(d.avg_cost)}</td>
-                            <td class="${dPL>=0?'price-positive':'price-negative'}" style="text-align:right;">${dPL>=0?'+':''}${dispSym0}${fmtNum(dPL)}</td>
+                            <td class="${d.plLocal>=0?'price-positive':'price-negative'}" style="text-align:right;">${d.plLocal>=0?'+':''}${curSym}${fmtNum(d.plLocal)}</td>
                             <td class="${d.plPct>=0?'price-positive':'price-negative'}" style="text-align:right;">${formatPercent(d.plPct)}</td>
                         </tr>`;
                     }).join('')}
