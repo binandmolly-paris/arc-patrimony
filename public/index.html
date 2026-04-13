@@ -1893,27 +1893,6 @@
                     <div class="stat-value ${totalPLPercent >= 0 ? 'price-positive' : 'price-negative'}">${formatPercent(totalPLPercent)}</div>
                 </div>
             </div>
-            ${top3Best.length > 0 ? `<div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
-                <div style="flex:1;min-width:300px;padding:10px 16px;border-radius:10px;background:rgba(74,222,128,0.06);border:1px solid rgba(74,222,128,0.15);">
-                    <div style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Top Performers</div>
-                    <div style="display:flex;gap:14px;flex-wrap:wrap;">
-                        ${top3Best.map(h => `<span style="display:inline-flex;align-items:center;gap:6px;">
-                            <span style="color:#cbd5e1;font-size:12px;">${h.name}</span>
-                            <span class="price-positive" style="font-weight:600;font-size:12px;">${formatPercent(APP.prices[h.symbol]?.change||0)}</span>
-                        </span>`).join('<span style="color:#1e293b;">|</span>')}
-                    </div>
-                </div>
-                <div style="flex:1;min-width:300px;padding:10px 16px;border-radius:10px;background:rgba(248,113,113,0.06);border:1px solid rgba(248,113,113,0.15);">
-                    <div style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Worst Performers</div>
-                    <div style="display:flex;gap:14px;flex-wrap:wrap;">
-                        ${top3Worst.map(h => `<span style="display:inline-flex;align-items:center;gap:6px;">
-                            <span style="color:#cbd5e1;font-size:12px;">${h.name}</span>
-                            <span class="price-negative" style="font-weight:600;font-size:12px;">${formatPercent(APP.prices[h.symbol]?.change||0)}</span>
-                        </span>`).join('<span style="color:#1e293b;">|</span>')}
-                    </div>
-                </div>
-            </div>` : ''}
-
             <div class="stat-cards" style="margin-top:12px;">
                 ${Object.entries(regionStats).map(([r, s]) => {
                     const pl = s.value - s.cost;
@@ -1930,34 +1909,29 @@
                     });
                     const todayBase = s.value - todayPL;
                     const todayPct = todayBase > 0 ? (todayPL / todayBase * 100) : 0;
-                    return `<div class="stat-card" style="position:relative;">
+                    return `<div class="stat-card" style="position:relative;padding:14px 16px;">
                         <div style="display:flex;justify-content:space-between;align-items:flex-start;">
-                            <div>
-                                <div class="stat-label" style="margin-bottom:2px;">${flag} ${r} (${s.count})</div>
-                                <div style="font-size:16px;color:#e2e8f0;font-weight:600;font-family:Montserrat,sans-serif;">$${fmtNum(s.value)}</div>
-                            </div>
-                            <div style="text-align:right;">
-                                <div class="${pct>=0?'price-positive':'price-negative'}" style="font-size:24px;font-weight:bold;line-height:1.1;font-family:Montserrat,sans-serif;">${formatPercent(pct)}</div>
-                                <div style="font-size:9px;color:#64748b;letter-spacing:1.5px;margin-top:2px;">YTD RETURN</div>
-                            </div>
+                            <div class="stat-label" style="margin-bottom:0;">${flag} ${r} (${s.count})</div>
+                            <div style="font-size:14px;color:#e2e8f0;font-weight:600;font-family:Montserrat,sans-serif;">$${fmtNum(s.value)}</div>
                         </div>
-                        <div style="margin-top:8px;padding:6px 10px;background:rgba(30,41,59,0.3);border-radius:8px;border:1px solid rgba(193,166,115,0.06);">
-                            <div style="display:flex;justify-content:space-between;align-items:center;">
-                                <span style="color:#64748b;font-size:10px;letter-spacing:0.5px;">Cumulative P&L</span>
-                                <div style="display:flex;align-items:baseline;gap:6px;">
-                                    <span class="${pl>=0?'price-positive':'price-negative'}" style="font-size:13px;font-weight:600;">${pl>=0?'+':''}$${fmtNum(pl)}</span>
-                                </div>
-                            </div>
+                        <div style="text-align:center;margin:10px 0 6px;">
+                            <div class="${pct>=0?'price-positive':'price-negative'}" style="font-size:28px;font-weight:bold;line-height:1;font-family:Montserrat,sans-serif;">${formatPercent(pct)}</div>
+                            <div style="font-size:9px;color:#64748b;letter-spacing:1.5px;margin-top:3px;">YTD RETURN</div>
+                            <div class="${pl>=0?'price-positive':'price-negative'}" style="font-size:12px;margin-top:3px;opacity:0.7;">${pl>=0?'+':''}$${fmtNum(pl)}</div>
                         </div>
-                        <div style="margin-top:6px;background:rgba(30,41,59,0.6);border-radius:4px;height:4px;overflow:hidden;">
+                        <div style="margin-top:6px;background:rgba(30,41,59,0.6);border-radius:4px;height:3px;overflow:hidden;">
                             <div style="width:${Math.min(100, s.value/totalValue*100)}%;height:100%;background:${barColor};border-radius:4px;box-shadow:0 0 8px ${barColor}40;"></div>
                         </div>
-                        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;">
-                            <span style="font-size:10px;color:#475569;">Weight ${fmtNum(totalValue>0?s.value/totalValue*100:0,1)}%</span>
-                            <div style="display:flex;align-items:baseline;gap:4px;">
-                                <span style="font-size:9px;color:#64748b;">Today</span>
-                                <span class="${todayPL>=0?'price-positive':'price-negative'}" style="font-size:12px;font-weight:600;">${todayPL>=0?'+':''}$${fmtNum(todayPL)}</span>
-                                <span class="${todayPL>=0?'price-positive':'price-negative'}" style="font-size:11px;">(${formatPercent(todayPct)})</span>
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;padding-top:6px;border-top:1px solid rgba(193,166,115,0.06);">
+                            <div style="text-align:left;">
+                                <div style="font-size:9px;color:#64748b;letter-spacing:0.5px;margin-bottom:2px;">Today</div>
+                                <span class="${todayPL>=0?'price-positive':'price-negative'}" style="font-size:11px;font-weight:600;">${todayPL>=0?'+':''}$${fmtNum(todayPL)}</span>
+                                <span class="${todayPL>=0?'price-positive':'price-negative'}" style="font-size:10px;opacity:0.7;"> ${formatPercent(todayPct)}</span>
+                            </div>
+                            <div style="text-align:right;">
+                                <div style="font-size:9px;color:#64748b;letter-spacing:0.5px;margin-bottom:2px;">Cumulative</div>
+                                <span class="${pl>=0?'price-positive':'price-negative'}" style="font-size:11px;font-weight:600;">${pl>=0?'+':''}$${fmtNum(pl)}</span>
+                                <span class="${pl>=0?'price-positive':'price-negative'}" style="font-size:10px;opacity:0.7;"> ${formatPercent(pct)}</span>
                             </div>
                         </div>
                     </div>`;
@@ -1971,15 +1945,15 @@
                         <svg width="18" height="18" viewBox="0 0 18 18"><circle cx="9" cy="9" r="7" fill="none" stroke="var(--gold)" stroke-width="1.5" opacity="0.6"/><circle cx="9" cy="9" r="3" fill="var(--gold)" opacity="0.8"/><circle cx="9" cy="3" r="1.2" fill="var(--gold-light)"/></svg>
                         Regional Allocation
                     </div>
-                    <div id="region-viz" style="display:flex;flex-direction:column;align-items:center;gap:20px;"></div>
+                    <div id="region-viz" style="display:flex;align-items:center;gap:20px;"></div>
                 </div>
                 <div class="chart-card" style="position:relative;overflow:hidden;">
                     <div style="position:absolute;bottom:-30px;left:-30px;width:100px;height:100px;border-radius:50%;background:radial-gradient(circle,rgba(193,166,115,0.06),transparent 70%);pointer-events:none;"></div>
                     <div class="chart-title" style="display:flex;align-items:center;gap:10px;">
-                        <svg width="18" height="18" viewBox="0 0 18 18"><rect x="1" y="1" width="7" height="7" rx="1.5" fill="#4ade80" opacity="0.7"/><rect x="10" y="1" width="7" height="4" rx="1.5" fill="#C1A673" opacity="0.7"/><rect x="10" y="7" width="7" height="4" rx="1.5" fill="#f87171" opacity="0.5"/><rect x="1" y="10" width="4" height="7" rx="1.5" fill="#E8B84B" opacity="0.6"/><rect x="7" y="13" width="5" height="4" rx="1.5" fill="#D4A574" opacity="0.5"/></svg>
-                        Holdings Heatmap
+                        <svg width="18" height="18" viewBox="0 0 18 18"><path d="M3,3 L8,3 L8,8 L3,8Z" fill="#4ade80" opacity="0.7" rx="1"/><path d="M10,3 L15,3 L15,7 L10,7Z" fill="#f87171" opacity="0.7" rx="1"/><path d="M3,10 L8,10 L8,15 L3,15Z" fill="#4ade80" opacity="0.5" rx="1"/><path d="M10,9 L15,9 L15,15 L10,15Z" fill="#f87171" opacity="0.5" rx="1"/></svg>
+                        Today's Movers by Region
                     </div>
-                    <div id="heatmap-viz" style="display:flex;flex-direction:column;padding-top:4px;"></div>
+                    <div id="movers-viz" style="overflow-x:auto;"></div>
                 </div>
             </div>
         `;
@@ -2234,7 +2208,6 @@
             let rotateOffset = -90;
 
             let ringSegments = '';
-            let legendCards = '';
             regionData.forEach((d, i) => {
                 const segDeg = (d.value / regionTotal) * availableDeg;
                 const segLen = (segDeg / 360) * circumference;
@@ -2242,18 +2215,22 @@
                 const dashoffset = -(rotateOffset / 360) * circumference;
                 ringSegments += '<circle cx="'+CX+'" cy="'+CY+'" r="'+R+'" fill="none" stroke="'+d.color+'" stroke-width="'+SW+'" stroke-dasharray="'+dasharray+'" stroke-dashoffset="'+dashoffset+'" stroke-linecap="round" style="filter:drop-shadow(0 0 8px '+d.color+'60);transform-origin:center;opacity:0;animation:ringFadeIn 0.8s ease '+(0.2+i*0.15)+'s forwards;"/>';
                 rotateOffset += segDeg + gapDeg;
+            });
 
+            // Legend items: vertical list on the right, ordered by weight
+            let legendList = '';
+            regionData.forEach((d, i) => {
                 const plClass = d.plPct >= 0 ? 'price-positive' : 'price-negative';
-                legendCards += '<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:rgba(20,25,32,0.5);border:1px solid '+d.color+'25;border-radius:10px;flex:1;min-width:130px;backdrop-filter:blur(4px);transition:all 0.3s ease;" onmouseover="this.style.borderColor=\''+d.color+'60\';this.style.background=\'rgba(20,25,32,0.8)\'" onmouseout="this.style.borderColor=\''+d.color+'25\';this.style.background=\'rgba(20,25,32,0.5)\'">'
-                    + '<div style="width:36px;height:36px;border-radius:50%;background:'+d.color+'15;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">'+d.flag+'</div>'
+                legendList += '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;'+(i>0?'border-top:1px solid rgba(193,166,115,0.06);':'')+'">'
+                    + '<span style="font-size:16px;">'+d.flag+'</span>'
                     + '<div style="flex:1;min-width:0;">'
                     + '<div style="display:flex;justify-content:space-between;align-items:baseline;">'
-                    + '<span style="color:#e2e8f0;font-size:13px;font-weight:600;font-family:Montserrat,sans-serif;">'+d.label+'</span>'
-                    + '<span style="color:'+d.color+';font-size:15px;font-weight:700;font-family:Montserrat,sans-serif;">'+fmtNum(d.pct,1)+'%</span>'
+                    + '<span style="color:#e2e8f0;font-size:12px;font-weight:600;font-family:Montserrat,sans-serif;">'+d.label+'</span>'
+                    + '<span style="color:'+d.color+';font-size:14px;font-weight:700;font-family:Montserrat,sans-serif;">'+fmtNum(d.pct,1)+'%</span>'
                     + '</div>'
-                    + '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:3px;">'
-                    + '<span style="color:#64748b;font-size:11px;font-family:Montserrat,sans-serif;">$'+fmtNum(d.value)+'</span>'
-                    + '<span class="'+plClass+'" style="font-size:11px;font-weight:600;font-family:Montserrat,sans-serif;">'+formatPercent(d.plPct)+'</span>'
+                    + '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:2px;">'
+                    + '<span style="color:#64748b;font-size:10px;font-family:Montserrat,sans-serif;">$'+fmtNum(d.value)+'</span>'
+                    + '<span class="'+plClass+'" style="font-size:11px;font-weight:600;font-family:Montserrat,sans-serif;">P&L '+formatPercent(d.plPct)+'</span>'
                     + '</div>'
                     + '</div></div>';
             });
@@ -2261,86 +2238,61 @@
             const regionViz = document.getElementById('region-viz');
             if (regionViz) {
                 regionViz.innerHTML = '<style>@keyframes ringFadeIn{from{opacity:0;transform:scale(0.85);}to{opacity:1;transform:scale(1);}}</style>'
-                    + '<svg viewBox="0 0 200 200" width="200" height="200" style="overflow:visible;">'
+                    + '<div style="flex-shrink:0;">'
+                    + '<svg viewBox="0 0 200 200" width="180" height="180" style="overflow:visible;">'
                     + '<circle cx="'+CX+'" cy="'+CY+'" r="'+R+'" fill="none" stroke="rgba(193,166,115,0.06)" stroke-width="'+SW+'"/>'
                     + ringSegments
-                    + '<text x="'+CX+'" y="'+(CY-8)+'" text-anchor="middle" fill="#e2e8f0" font-size="18" font-weight="700" font-family="Montserrat,sans-serif">$'+fmtNum(regionTotal)+'</text>'
-                    + '<text x="'+CX+'" y="'+(CY+10)+'" text-anchor="middle" fill="#64748b" font-size="10" letter-spacing="2" font-family="Montserrat,sans-serif">TOTAL VALUE</text>'
-                    + '</svg>'
-                    + '<div style="display:flex;gap:8px;flex-wrap:wrap;width:100%;">'+legendCards+'</div>';
+                    + '<text x="'+CX+'" y="'+(CY-8)+'" text-anchor="middle" fill="#e2e8f0" font-size="16" font-weight="700" font-family="Montserrat,sans-serif">$'+fmtNum(regionTotal)+'</text>'
+                    + '<text x="'+CX+'" y="'+(CY+10)+'" text-anchor="middle" fill="#64748b" font-size="9" letter-spacing="2" font-family="Montserrat,sans-serif">TOTAL VALUE</text>'
+                    + '</svg></div>'
+                    + '<div style="flex:1;min-width:120px;display:flex;flex-direction:column;justify-content:center;">'+legendList+'</div>';
             }
 
-            // Holdings Heatmap (treemap) - each stock as a colored block
-            const heatmapViz = document.getElementById('heatmap-viz');
-            if (heatmapViz) {
-                // Build stock data sorted by market value
-                const stockData = activeHoldings.map(h => {
-                    const pd = APP.prices[h.symbol] || {};
-                    const price = pd.price || h.avg_cost;
-                    const change = pd.change || 0;
-                    const mv = h.qty * price * (APP.FX_RATES[h.currency]||1);
-                    return { name: h.name || h.symbol, symbol: h.symbol, mv, change, region: h.region };
-                }).sort((a,b) => b.mv - a.mv);
+            // Today's Movers by Region - best/worst 3 per region as table
+            const moversViz = document.getElementById('movers-viz');
+            if (moversViz) {
+                const regions = [...new Set(activeHoldings.map(h => h.region).filter(Boolean))];
+                let tableHtml = '<table style="width:100%;border-collapse:separate;border-spacing:0;font-size:11px;font-family:Montserrat,sans-serif;">';
+                tableHtml += '<thead><tr>'
+                    + '<th style="text-align:left;padding:6px 8px;color:#64748b;font-weight:500;font-size:10px;letter-spacing:0.5px;border-bottom:1px solid rgba(193,166,115,0.1);">Region</th>'
+                    + '<th style="text-align:left;padding:6px 8px;color:#4ade80;font-weight:500;font-size:10px;letter-spacing:0.5px;border-bottom:1px solid rgba(193,166,115,0.1);">Top 3</th>'
+                    + '<th style="text-align:left;padding:6px 8px;color:#f87171;font-weight:500;font-size:10px;letter-spacing:0.5px;border-bottom:1px solid rgba(193,166,115,0.1);">Bottom 3</th>'
+                    + '</tr></thead><tbody>';
 
-                const totalMV = stockData.reduce((s,d) => s + d.mv, 0);
+                regions.forEach((r, ri) => {
+                    const flag = r==='美国'?'🇺🇸':r==='中国'?'🇨🇳':r==='日本'?'🇯🇵':'🌐';
+                    const rColor = regionColors[r] || fallbackColor;
+                    const rHoldings = activeHoldings.filter(h => h.region === r).map(h => ({
+                        name: h.name || h.symbol, symbol: h.symbol,
+                        change: APP.prices[h.symbol]?.change || 0
+                    })).sort((a,b) => b.change - a.change);
 
-                // Color function: green for positive, red for negative, intensity by magnitude
-                function heatColor(chg) {
-                    if (chg >= 0) {
-                        const intensity = Math.min(chg / 5, 1); // cap at 5%
-                        const r = Math.round(20 + (74-20)*(1-intensity));
-                        const g = Math.round(80 + (222-80)*intensity);
-                        const b = Math.round(40 + (128-40)*(1-intensity)*0.5);
-                        return 'rgba('+r+','+g+','+b+',0.85)';
-                    } else {
-                        const intensity = Math.min(Math.abs(chg) / 5, 1);
-                        const r = Math.round(80 + (248-80)*intensity);
-                        const g = Math.round(40 + (113-40)*(1-intensity)*0.3);
-                        const b = Math.round(40 + (113-40)*(1-intensity)*0.3);
-                        return 'rgba('+r+','+g+','+b+',0.85)';
-                    }
-                }
+                    const best3 = rHoldings.slice(0, 3);
+                    const worst3 = rHoldings.slice(-3).reverse();
 
-                // Simple treemap layout: single row with flex
-                let blocks = '';
-                const maxStocks = 15; // limit display
-                const displayStocks = stockData.slice(0, maxStocks);
-                const displayTotal = displayStocks.reduce((s,d) => s + d.mv, 0);
+                    const borderStyle = ri < regions.length - 1 ? 'border-bottom:1px solid rgba(193,166,115,0.06);' : '';
 
-                displayStocks.forEach((d, i) => {
-                    const weight = displayTotal > 0 ? (d.mv / displayTotal * 100) : 0;
-                    const bgColor = heatColor(d.change);
-                    const textColor = Math.abs(d.change) > 2 ? '#fff' : '#e2e8f0';
-                    const minW = weight > 8 ? '0' : '50px';
-                    const showName = weight > 6;
-                    const regionFlag = d.region==='美国'?'🇺🇸':d.region==='中国'?'🇨🇳':d.region==='日本'?'🇯🇵':'🌐';
-
-                    blocks += '<div style="flex:'+Math.max(weight,3)+';min-width:'+minW+';height:100%;background:'+bgColor+';border-radius:6px;padding:6px 8px;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:2px;cursor:default;transition:all 0.3s ease;border:1px solid transparent;opacity:0;animation:heatFadeIn 0.4s ease '+(0.1+i*0.05)+'s forwards;" '
-                        + 'onmouseover="this.style.border=\'1px solid rgba(193,166,115,0.5)\';this.style.transform=\'scale(1.02)\';this.style.zIndex=\'2\'" '
-                        + 'onmouseout="this.style.border=\'1px solid transparent\';this.style.transform=\'scale(1)\';this.style.zIndex=\'0\'" '
-                        + 'title="'+d.name+' ('+d.symbol+')  $'+fmtNum(d.mv)+' | '+(d.change>=0?'+':'')+fmtNum(d.change,2)+'%">'
-                        + (showName ? '<div style="font-size:10px;color:'+textColor+';font-weight:600;font-family:Montserrat,sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;text-align:center;line-height:1.2;">'+d.symbol+'</div>' : '')
-                        + '<div style="font-size:'+(weight>10?'14':'11')+'px;font-weight:700;color:'+textColor+';font-family:Montserrat,sans-serif;">'+(d.change>=0?'+':'')+fmtNum(d.change,1)+'%</div>'
-                        + (weight > 12 ? '<div style="font-size:9px;color:'+textColor+';opacity:0.7;font-family:Montserrat,sans-serif;">$'+fmtNum(d.mv)+'</div>' : '')
-                        + '</div>';
+                    tableHtml += '<tr>'
+                        + '<td style="padding:8px;vertical-align:top;'+borderStyle+'white-space:nowrap;">'
+                        + '<span style="font-size:14px;">'+flag+'</span> '
+                        + '<span style="color:'+rColor+';font-weight:600;font-size:12px;">'+r+'</span>'
+                        + '</td>'
+                        + '<td style="padding:8px;vertical-align:top;'+borderStyle+'">'
+                        + best3.map(s => '<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;margin-bottom:3px;">'
+                            + '<span style="color:#cbd5e1;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:110px;">'+s.name+'</span>'
+                            + '<span class="price-positive" style="font-size:11px;font-weight:600;white-space:nowrap;">'+formatPercent(s.change)+'</span>'
+                            + '</div>').join('')
+                        + '</td>'
+                        + '<td style="padding:8px;vertical-align:top;'+borderStyle+'">'
+                        + worst3.map(s => '<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;margin-bottom:3px;">'
+                            + '<span style="color:#cbd5e1;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:110px;">'+s.name+'</span>'
+                            + '<span class="price-negative" style="font-size:11px;font-weight:600;white-space:nowrap;">'+formatPercent(s.change)+'</span>'
+                            + '</div>').join('')
+                        + '</td></tr>';
                 });
 
-                // Count positive/negative
-                const posCount = stockData.filter(d => d.change >= 0).length;
-                const negCount = stockData.filter(d => d.change < 0).length;
-
-                heatmapViz.innerHTML = '<style>@keyframes heatFadeIn{from{opacity:0;transform:scale(0.9);}to{opacity:1;transform:scale(1);}}</style>'
-                    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">'
-                    + '<div style="display:flex;align-items:center;gap:12px;">'
-                    + '<span style="font-size:11px;color:#4ade80;">▲ '+posCount+' Up</span>'
-                    + '<span style="font-size:11px;color:#f87171;">▼ '+negCount+' Down</span>'
-                    + '</div>'
-                    + '<div style="display:flex;align-items:center;gap:4px;">'
-                    + '<div style="width:40px;height:6px;border-radius:3px;background:linear-gradient(90deg,#f87171,#64748b,#4ade80);"></div>'
-                    + '<span style="font-size:9px;color:#64748b;">Daily Change</span>'
-                    + '</div></div>'
-                    + '<div style="display:flex;gap:3px;height:140px;align-items:stretch;">'+blocks+'</div>'
-                    + (stockData.length > maxStocks ? '<div style="text-align:center;margin-top:6px;font-size:10px;color:#64748b;">+'+(stockData.length-maxStocks)+' more holdings</div>' : '');
+                tableHtml += '</tbody></table>';
+                moversViz.innerHTML = tableHtml;
             }
         }
     }
