@@ -1919,33 +1919,46 @@
                     const pl = s.value - s.cost;
                     const pct = s.cost > 0 ? (pl / s.cost * 100) : 0;
                     const flag = r==='美国'?'🇺🇸':r==='中国'?'🇨🇳':r==='日本'?'🇯🇵':'🌐';
-                    const barColor = r==='美国'?'#C1A673':r==='中国'?'#fbbf24':'#f87171';
-                    // Best/worst stock in this region
-                    const regionHoldings = activeHoldings.filter(h => h.region === r);
-                    let rBest = null, rWorst = null;
-                    regionHoldings.forEach(h => {
-                        const chg = APP.prices[h.symbol]?.change || 0;
-                        if (!rBest || chg > (APP.prices[rBest.symbol]?.change || 0)) rBest = h;
-                        if (!rWorst || chg < (APP.prices[rWorst.symbol]?.change || 0)) rWorst = h;
+                    const barColor = r==='美国'?'#C1A673':r==='中国'?'#E8B84B':r==='日本'?'#D4A574':'#8B9CB6';
+                    // Today's P&L for this region
+                    let todayPL = 0;
+                    activeHoldings.filter(h => h.region === r).forEach(h => {
+                        const pd = APP.prices[h.symbol];
+                        if (pd && pd.prevClose && pd.price) {
+                            todayPL += h.qty * (pd.price - pd.prevClose) * (APP.FX_RATES[h.currency] || 1);
+                        }
                     });
-                    const bestInfo = rBest ? (rBest.name||rBest.symbol)+' '+formatPercent(APP.prices[rBest.symbol]?.change||0) : '';
-                    const worstInfo = rWorst ? (rWorst.name||rWorst.symbol)+' '+formatPercent(APP.prices[rWorst.symbol]?.change||0) : '';
+                    const todayBase = s.value - todayPL;
+                    const todayPct = todayBase > 0 ? (todayPL / todayBase * 100) : 0;
                     return `<div class="stat-card" style="position:relative;">
                         <div style="display:flex;justify-content:space-between;align-items:flex-start;">
-                            <div class="stat-label">${flag} ${r} Assets (${s.count} stocks)</div>
+                            <div>
+                                <div class="stat-label" style="margin-bottom:2px;">${flag} ${r} (${s.count})</div>
+                                <div style="font-size:16px;color:#e2e8f0;font-weight:600;font-family:Montserrat,sans-serif;">$${fmtNum(s.value)}</div>
+                            </div>
                             <div style="text-align:right;">
-                                <div class="${pct>=0?'price-positive':'price-negative'}" style="font-size:22px;font-weight:bold;line-height:1.1;">${formatPercent(pct)}</div>
-                                <div class="${pl>=0?'price-positive':'price-negative'}" style="font-size:12px;margin-top:2px;">${pl>=0?'+':''}$${fmtNum(pl)}</div>
+                                <div class="${pct>=0?'price-positive':'price-negative'}" style="font-size:24px;font-weight:bold;line-height:1.1;font-family:Montserrat,sans-serif;">${formatPercent(pct)}</div>
+                                <div style="font-size:9px;color:#64748b;letter-spacing:1.5px;margin-top:2px;">YTD RETURN</div>
                             </div>
                         </div>
-                        <div class="stat-value" style="font-size:18px;margin-top:4px;">$${fmtNum(s.value)}</div>
-                        <div style="font-size:12px;color:#64748b;margin-top:2px;">Cost $${fmtNum(s.cost)}</div>
-                        <div style="margin-top:6px;background:rgba(30,41,59,0.6);border-radius:4px;height:4px;overflow:hidden;">
-                            <div style="width:${Math.min(100, s.value/totalValue*100)}%;height:100%;background:${barColor};border-radius:4px;"></div>
+                        <div style="margin-top:8px;padding:6px 10px;background:rgba(30,41,59,0.3);border-radius:8px;border:1px solid rgba(193,166,115,0.06);">
+                            <div style="display:flex;justify-content:space-between;align-items:center;">
+                                <span style="color:#64748b;font-size:10px;letter-spacing:0.5px;">Cumulative P&L</span>
+                                <div style="display:flex;align-items:baseline;gap:6px;">
+                                    <span class="${pl>=0?'price-positive':'price-negative'}" style="font-size:13px;font-weight:600;">${pl>=0?'+':''}$${fmtNum(pl)}</span>
+                                </div>
+                            </div>
                         </div>
-                        <div style="display:flex;justify-content:space-between;font-size:10px;margin-top:6px;color:#475569;">
-                            <span>Weight ${fmtNum(totalValue>0?s.value/totalValue*100:0,1)}%</span>
-                            <span>${rBest && rWorst && rBest.symbol !== rWorst.symbol ? '<span class="price-positive">▲'+bestInfo+'</span> <span class="price-negative">▼'+worstInfo+'</span>' : (rBest ? '<span class="price-positive">▲'+bestInfo+'</span>' : '')}</span>
+                        <div style="margin-top:6px;background:rgba(30,41,59,0.6);border-radius:4px;height:4px;overflow:hidden;">
+                            <div style="width:${Math.min(100, s.value/totalValue*100)}%;height:100%;background:${barColor};border-radius:4px;box-shadow:0 0 8px ${barColor}40;"></div>
+                        </div>
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;">
+                            <span style="font-size:10px;color:#475569;">Weight ${fmtNum(totalValue>0?s.value/totalValue*100:0,1)}%</span>
+                            <div style="display:flex;align-items:baseline;gap:4px;">
+                                <span style="font-size:9px;color:#64748b;">Today</span>
+                                <span class="${todayPL>=0?'price-positive':'price-negative'}" style="font-size:12px;font-weight:600;">${todayPL>=0?'+':''}$${fmtNum(todayPL)}</span>
+                                <span class="${todayPL>=0?'price-positive':'price-negative'}" style="font-size:11px;">(${formatPercent(todayPct)})</span>
+                            </div>
                         </div>
                     </div>`;
                 }).join('')}
@@ -1963,10 +1976,10 @@
                 <div class="chart-card" style="position:relative;overflow:hidden;">
                     <div style="position:absolute;bottom:-30px;left:-30px;width:100px;height:100px;border-radius:50%;background:radial-gradient(circle,rgba(193,166,115,0.06),transparent 70%);pointer-events:none;"></div>
                     <div class="chart-title" style="display:flex;align-items:center;gap:10px;">
-                        <svg width="18" height="18" viewBox="0 0 18 18"><rect x="2" y="3" width="14" height="2.5" rx="1.2" fill="var(--gold)" opacity="0.9"/><rect x="2" y="8" width="10" height="2.5" rx="1.2" fill="var(--gold-light)" opacity="0.7"/><rect x="2" y="13" width="6" height="2.5" rx="1.2" fill="var(--gold-dark)" opacity="0.5"/></svg>
-                        Currency Exposure
+                        <svg width="18" height="18" viewBox="0 0 18 18"><rect x="1" y="1" width="7" height="7" rx="1.5" fill="#4ade80" opacity="0.7"/><rect x="10" y="1" width="7" height="4" rx="1.5" fill="#C1A673" opacity="0.7"/><rect x="10" y="7" width="7" height="4" rx="1.5" fill="#f87171" opacity="0.5"/><rect x="1" y="10" width="4" height="7" rx="1.5" fill="#E8B84B" opacity="0.6"/><rect x="7" y="13" width="5" height="4" rx="1.5" fill="#D4A574" opacity="0.5"/></svg>
+                        Holdings Heatmap
                     </div>
-                    <div id="currency-viz" style="display:flex;flex-direction:column;gap:16px;padding-top:8px;"></div>
+                    <div id="heatmap-viz" style="display:flex;flex-direction:column;padding-top:4px;"></div>
                 </div>
             </div>
         `;
@@ -2183,35 +2196,42 @@
 
         container.innerHTML = html;
 
-        // Render region orbital ring + currency exposure bars
+        // Render region orbital ring + holdings heatmap
         if (activeHoldings.length > 0) {
             const regionColors = {'美国':'#C1A673','中国':'#E8B84B','日本':'#D4A574','香港':'#A8C1A6'};
             const regionFlags = {'美国':'🇺🇸','中国':'🇨🇳','日本':'🇯🇵','香港':'🇭🇰'};
-            const currencyColors = {'USD':'#C1A673','CNY':'#E8B84B','JPY':'#D4A574','HKD':'#A8C1A6'};
-            const currencySymbols = {'USD':'$','CNY':'¥','JPY':'¥','HKD':'HK$'};
             const fallbackColor = '#8B9CB6';
 
-            // Region data
+            // Region data with P&L
             const regionGrouped = {};
+            const regionCosts = {};
             activeHoldings.forEach(h => {
                 const key = h.region || 'Other';
                 const p = APP.prices[h.symbol]?.price || h.avg_cost;
-                regionGrouped[key] = (regionGrouped[key]||0) + h.qty * p * (APP.FX_RATES[h.currency]||1);
+                const rate = APP.FX_RATES[h.currency]||1;
+                regionGrouped[key] = (regionGrouped[key]||0) + h.qty * p * rate;
+                regionCosts[key] = (regionCosts[key]||0) + h.qty * h.avg_cost * rate;
             });
             const regionTotal = Object.values(regionGrouped).reduce((a,b) => a+b, 0);
-            const regionData = Object.entries(regionGrouped).sort((a,b) => b[1]-a[1]).map(([label, value]) => ({
-                label, value, pct: regionTotal > 0 ? (value/regionTotal*100) : 0,
-                color: regionColors[label] || fallbackColor,
-                flag: regionFlags[label] || '🌐'
-            }));
+            const regionData = Object.entries(regionGrouped).sort((a,b) => b[1]-a[1]).map(([label, value]) => {
+                const cost = regionCosts[label] || 0;
+                const pl = value - cost;
+                const plPct = cost > 0 ? (pl / cost * 100) : 0;
+                return {
+                    label, value, pct: regionTotal > 0 ? (value/regionTotal*100) : 0,
+                    color: regionColors[label] || fallbackColor,
+                    flag: regionFlags[label] || '🌐',
+                    pl, plPct
+                };
+            });
 
             // Build SVG orbital ring
             const R = 78, SW = 16, CX = 100, CY = 100;
             const circumference = 2 * Math.PI * R;
-            const gapDeg = 6; // gap in degrees between segments
+            const gapDeg = 6;
             const totalGapDeg = gapDeg * regionData.length;
             const availableDeg = 360 - totalGapDeg;
-            let rotateOffset = -90; // start from top
+            let rotateOffset = -90;
 
             let ringSegments = '';
             let legendCards = '';
@@ -2220,18 +2240,21 @@
                 const segLen = (segDeg / 360) * circumference;
                 const dasharray = segLen + ' ' + (circumference - segLen);
                 const dashoffset = -(rotateOffset / 360) * circumference;
-                const glowId = 'rg' + i;
                 ringSegments += '<circle cx="'+CX+'" cy="'+CY+'" r="'+R+'" fill="none" stroke="'+d.color+'" stroke-width="'+SW+'" stroke-dasharray="'+dasharray+'" stroke-dashoffset="'+dashoffset+'" stroke-linecap="round" style="filter:drop-shadow(0 0 8px '+d.color+'60);transform-origin:center;opacity:0;animation:ringFadeIn 0.8s ease '+(0.2+i*0.15)+'s forwards;"/>';
                 rotateOffset += segDeg + gapDeg;
 
-                legendCards += '<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:rgba(20,25,32,0.5);border:1px solid '+d.color+'25;border-radius:10px;flex:1;min-width:120px;backdrop-filter:blur(4px);transition:all 0.3s ease;" onmouseover="this.style.borderColor=\''+d.color+'60\';this.style.background=\'rgba(20,25,32,0.8)\'" onmouseout="this.style.borderColor=\''+d.color+'25\';this.style.background=\'rgba(20,25,32,0.5)\'">'
+                const plClass = d.plPct >= 0 ? 'price-positive' : 'price-negative';
+                legendCards += '<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:rgba(20,25,32,0.5);border:1px solid '+d.color+'25;border-radius:10px;flex:1;min-width:130px;backdrop-filter:blur(4px);transition:all 0.3s ease;" onmouseover="this.style.borderColor=\''+d.color+'60\';this.style.background=\'rgba(20,25,32,0.8)\'" onmouseout="this.style.borderColor=\''+d.color+'25\';this.style.background=\'rgba(20,25,32,0.5)\'">'
                     + '<div style="width:36px;height:36px;border-radius:50%;background:'+d.color+'15;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">'+d.flag+'</div>'
                     + '<div style="flex:1;min-width:0;">'
                     + '<div style="display:flex;justify-content:space-between;align-items:baseline;">'
                     + '<span style="color:#e2e8f0;font-size:13px;font-weight:600;font-family:Montserrat,sans-serif;">'+d.label+'</span>'
                     + '<span style="color:'+d.color+';font-size:15px;font-weight:700;font-family:Montserrat,sans-serif;">'+fmtNum(d.pct,1)+'%</span>'
                     + '</div>'
-                    + '<div style="color:#64748b;font-size:11px;margin-top:2px;font-family:Montserrat,sans-serif;">$'+fmtNum(d.value)+'</div>'
+                    + '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:3px;">'
+                    + '<span style="color:#64748b;font-size:11px;font-family:Montserrat,sans-serif;">$'+fmtNum(d.value)+'</span>'
+                    + '<span class="'+plClass+'" style="font-size:11px;font-weight:600;font-family:Montserrat,sans-serif;">'+formatPercent(d.plPct)+'</span>'
+                    + '</div>'
                     + '</div></div>';
             });
 
@@ -2247,54 +2270,77 @@
                     + '<div style="display:flex;gap:8px;flex-wrap:wrap;width:100%;">'+legendCards+'</div>';
             }
 
-            // Currency data
-            const currencyGrouped = {};
-            activeHoldings.forEach(h => {
-                const key = h.currency || 'USD';
-                const p = APP.prices[h.symbol]?.price || h.avg_cost;
-                currencyGrouped[key] = (currencyGrouped[key]||0) + h.qty * p * (APP.FX_RATES[h.currency]||1);
-            });
-            const currencyTotal = Object.values(currencyGrouped).reduce((a,b) => a+b, 0);
-            const currencyData = Object.entries(currencyGrouped).sort((a,b) => b[1]-a[1]).map(([label, value]) => ({
-                label, value, pct: currencyTotal > 0 ? (value/currencyTotal*100) : 0,
-                color: currencyColors[label] || fallbackColor,
-                sym: currencySymbols[label] || label
-            }));
+            // Holdings Heatmap (treemap) - each stock as a colored block
+            const heatmapViz = document.getElementById('heatmap-viz');
+            if (heatmapViz) {
+                // Build stock data sorted by market value
+                const stockData = activeHoldings.map(h => {
+                    const pd = APP.prices[h.symbol] || {};
+                    const price = pd.price || h.avg_cost;
+                    const change = pd.change || 0;
+                    const mv = h.qty * price * (APP.FX_RATES[h.currency]||1);
+                    return { name: h.name || h.symbol, symbol: h.symbol, mv, change, region: h.region };
+                }).sort((a,b) => b.mv - a.mv);
 
-            // Stacked bar at top
-            const currencyViz = document.getElementById('currency-viz');
-            if (currencyViz) {
-                let stackedBar = '<div style="display:flex;height:8px;border-radius:4px;overflow:hidden;gap:2px;margin-bottom:4px;">';
-                currencyData.forEach((d,i) => {
-                    stackedBar += '<div style="flex:'+d.pct+';background:'+d.color+';border-radius:4px;min-width:4px;opacity:0;animation:barSlideIn 0.6s ease '+(0.3+i*0.1)+'s forwards;"></div>';
+                const totalMV = stockData.reduce((s,d) => s + d.mv, 0);
+
+                // Color function: green for positive, red for negative, intensity by magnitude
+                function heatColor(chg) {
+                    if (chg >= 0) {
+                        const intensity = Math.min(chg / 5, 1); // cap at 5%
+                        const r = Math.round(20 + (74-20)*(1-intensity));
+                        const g = Math.round(80 + (222-80)*intensity);
+                        const b = Math.round(40 + (128-40)*(1-intensity)*0.5);
+                        return 'rgba('+r+','+g+','+b+',0.85)';
+                    } else {
+                        const intensity = Math.min(Math.abs(chg) / 5, 1);
+                        const r = Math.round(80 + (248-80)*intensity);
+                        const g = Math.round(40 + (113-40)*(1-intensity)*0.3);
+                        const b = Math.round(40 + (113-40)*(1-intensity)*0.3);
+                        return 'rgba('+r+','+g+','+b+',0.85)';
+                    }
+                }
+
+                // Simple treemap layout: single row with flex
+                let blocks = '';
+                const maxStocks = 15; // limit display
+                const displayStocks = stockData.slice(0, maxStocks);
+                const displayTotal = displayStocks.reduce((s,d) => s + d.mv, 0);
+
+                displayStocks.forEach((d, i) => {
+                    const weight = displayTotal > 0 ? (d.mv / displayTotal * 100) : 0;
+                    const bgColor = heatColor(d.change);
+                    const textColor = Math.abs(d.change) > 2 ? '#fff' : '#e2e8f0';
+                    const minW = weight > 8 ? '0' : '50px';
+                    const showName = weight > 6;
+                    const regionFlag = d.region==='美国'?'🇺🇸':d.region==='中国'?'🇨🇳':d.region==='日本'?'🇯🇵':'🌐';
+
+                    blocks += '<div style="flex:'+Math.max(weight,3)+';min-width:'+minW+';height:100%;background:'+bgColor+';border-radius:6px;padding:6px 8px;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:2px;cursor:default;transition:all 0.3s ease;border:1px solid transparent;opacity:0;animation:heatFadeIn 0.4s ease '+(0.1+i*0.05)+'s forwards;" '
+                        + 'onmouseover="this.style.border=\'1px solid rgba(193,166,115,0.5)\';this.style.transform=\'scale(1.02)\';this.style.zIndex=\'2\'" '
+                        + 'onmouseout="this.style.border=\'1px solid transparent\';this.style.transform=\'scale(1)\';this.style.zIndex=\'0\'" '
+                        + 'title="'+d.name+' ('+d.symbol+')  $'+fmtNum(d.mv)+' | '+(d.change>=0?'+':'')+fmtNum(d.change,2)+'%">'
+                        + (showName ? '<div style="font-size:10px;color:'+textColor+';font-weight:600;font-family:Montserrat,sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;text-align:center;line-height:1.2;">'+d.symbol+'</div>' : '')
+                        + '<div style="font-size:'+(weight>10?'14':'11')+'px;font-weight:700;color:'+textColor+';font-family:Montserrat,sans-serif;">'+(d.change>=0?'+':'')+fmtNum(d.change,1)+'%</div>'
+                        + (weight > 12 ? '<div style="font-size:9px;color:'+textColor+';opacity:0.7;font-family:Montserrat,sans-serif;">$'+fmtNum(d.mv)+'</div>' : '')
+                        + '</div>';
                 });
-                stackedBar += '</div>';
 
-                let barCards = '';
-                currencyData.forEach((d, i) => {
-                    const barWidth = Math.max(d.pct, 3);
-                    barCards += '<div style="opacity:0;animation:barSlideIn 0.5s ease '+(0.2+i*0.12)+'s forwards;">'
-                        + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">'
-                        + '<div style="display:flex;align-items:center;gap:8px;">'
-                        + '<div style="width:28px;height:28px;border-radius:8px;background:'+d.color+'18;border:1px solid '+d.color+'30;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'
-                        + '<span style="font-size:12px;font-weight:700;color:'+d.color+';font-family:Montserrat,sans-serif;">'+d.sym+'</span></div>'
-                        + '<div><div style="color:#e2e8f0;font-size:13px;font-weight:600;font-family:Montserrat,sans-serif;">'+d.label+'</div>'
-                        + '<div style="color:#64748b;font-size:11px;font-family:Montserrat,sans-serif;">$'+fmtNum(d.value)+'</div></div>'
-                        + '</div>'
-                        + '<div style="text-align:right;">'
-                        + '<span style="color:'+d.color+';font-size:18px;font-weight:700;font-family:Montserrat,sans-serif;">'+fmtNum(d.pct,1)+'%</span>'
-                        + '</div></div>'
-                        + '<div style="height:6px;background:rgba(30,41,59,0.6);border-radius:3px;overflow:hidden;">'
-                        + '<div style="width:'+barWidth+'%;height:100%;background:linear-gradient(90deg,'+d.color+','+d.color+'90);border-radius:3px;box-shadow:0 0 12px '+d.color+'40;transition:width 1s ease;"></div>'
-                        + '</div></div>';
-                });
+                // Count positive/negative
+                const posCount = stockData.filter(d => d.change >= 0).length;
+                const negCount = stockData.filter(d => d.change < 0).length;
 
-                currencyViz.innerHTML = '<style>@keyframes barSlideIn{from{opacity:0;transform:translateX(-12px);}to{opacity:1;transform:translateX(0);}}</style>'
-                    + stackedBar + barCards
-                    + '<div style="text-align:center;padding-top:8px;border-top:1px solid rgba(193,166,115,0.1);">'
-                    + '<span style="color:#64748b;font-size:10px;letter-spacing:2px;font-family:Montserrat,sans-serif;">TOTAL EXPOSURE</span>'
-                    + '<div style="color:#C1A673;font-size:20px;font-weight:700;font-family:Montserrat,sans-serif;margin-top:2px;">$'+fmtNum(currencyTotal)+'</div>'
-                    + '</div>';
+                heatmapViz.innerHTML = '<style>@keyframes heatFadeIn{from{opacity:0;transform:scale(0.9);}to{opacity:1;transform:scale(1);}}</style>'
+                    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">'
+                    + '<div style="display:flex;align-items:center;gap:12px;">'
+                    + '<span style="font-size:11px;color:#4ade80;">▲ '+posCount+' Up</span>'
+                    + '<span style="font-size:11px;color:#f87171;">▼ '+negCount+' Down</span>'
+                    + '</div>'
+                    + '<div style="display:flex;align-items:center;gap:4px;">'
+                    + '<div style="width:40px;height:6px;border-radius:3px;background:linear-gradient(90deg,#f87171,#64748b,#4ade80);"></div>'
+                    + '<span style="font-size:9px;color:#64748b;">Daily Change</span>'
+                    + '</div></div>'
+                    + '<div style="display:flex;gap:3px;height:140px;align-items:stretch;">'+blocks+'</div>'
+                    + (stockData.length > maxStocks ? '<div style="text-align:center;margin-top:6px;font-size:10px;color:#64748b;">+'+(stockData.length-maxStocks)+' more holdings</div>' : '');
             }
         }
     }
