@@ -1,0 +1,3309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Arc Patrimony - Cloud Version">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Arc Patrimony">
+    <meta name="theme-color" content="#060b18">
+    <title>Arc Patrimony</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=Montserrat:wght@300;400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --gold: #C1A673;
+            --gold-light: #EADDBC;
+            --gold-dark: #96845E;
+            --gold-glow: rgba(193,166,115,0.15);
+            --gold-border: rgba(193,166,115,0.2);
+            --gold-border-hover: rgba(193,166,115,0.4);
+            --bg-deep: #0B0F12;
+            --bg-card: rgba(20,25,32,0.6);
+        }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            height: 100%;
+            font-family: 'Montserrat', 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            background-color: var(--bg-deep);
+            color: #e2e8f0;
+        }
+
+        #root {
+            height: 100%;
+        }
+
+        /* ===== Sci-fi Grid Background ===== */
+        .app-container::before {
+            content: '';
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-image:
+                linear-gradient(rgba(193,166,115,0.02) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(193,166,115,0.02) 1px, transparent 1px);
+            background-size: 60px 60px;
+            pointer-events: none;
+            z-index: 0;
+        }
+        .app-container::after {
+            content: '';
+            position: fixed;
+            top: -50%; left: -50%; width: 200%; height: 200%;
+            background: radial-gradient(ellipse at 20% 20%, rgba(193,166,115,0.05) 0%, transparent 50%),
+                        radial-gradient(ellipse at 80% 80%, rgba(150,132,94,0.03) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: 0;
+        }
+        .app-container > * { position: relative; z-index: 1; }
+
+        /* ===== Glassmorphism base ===== */
+        .glass {
+            background: var(--bg-card) !important;
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--gold-border) !important;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255,255,255,0.03);
+        }
+
+        /* ===== Breathing glow animation ===== */
+        @keyframes breathe {
+            0%, 100% { box-shadow: 0 0 8px rgba(193,166,115,0.1), 0 4px 15px rgba(0,0,0,0.2); }
+            50% { box-shadow: 0 0 20px rgba(193,166,115,0.2), 0 4px 20px rgba(0,0,0,0.3); }
+        }
+        @keyframes breatheActive {
+            0%, 100% { box-shadow: 0 0 12px rgba(193,166,115,0.3), 0 4px 20px rgba(0,0,0,0.3); }
+            50% { box-shadow: 0 0 28px rgba(234,221,188,0.4), 0 4px 25px rgba(0,0,0,0.4); }
+        }
+
+        /* ===== Brand loading screen ===== */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes logoGlow {
+            0%, 100% { filter: drop-shadow(0 0 8px rgba(193,166,115,0.2)); }
+            50% { filter: drop-shadow(0 0 20px rgba(234,221,188,0.5)); }
+        }
+        @keyframes starPulse {
+            0%, 100% { opacity: 0.8; }
+            50% { opacity: 1; filter: drop-shadow(0px 0px 8px rgba(234,221,188,0.8)); }
+        }
+        @keyframes slideIn {
+            from { transform: translateX(-100%); }
+            to { transform: translateX(0); }
+        }
+
+        /* Login Screen */
+        .login-screen {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background: var(--bg-deep);
+            background-image:
+                linear-gradient(rgba(193,166,115,0.025) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(193,166,115,0.025) 1px, transparent 1px);
+            background-size: 60px 60px;
+            padding: 20px;
+            position: relative;
+            overflow: hidden;
+        }
+        .login-screen::before {
+            content: '';
+            position: absolute;
+            top: -30%; left: -30%; width: 160%; height: 160%;
+            background: radial-gradient(ellipse at 30% 30%, rgba(193,166,115,0.06) 0%, transparent 50%),
+                        radial-gradient(ellipse at 70% 70%, rgba(150,132,94,0.04) 0%, transparent 50%);
+            pointer-events: none;
+        }
+
+        .login-card {
+            background: rgba(20, 25, 32, 0.75);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--gold-border);
+            border-radius: 16px;
+            padding: 40px;
+            width: 100%;
+            max-width: 420px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(234,221,188,0.03);
+            position: relative;
+            z-index: 1;
+            animation: fadeIn 0.6s ease-out;
+        }
+
+        .login-logo {
+            font-size: 48px;
+            text-align: center;
+            margin-bottom: 12px;
+        }
+
+        .login-brand-icon {
+            width: 100px;
+            height: 100px;
+            margin: 0 auto 20px;
+            animation: logoGlow 3s ease-in-out infinite;
+        }
+
+        .login-title {
+            font-family: 'Cinzel', 'Times New Roman', serif;
+            font-size: 26px;
+            font-weight: 500;
+            text-align: center;
+            margin-bottom: 4px;
+            background: linear-gradient(135deg, #C1A673, #EADDBC, #96845E);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: 6px;
+        }
+
+        .login-subtitle {
+            font-family: 'Montserrat', sans-serif;
+            font-size: 11px;
+            font-weight: 300;
+            text-align: center;
+            color: var(--gold-dark);
+            margin-bottom: 30px;
+            letter-spacing: 6px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            color: #cbd5e1;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 12px 14px;
+            background: rgba(11, 15, 18, 0.6);
+            border: 1px solid rgba(150,132,94,0.25);
+            border-radius: 10px;
+            color: #e2e8f0;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: var(--gold);
+            box-shadow: 0 0 0 3px rgba(193,166,115,0.1), 0 0 15px rgba(193,166,115,0.08);
+        }
+
+        .form-error {
+            color: #f87171;
+            font-size: 13px;
+            margin-top: 5px;
+            display: none;
+        }
+
+        .form-error.show {
+            display: block;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 25px;
+        }
+
+        button {
+            flex: 1;
+            padding: 12px 20px;
+            font-size: 14px;
+            font-weight: 500;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #C1A673, #96845E);
+            color: #0B0F12;
+            border-radius: 10px;
+            font-weight: 500;
+        }
+
+        .btn-primary:hover {
+            background: linear-gradient(135deg, #EADDBC, #C1A673);
+            box-shadow: 0 4px 20px rgba(193,166,115,0.4);
+        }
+
+        .btn-primary:active {
+            transform: scale(0.98);
+        }
+
+        .btn-secondary {
+            background: rgba(30, 35, 40, 0.5);
+            border: 1px solid var(--gold-border);
+            color: var(--gold-light);
+            border-radius: 10px;
+        }
+
+        .btn-secondary:hover {
+            background: rgba(40, 45, 50, 0.5);
+            border-color: var(--gold-border-hover);
+        }
+
+        .btn-secondary:active {
+            transform: scale(0.98);
+        }
+
+        /* App Layout */
+        .app-container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            background-color: #060b18;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Market status light bar */
+        .market-light-bar {
+            height: 2px;
+            background: linear-gradient(90deg, transparent, #4ade80, var(--gold), #4ade80, transparent);
+            background-size: 200% 100%;
+            animation: lightBarFlow 4s linear infinite;
+        }
+        .market-light-bar.negative {
+            background: linear-gradient(90deg, transparent, #f87171, var(--gold), #f87171, transparent);
+            background-size: 200% 100%;
+        }
+        @keyframes lightBarFlow {
+            0% { background-position: 0% 0%; }
+            100% { background-position: 200% 0%; }
+        }
+
+        .app-header {
+            background: rgba(11, 15, 18, 0.85);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-bottom: 1px solid rgba(193,166,115,0.1);
+            padding: 12px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .app-title-group {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .app-logo-mini {
+            width: 32px;
+            height: 32px;
+        }
+
+        .app-title {
+            font-family: 'Cinzel', 'Times New Roman', serif;
+            font-size: 18px;
+            font-weight: 500;
+            background: linear-gradient(135deg, #C1A673, #EADDBC, #96845E);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: 3px;
+        }
+
+        .header-user {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 14px;
+        }
+
+        .header-user-badge {
+            background: rgba(193,166,115,0.1);
+            border: 1px solid rgba(193,166,115,0.2);
+            padding: 6px 14px;
+            border-radius: 20px;
+            color: var(--gold-light);
+            font-weight: 400;
+            font-size: 13px;
+        }
+
+        .btn-logout {
+            padding: 7px 14px;
+            background: rgba(248,113,113,0.08);
+            border: 1px solid rgba(248,113,113,0.2);
+            color: #fca5a5;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.3s;
+        }
+
+        .btn-logout:hover {
+            background: rgba(248,113,113,0.15);
+            border-color: rgba(248,113,113,0.35);
+        }
+
+        /* ===== Floating breathing tab buttons ===== */
+        .tabs {
+            display: flex;
+            gap: 8px;
+            background: rgba(11, 15, 18, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            overflow-x: auto;
+            padding: 12px 20px;
+            border-bottom: 1px solid rgba(193,166,115,0.06);
+        }
+
+        .tab {
+            padding: 10px 20px;
+            cursor: pointer;
+            border: 1px solid rgba(193,166,115,0.1);
+            border-radius: 12px;
+            color: #64748b;
+            font-size: 13px;
+            font-weight: 500;
+            white-space: nowrap;
+            transition: all 0.4s ease;
+            background: rgba(20, 25, 32, 0.4);
+            position: relative;
+            animation: breathe 4s ease-in-out infinite;
+        }
+
+        .tab:hover {
+            color: var(--gold-light);
+            background: rgba(193,166,115,0.06);
+            border-color: rgba(193,166,115,0.25);
+        }
+
+        .tab.active {
+            color: var(--gold-light);
+            background: linear-gradient(135deg, rgba(193,166,115,0.15), rgba(193,166,115,0.06));
+            border-color: rgba(193,166,115,0.4);
+            animation: breatheActive 3s ease-in-out infinite;
+        }
+
+        .tab-badge {
+            display: inline-block;
+            background: linear-gradient(135deg, var(--gold), var(--gold-dark));
+            color: #0B0F12;
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 10px;
+            margin-left: 6px;
+            font-weight: 600;
+        }
+
+        .tab-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        /* Dashboard */
+        .stat-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: var(--bg-card);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--gold-border);
+            border-radius: 12px;
+            padding: 20px;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+        }
+        .stat-card:hover {
+            border-color: var(--gold-border-hover);
+            box-shadow: 0 8px 30px rgba(0,0,0,0.3), 0 0 15px var(--gold-glow);
+        }
+
+        .stat-label {
+            font-size: 11px;
+            color: var(--gold-dark);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 8px;
+        }
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--gold-light);
+        }
+
+        .stat-change {
+            font-size: 13px;
+            color: #4ade80;
+            margin-top: 5px;
+        }
+
+        .stat-change.negative {
+            color: #f87171;
+        }
+
+        .charts-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .chart-card {
+            background: var(--bg-card);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--gold-border);
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+            transition: all 0.3s ease;
+        }
+        .chart-card:hover {
+            border-color: var(--gold-border-hover);
+        }
+
+        .chart-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #cbd5e1;
+            margin-bottom: 15px;
+        }
+
+        canvas {
+            max-width: 100%;
+            height: auto;
+        }
+
+        .holdings-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: rgba(15, 23, 42, 0.4);
+            border: none;
+        }
+
+        .holdings-table thead {
+            background: rgba(6, 11, 24, 0.8);
+            border-bottom: 1px solid rgba(99,102,241,0.1);
+        }
+
+        .holdings-table th {
+            padding: 12px 16px;
+            text-align: left;
+            font-size: 11px;
+            font-weight: 600;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            position: sticky;
+            top: 0;
+            background: rgba(6, 11, 24, 0.95);
+            z-index: 10;
+        }
+
+        .holdings-table td {
+            padding: 12px 16px;
+            font-size: 13px;
+            border-bottom: 1px solid rgba(51, 65, 85, 0.3);
+        }
+
+        .holdings-table tbody tr:last-child td {
+            border-bottom: none;
+        }
+
+        .holdings-table tbody tr:hover {
+            background: rgba(193, 166, 115, 0.04);
+        }
+
+        .symbol-cell {
+            font-weight: 600;
+            color: var(--gold);
+        }
+
+        .region-badge {
+            display: inline-block;
+            background: rgba(193,166,115,0.08);
+            border: 1px solid rgba(193,166,115,0.15);
+            color: var(--gold-light);
+            padding: 3px 8px;
+            border-radius: 6px;
+            font-size: 11px;
+        }
+
+        .price-positive {
+            color: #4ade80;
+        }
+
+        .price-negative {
+            color: #f87171;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #64748b;
+        }
+
+        .empty-icon {
+            font-size: 48px;
+            margin-bottom: 15px;
+        }
+
+        .empty-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #cbd5e1;
+        }
+
+        .empty-text {
+            font-size: 13px;
+            color: #94a3b8;
+        }
+
+        /* Search and Stock Cards */
+        .search-box {
+            margin-bottom: 20px;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 12px 16px;
+            background: rgba(30, 41, 59, 0.4);
+            border: 1px solid var(--gold-border);
+            border-radius: 10px;
+            color: #e2e8f0;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: var(--gold-border-hover);
+            box-shadow: 0 0 15px var(--gold-glow);
+        }
+
+        .stock-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 15px;
+        }
+
+        .stock-card {
+            background: rgba(30, 41, 59, 0.4);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(193,166,115,0.12);
+            border-radius: 12px;
+            padding: 15px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .stock-card:hover {
+            border-color: var(--gold-border-hover);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3), 0 0 15px rgba(99, 102, 241, 0.15);
+            transform: translateY(-2px);
+        }
+
+        .stock-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 10px;
+        }
+
+        .stock-card-symbol {
+            font-weight: 600;
+            color: var(--gold);
+            font-size: 16px;
+        }
+
+        .stock-card-change {
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .stock-card-name {
+            font-size: 12px;
+            color: #94a3b8;
+            margin-bottom: 8px;
+        }
+
+        .stock-card-price {
+            font-size: 18px;
+            font-weight: bold;
+            color: #e2e8f0;
+            margin-bottom: 8px;
+        }
+
+        .stock-detail-panel {
+            background: rgba(30, 41, 59, 0.45);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--gold-border);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .stock-detail-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 20px;
+        }
+
+        .stock-detail-info h2 {
+            font-size: 20px;
+            color: #e2e8f0;
+            margin-bottom: 5px;
+        }
+
+        .stock-detail-info p {
+            font-size: 13px;
+            color: #94a3b8;
+        }
+
+        .stock-detail-price {
+            text-align: right;
+        }
+
+        .stock-detail-price-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: var(--gold-light);
+        }
+
+        .stock-detail-chart canvas {
+            width: 100%;
+            height: 200px;
+        }
+
+        /* Trade Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(4px);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .modal.show {
+            display: flex;
+        }
+
+        .modal-content {
+            background: rgba(30, 41, 59, 0.85);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(99,102,241,0.2);
+            border-radius: 16px;
+            padding: 30px;
+            max-width: 500px;
+            width: 100%;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 25px 50px rgba(0,0,0,0.5);
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        .modal-header {
+            font-size: 18px;
+            font-weight: 600;
+            color: #e2e8f0;
+            margin-bottom: 20px;
+        }
+
+        .modal-close {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: none;
+            border: none;
+            color: #94a3b8;
+            font-size: 24px;
+            cursor: pointer;
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        .form-grid.full {
+            grid-template-columns: 1fr;
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 25px;
+        }
+
+        .modal-buttons button {
+            flex: 1;
+            padding: 12px;
+        }
+
+        /* Alert Cards */
+        .alert-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 15px;
+        }
+
+        .alert-card {
+            background: rgba(30, 41, 59, 0.4);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(193,166,115,0.12);
+            border-radius: 12px;
+            padding: 15px;
+            transition: all 0.3s;
+        }
+        .alert-card:hover {
+            border-color: var(--gold-border-hover);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+        }
+
+        .alert-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .alert-card-symbol {
+            font-weight: 600;
+            color: var(--gold);
+            font-size: 14px;
+        }
+
+        .alert-card-close {
+            background: none;
+            border: none;
+            color: #f87171;
+            cursor: pointer;
+            font-size: 18px;
+            padding: 0;
+        }
+
+        .alert-card-condition {
+            font-size: 12px;
+            color: #94a3b8;
+            margin-bottom: 10px;
+        }
+
+        .alert-card-price {
+            font-size: 16px;
+            font-weight: bold;
+            color: var(--gold);
+            margin-bottom: 12px;
+        }
+
+        .toggle-switch {
+            position: relative;
+            width: 50px;
+            height: 26px;
+            background-color: #334155;
+            border-radius: 13px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .toggle-switch.active {
+            background-color: #4ade80;
+        }
+
+        .toggle-slider {
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            width: 20px;
+            height: 20px;
+            background-color: white;
+            border-radius: 50%;
+            transition: left 0.2s;
+        }
+
+        .toggle-switch.active .toggle-slider {
+            left: 27px;
+        }
+
+        /* Trade Table */
+        .trades-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: rgba(15, 23, 42, 0.4);
+            border-radius: 12px;
+            overflow: hidden;
+            border: none;
+        }
+
+        .trades-table thead {
+            background: rgba(6, 11, 24, 0.8);
+            border-bottom: 1px solid rgba(99,102,241,0.1);
+        }
+
+        .trades-table th {
+            padding: 12px 16px;
+            text-align: left;
+            font-size: 11px;
+            font-weight: 600;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+        }
+
+        .trades-table td {
+            padding: 12px 16px;
+            font-size: 13px;
+            border-bottom: 1px solid rgba(51,65,85,0.3);
+        }
+
+        .trades-table tbody tr:last-child td {
+            border-bottom: none;
+        }
+
+        .trades-table tbody tr:hover {
+            background: rgba(99,102,241,0.06);
+        }
+
+        .trade-type-buy {
+            color: #4ade80;
+        }
+
+        .trade-type-sell {
+            color: #f87171;
+        }
+
+        .trade-type-dividend {
+            color: #fbbf24;
+        }
+
+        /* FX Rates */
+        .fx-rates {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .fx-rate {
+            background: rgba(30, 41, 59, 0.4);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(193,166,115,0.12);
+            border-radius: 10px;
+            padding: 12px;
+            text-align: center;
+        }
+
+        .fx-rate-label {
+            font-size: 12px;
+            color: #94a3b8;
+            margin-bottom: 5px;
+        }
+
+        .fx-rate-value {
+            font-size: 16px;
+            font-weight: bold;
+            color: var(--gold-light);
+        }
+
+        /* Data Management */
+        .data-management {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .data-section {
+            background: rgba(30, 41, 59, 0.45);
+            backdrop-filter: blur(16px);
+            border: 1px solid var(--gold-border);
+            border-radius: 12px;
+            padding: 20px;
+        }
+
+        .data-section-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #cbd5e1;
+            margin-bottom: 15px;
+        }
+
+        .user-info {
+            font-size: 13px;
+            color: #94a3b8;
+            line-height: 1.8;
+        }
+
+        .user-info strong {
+            color: #cbd5e1;
+        }
+
+        .data-buttons {
+            display: flex;
+            gap: 10px;
+        }
+
+        #importFile {
+            display: none;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border: 2px solid rgba(99,102,241,0.2);
+            border-top-color: var(--gold);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .tabs {
+                padding: 8px 10px;
+                gap: 6px;
+            }
+
+            .tab {
+                padding: 8px 14px;
+                font-size: 12px;
+            }
+
+            .tab-content {
+                padding: 15px;
+            }
+
+            .stat-cards {
+                grid-template-columns: 1fr;
+            }
+
+            .charts-row {
+                grid-template-columns: 1fr;
+            }
+
+            .stock-cards {
+                grid-template-columns: 1fr;
+            }
+
+            .form-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .data-buttons {
+                flex-direction: column;
+            }
+
+            .modal-content {
+                padding: 20px;
+            }
+
+            .holdings-table,
+            .trades-table {
+                font-size: 12px;
+            }
+
+            .holdings-table th,
+            .holdings-table td,
+            .trades-table th,
+            .trades-table td {
+                padding: 8px 10px;
+            }
+        }
+
+        /* Utility */
+        .mt-20 {
+            margin-top: 20px;
+        }
+
+        .text-center {
+            text-align: center;
+        }
+
+        .text-sm {
+            font-size: 12px;
+        }
+
+        .text-muted {
+            color: #94a3b8;
+        }
+
+        .nowrap {
+            white-space: nowrap;
+        }
+    </style>
+</head>
+<body>
+<div id="root"></div>
+
+<script>
+    // ============ State Management ============
+    const APP = {
+        token: localStorage.getItem('kxm_token'),
+        username: localStorage.getItem('kxm_user'),
+        prices: {},
+        priceUpdateInterval: null,
+        holdings: [],
+        trades: [],
+        alerts: [],
+        selectedStock: null,
+        isRegister: false,
+        regionFilter: '全部',
+        currencyFilter: '全部',
+        holdingsSort: { key: null, dir: 'desc' },
+        portfolioBudget: 0,
+        FX_RATES: {
+            'JPY': 0.0067,
+            'CNY': 0.138,
+            'USD': 1,
+            'HKD': 0.128,
+            'default': 1
+        }
+    };
+
+    const API_BASE = '/api';
+
+    // ============ Utility Functions ============
+    async function apiCall(endpoint, method = 'GET', body = null, isAuthorized = true) {
+        const options = {
+            method,
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        };
+
+        if (isAuthorized && APP.token) {
+            options.headers['x-token'] = APP.token;
+        }
+
+        if (body) {
+            options.body = JSON.stringify(body);
+        }
+
+        try {
+            const response = await fetch(`${API_BASE}${endpoint}`, options);
+            if (!response.ok) {
+                throw new Error(`API error: ${response.status}`);
+            }
+            return await response.json();
+        } catch (error) {
+            console.error('API call failed:', error);
+            throw error;
+        }
+    }
+
+    function fmtNum(value, decimals = 2) {
+        return Number(value).toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+    }
+
+    function formatCurrency(value, currency = 'USD') {
+        const rate = APP.FX_RATES[currency] || APP.FX_RATES.default;
+        const converted = value * rate;
+        const symbol = currency === 'USD' ? '$' : currency === 'CNY' ? '¥' : currency;
+        return `${symbol}${fmtNum(converted)}`;
+    }
+
+    function formatPercent(value) {
+        const sign = value >= 0 ? '+' : '';
+        return `${sign}${value.toFixed(2)}%`;
+    }
+
+    function getRegionColor(region) {
+        const colors = {
+            'US': '#C1A673',
+            'HK': '#4ade80',
+            'JP': '#f87171',
+            'CN': '#fbbf24'
+        };
+        return colors[region] || '#64748b';
+    }
+
+    // ============ Canvas Chart Functions ============
+    function drawPie(canvasId, data) {
+        const canvas = document.getElementById(canvasId);
+        if (!canvas || !data || data.length === 0) return;
+        try { _drawPieInner(canvas, data); } catch(e) { console.warn('drawPie error:', e.message); }
+    }
+    function _drawPieInner(canvas, data) {
+
+        const ctx = canvas.getContext('2d');
+        const rect = canvas.getBoundingClientRect();
+        canvas.width = rect.width;
+        canvas.height = rect.height;
+
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+        const radius = Math.max(Math.min(centerX, centerY) - 20, 30);
+        const innerRadius = radius * 0.6;
+
+        let currentAngle = -Math.PI / 2;
+        const total = data.reduce((sum, d) => sum + d.value, 0);
+
+        data.forEach(item => {
+            const sliceAngle = (item.value / total) * 2 * Math.PI;
+
+            // Draw slice
+            ctx.fillStyle = item.color;
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radius, currentAngle, currentAngle + sliceAngle);
+            ctx.lineTo(centerX + innerRadius * Math.cos(currentAngle + sliceAngle / 2),
+                       centerY + innerRadius * Math.sin(currentAngle + sliceAngle / 2));
+            ctx.arc(centerX, centerY, innerRadius, currentAngle + sliceAngle, currentAngle, true);
+            ctx.closePath();
+            ctx.fill();
+
+            currentAngle += sliceAngle;
+        });
+
+        // Draw center text
+        ctx.fillStyle = '#e2e8f0';
+        ctx.font = 'bold 16px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(`$${Number(total.toFixed(0)).toLocaleString('en-US')}`, centerX, centerY);
+    }
+
+    function drawLine(canvasId, data, color = '#C1A673') {
+        const canvas = document.getElementById(canvasId);
+        if (!canvas) return;
+
+        const ctx = canvas.getContext('2d');
+        const rect = canvas.getBoundingClientRect();
+        canvas.width = rect.width;
+        canvas.height = rect.height;
+
+        const padding = 40;
+        const width = canvas.width - padding * 2;
+        const height = canvas.height - padding * 2;
+
+        const values = data.map(d => d.v);
+        const minVal = Math.min(...values);
+        const maxVal = Math.max(...values);
+        const range = maxVal - minVal || 1;
+
+        // Draw gradient
+        const gradient = ctx.createLinearGradient(0, padding, 0, padding + height);
+        gradient.addColorStop(0, color + '40');
+        gradient.addColorStop(1, color + '00');
+
+        // Draw line
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+
+        data.forEach((point, i) => {
+            const x = padding + (i / (data.length - 1)) * width;
+            const y = padding + height - ((point.v - minVal) / range) * height;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        });
+
+        ctx.stroke();
+
+        // Fill area under curve
+        ctx.lineTo(padding + width, padding + height);
+        ctx.lineTo(padding, padding + height);
+        ctx.closePath();
+        ctx.fillStyle = gradient;
+        ctx.fill();
+
+        // Draw grid lines
+        ctx.strokeStyle = '#334155';
+        ctx.lineWidth = 1;
+        for (let i = 0; i <= 4; i++) {
+            const y = padding + (height / 4) * i;
+            ctx.beginPath();
+            ctx.moveTo(padding, y);
+            ctx.lineTo(padding + width, y);
+            ctx.stroke();
+        }
+
+        // Draw axes
+        ctx.strokeStyle = '#475569';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(padding, padding);
+        ctx.lineTo(padding, padding + height);
+        ctx.lineTo(padding + width, padding + height);
+        ctx.stroke();
+    }
+
+    function drawBar(canvasId, data) {
+        const canvas = document.getElementById(canvasId);
+        if (!canvas || !data || data.length === 0) return;
+        try {
+
+        const ctx = canvas.getContext('2d');
+        const rect = canvas.getBoundingClientRect();
+        canvas.width = rect.width;
+        canvas.height = rect.height;
+
+        const padding = 40;
+        const width = canvas.width - padding * 2;
+        const height = canvas.height - padding * 2;
+
+        const values = data.map(d => d.value);
+        const minVal = Math.min(...values, 0);
+        const maxVal = Math.max(...values);
+        const range = maxVal - minVal || 1;
+
+        const barWidth = width / data.length * 0.6;
+        const barGap = width / data.length;
+
+        data.forEach((item, i) => {
+            const x = padding + (i + 0.2) * barGap;
+            const barHeight = (item.value - minVal) / range * height;
+            const y = padding + height - barHeight;
+
+            ctx.fillStyle = item.value >= 0 ? '#4ade80' : '#f87171';
+            ctx.fillRect(x, Math.min(y, padding + height), barWidth, Math.abs(barHeight));
+
+            // Label
+            ctx.fillStyle = '#cbd5e1';
+            ctx.font = '12px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(item.label, x + barWidth / 2, padding + height + 20);
+        });
+
+        // Axes
+        ctx.strokeStyle = '#475569';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(padding, padding);
+        ctx.lineTo(padding, padding + height);
+        ctx.lineTo(padding + width, padding + height);
+        ctx.stroke();
+
+        // Zero line
+        const zeroY = padding + height - ((0 - minVal) / range) * height;
+        ctx.strokeStyle = '#334155';
+        ctx.beginPath();
+        ctx.moveTo(padding, zeroY);
+        ctx.lineTo(padding + width, zeroY);
+        ctx.stroke();
+        } catch(e) { console.warn('drawBar error:', e.message); }
+    }
+
+    function drawHBar(canvasId, data) {
+        const canvas = document.getElementById(canvasId);
+        if (!canvas || !data || data.length === 0) return;
+        try {
+
+        const ctx = canvas.getContext('2d');
+        const rect = canvas.getBoundingClientRect();
+        canvas.width = rect.width;
+        canvas.height = rect.height;
+
+        const padding = 100;
+        const width = canvas.width - padding - 20;
+        const height = canvas.height - padding;
+        const barHeight = Math.max(20, height / data.length);
+
+        const values = data.map(d => d.value);
+        const maxVal = Math.max(...values);
+
+        data.forEach((item, i) => {
+            const y = padding + i * barHeight;
+            const barWidth = (item.value / maxVal) * width;
+
+            ctx.fillStyle = item.color || '#C1A673';
+            ctx.fillRect(padding, y, barWidth, barHeight - 5);
+
+            // Label
+            ctx.fillStyle = '#cbd5e1';
+            ctx.font = 'bold 12px sans-serif';
+            ctx.textAlign = 'right';
+            ctx.fillText(item.label, padding - 10, y + barHeight / 2);
+
+            // Value
+            ctx.fillStyle = '#94a3b8';
+            ctx.font = '11px sans-serif';
+            ctx.textAlign = 'left';
+            ctx.fillText(item.value.toFixed(2), padding + barWidth + 5, y + barHeight / 2);
+        });
+        } catch(e) { console.warn('drawHBar error:', e.message); }
+    }
+
+    // ============ Auth Functions ============
+    async function handleLogin() {
+        const username = document.getElementById('loginUsername').value;
+        const password = document.getElementById('loginPassword').value;
+        const errorEl = document.getElementById('loginError');
+
+        if (!username || !password) {
+            errorEl.textContent = 'Please enter username and password';
+            errorEl.classList.add('show');
+            return;
+        }
+
+        try {
+            const endpoint = APP.isRegister ? '/register' : '/login';
+            const data = await apiCall(endpoint, 'POST', { username, password }, false);
+
+            APP.token = data.token;
+            APP.username = data.username;
+            localStorage.setItem('kxm_token', data.token);
+            localStorage.setItem('kxm_user', data.username);
+
+            showApp();
+        } catch (error) {
+            errorEl.textContent = APP.isRegister ? 'Registration failed, username may already exist' : 'Sign in failed, invalid username or password';
+            errorEl.classList.add('show');
+        }
+    }
+
+    function handleLogout() {
+        localStorage.removeItem('kxm_token');
+        localStorage.removeItem('kxm_user');
+        APP.token = null;
+        APP.username = null;
+        APP.isRegister = false;
+        if (APP.priceUpdateInterval) clearInterval(APP.priceUpdateInterval);
+        showLogin();
+    }
+
+    function toggleRegister() {
+        APP.isRegister = !APP.isRegister;
+        const btn = document.getElementById('toggleRegisterBtn');
+        const title = document.querySelector('.login-title');
+        const subtitle = document.querySelector('.login-subtitle');
+        const loginBtn = document.querySelector('button[data-action="login"]');
+
+        if (APP.isRegister) {
+            title.textContent = 'Create Account';
+            subtitle.textContent = 'Create Your Account';
+            loginBtn.textContent = 'Sign Up';
+            btn.textContent = 'Have account? Sign In';
+        } else {
+            title.textContent = 'Arc Patrimony';
+            subtitle.textContent = 'Value Beyond Generations';
+            loginBtn.textContent = 'Sign In';
+            btn.textContent = 'Create Account';
+        }
+
+        document.getElementById('loginError').classList.remove('show');
+    }
+
+    // ============ Data Fetching ============
+    async function loadHoldings() {
+        try {
+            APP.holdings = await apiCall('/holdings');
+        } catch (error) {
+            console.error('Failed to load holdings:', error);
+            APP.holdings = [];
+        }
+    }
+
+    async function loadTrades() {
+        try {
+            APP.trades = await apiCall('/trades');
+        } catch (error) {
+            console.error('Failed to load trades:', error);
+            APP.trades = [];
+        }
+    }
+
+    async function loadAlerts() {
+        try {
+            APP.alerts = await apiCall('/alerts');
+        } catch (error) {
+            console.error('Failed to load alerts:', error);
+            APP.alerts = [];
+        }
+    }
+
+    async function updatePrices() {
+        if (APP.holdings.length === 0) return;
+
+        const symbols = APP.holdings.map(h => h.symbol).join(',');
+        try {
+            const data = await apiCall(`/prices?symbols=${symbols}`);
+            APP.prices = data;
+        } catch (error) {
+            console.error('Failed to update prices:', error);
+        }
+    }
+
+    async function updateFXRates() {
+        try {
+            const rates = await apiCall('/fx-rates', 'GET', null, false);
+            if (rates && typeof rates === 'object') {
+                Object.assign(APP.FX_RATES, rates);
+                APP.FX_RATES.default = 1;
+                console.log('汇率已更新:', JSON.stringify(APP.FX_RATES));
+            }
+        } catch(e) { console.warn('FX rate fetch failed:', e.message); }
+    }
+
+    async function seedTargetAlerts() {
+        const targets = [
+            {symbol:"BRK-B",name:"伯克希尔哈撒韦",condition:"低于",price:412},
+            {symbol:"KO",name:"可口可乐",condition:"低于",price:62},
+            {symbol:"SPGI",name:"标普全球",condition:"低于",price:335},
+            {symbol:"PG",name:"宝洁",condition:"低于",price:136},
+            {symbol:"V",name:"Visa",condition:"低于",price:247},
+            {symbol:"JNJ",name:"强生",condition:"低于",price:196},
+            {symbol:"UNH",name:"联合健康",condition:"低于",price:389},
+            {symbol:"GOOGL",name:"谷歌",condition:"低于",price:252},
+            {symbol:"MSFT",name:"微软",condition:"低于",price:298},
+            {symbol:"VOO",name:"Vanguard S&P 500",condition:"低于",price:462},
+            {symbol:"COST",name:"开市客",condition:"低于",price:845},
+            {symbol:"AAPL",name:"苹果",condition:"低于",price:201},
+            {symbol:"TSM",name:"台积电",condition:"低于",price:272},
+            {symbol:"ASML",name:"阿斯麦",condition:"低于",price:1078},
+            {symbol:"META",name:"Meta",condition:"低于",price:487},
+            {symbol:"AMZN",name:"亚马逊",condition:"低于",price:180},
+            {symbol:"NVDA",name:"英伟达",condition:"低于",price:132},
+            {symbol:"AVGO",name:"博通",condition:"低于",price:253},
+            {symbol:"NFLX",name:"Netflix",condition:"低于",price:72},
+            {symbol:"TCOM",name:"携程",condition:"低于",price:40},
+            {symbol:"PDD",name:"拼多多",condition:"低于",price:79},
+            {symbol:"BABA",name:"阿里巴巴",condition:"低于",price:97},
+            {symbol:"PANW",name:"Palo Alto",condition:"低于",price:121},
+            {symbol:"MU",name:"美光",condition:"低于",price:258},
+            {symbol:"TSLA",name:"特斯拉",condition:"低于",price:181},
+            {symbol:"PLTR",name:"Palantir",condition:"低于",price:66},
+            {symbol:"BZ=F",name:"布伦特原油",condition:"低于",price:68},
+        ];
+        try {
+            await apiCall('/import-alerts', 'POST', { alerts: targets });
+            console.log("✅ 目标价提醒已导入");
+        } catch(e) {
+            console.warn("导入提醒失败:", e.message);
+        }
+    }
+
+    async function initializeApp() {
+        await updateFXRates();
+        await loadHoldings();
+        await loadTrades();
+        await loadAlerts();
+        // Seed target alerts only for LiuBin on first use
+        if (APP.alerts.length === 0 && APP.username === 'LiuBin') {
+            await seedTargetAlerts();
+            await loadAlerts();
+        }
+        await updatePrices();
+        try {
+            const config = await apiCall('/portfolio-config');
+            APP.portfolioBudget = config.totalBudget || 0;
+        } catch(e) {}
+
+        // Update prices every 30 seconds
+        if (APP.priceUpdateInterval) clearInterval(APP.priceUpdateInterval);
+        APP.priceUpdateInterval = setInterval(async () => {
+            await updatePrices();
+            // Re-render current active tab with latest prices
+            const activeIdx = document.querySelector('.tab.active');
+            if (activeIdx) {
+                const tabs = document.querySelectorAll('.tab');
+                const idx = Array.from(tabs).indexOf(activeIdx);
+                if (idx === 0) renderTab0();
+                else if (idx === 1) renderTab1();
+                else if (idx === 4) renderTab4();
+            }
+        }, 30000);
+
+        // Update FX rates every 10 minutes
+        if (APP._fxInterval) clearInterval(APP._fxInterval);
+        APP._fxInterval = setInterval(async () => {
+            await updateFXRates();
+            renderTab0();
+        }, 10 * 60 * 1000);
+    }
+
+    // ============ UI Rendering ============
+    function showLogin() {
+        const root = document.getElementById('root');
+        root.innerHTML = `
+            <div class="login-screen">
+                <div class="login-card">
+                    <div class="login-brand-icon">
+                        <svg viewBox="300 160 400 500" xmlns="http://www.w3.org/2000/svg">
+                            <defs>
+                                <linearGradient id="goldGrad" x1="20%" y1="0%" x2="80%" y2="100%">
+                                    <stop offset="0%" stop-color="#C1A673"/>
+                                    <stop offset="50%" stop-color="#EADDBC"/>
+                                    <stop offset="100%" stop-color="#96845E"/>
+                                </linearGradient>
+                            </defs>
+                            <path d="M340,195 L660,195 L660,375 A320,320 0 0,1 500,655 A320,320 0 0,1 340,375 Z" fill="none" stroke="url(#goldGrad)" stroke-width="4"/>
+                            <path d="M355,210 L645,210 L645,375 A305,305 0 0,1 500,630 A305,305 0 0,1 355,375 Z" fill="none" stroke="url(#goldGrad)" stroke-width="1.5"/>
+                            <rect x="395" y="295" width="210" height="20" fill="url(#goldGrad)"/>
+                            <rect x="405" y="320" width="190" height="12" fill="url(#goldGrad)"/>
+                            <path d="M405,337 L405,525 L465,525 L465,425 A35,35 0 0,1 535,425 L535,525 L595,525 L595,337 Z" fill="url(#goldGrad)"/>
+                            <line x1="405" y1="425" x2="465" y2="425" stroke="#0B0F12" stroke-width="2"/>
+                            <line x1="535" y1="425" x2="595" y2="425" stroke="#0B0F12" stroke-width="2"/>
+                            <rect x="380" y="530" width="240" height="4" fill="url(#goldGrad)"/>
+                            <rect x="390" y="539" width="220" height="2" fill="url(#goldGrad)"/>
+                            <path d="M500,230 L504,246 L520,250 L504,254 L500,270 L496,254 L480,250 L496,246 Z" fill="url(#goldGrad)" style="animation:starPulse 4s infinite ease-in-out;transform-origin:500px 250px;"/>
+                        </svg>
+                    </div>
+                    <div class="login-title">ARC PATRIMONY</div>
+                    <div class="login-subtitle">FAMILY OFFICE</div>
+
+                    <div class="form-group">
+                        <label class="form-label">Username</label>
+                        <input type="text" id="loginUsername" class="form-input" placeholder="Enter username" tabindex="1" onkeydown="if(event.key==='Enter'||event.key==='Tab'){event.preventDefault();document.getElementById('loginPassword').focus();}">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Password</label>
+                        <input type="password" id="loginPassword" class="form-input" placeholder="Enter password" tabindex="2" onkeydown="if(event.key==='Enter'){event.preventDefault();handleLogin();}">
+                    </div>
+
+                    <div class="form-error" id="loginError"></div>
+
+                    <div class="button-group">
+                        <button class="btn-primary" data-action="login" onclick="handleLogin()">Sign In</button>
+                        <button class="btn-secondary" id="toggleRegisterBtn" onclick="toggleRegister()">Create Account</button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // Focus and allow enter key
+        setTimeout(() => {
+            const input = document.getElementById('loginUsername');
+            if (input) input.focus();
+        }, 100);
+
+        // Tab/Enter handling is now on the input elements directly
+    }
+
+    async function showApp() {
+        await initializeApp();
+
+        const root = document.getElementById('root');
+        root.innerHTML = `
+            <div class="app-container">
+                <div class="market-light-bar" id="marketLightBar"></div>
+                <div class="app-header">
+                    <div class="app-title-group">
+                        <svg class="app-logo-mini" viewBox="300 160 400 500" xmlns="http://www.w3.org/2000/svg">
+                            <defs>
+                                <linearGradient id="goldGradMini" x1="20%" y1="0%" x2="80%" y2="100%">
+                                    <stop offset="0%" stop-color="#C1A673"/>
+                                    <stop offset="50%" stop-color="#EADDBC"/>
+                                    <stop offset="100%" stop-color="#96845E"/>
+                                </linearGradient>
+                            </defs>
+                            <path d="M340,195 L660,195 L660,375 A320,320 0 0,1 500,655 A320,320 0 0,1 340,375 Z" fill="none" stroke="url(#goldGradMini)" stroke-width="6"/>
+                            <rect x="395" y="295" width="210" height="20" fill="url(#goldGradMini)"/>
+                            <path d="M405,337 L405,525 L465,525 L465,425 A35,35 0 0,1 535,425 L535,525 L595,525 L595,337 Z" fill="url(#goldGradMini)"/>
+                            <path d="M500,230 L504,246 L520,250 L504,254 L500,270 L496,254 L480,250 L496,246 Z" fill="url(#goldGradMini)"/>
+                        </svg>
+                        <div class="app-title">ARC PATRIMONY</div>
+                    </div>
+                    <div class="header-user">
+                        <div class="header-user-badge">${APP.username}</div>
+                        <button class="btn-logout" onclick="handleLogout()">Logout</button>
+                    </div>
+                </div>
+
+                <div class="tabs">
+                    <div class="tab active" onclick="switchTab(0)">Portfolio <span class="tab-badge" id="holdingsBadge"></span></div>
+                    <div class="tab" onclick="switchTab(1)">Market</div>
+                    <div class="tab" onclick="switchTab(2)">Trades</div>
+                    <div class="tab" onclick="switchTab(3)">Alerts</div>
+                    <div class="tab" onclick="switchTab(4)">Analysis</div>
+                    <div class="tab" onclick="switchTab(5)">Allocation</div>
+                    <div class="tab" onclick="switchTab(6)">Settings</div>
+                </div>
+
+                <div class="tab-content">
+                    <div id="tab-0"></div>
+                    <div id="tab-1" class="hidden"></div>
+                    <div id="tab-2" class="hidden"></div>
+                    <div id="tab-3" class="hidden"></div>
+                    <div id="tab-4" class="hidden"></div>
+                    <div id="tab-5" class="hidden"></div>
+                    <div id="tab-6" class="hidden"></div>
+                </div>
+            </div>
+
+            <div class="modal" id="tradeModal">
+                <div class="modal-content" style="position: relative;">
+                    <button class="modal-close" onclick="closeModal('tradeModal')">×</button>
+                    <div class="modal-header">New Trade</div>
+                    <div class="form-group">
+                        <label class="form-label">Stock Symbol</label>
+                        <input type="text" id="tradeSymbol" class="form-input" placeholder="US:AAPL HK:0700.HK A:600036.SS JP:7203.T" onblur="autoFillTrade()" style="text-transform:uppercase;">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Stock Name</label>
+                        <input type="text" id="tradeName" class="form-input" placeholder="e.g.: Apple Inc">
+                    </div>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label class="form-label">Trade Type</label>
+                            <select id="tradeType" class="form-input" style="appearance: none; padding-right: 30px;">
+                                <option value="买入">Buy</option>
+                                <option value="卖出">Sell</option>
+                                <option value="分红">Dividend</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Quantity</label>
+                            <input type="number" id="tradeQty" class="form-input" placeholder="0" step="0.01">
+                        </div>
+                    </div>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label class="form-label">Unit Price (USD)</label>
+                            <input type="number" id="tradePrice" class="form-input" placeholder="0.00" step="0.01">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Fee (USD)</label>
+                            <input type="number" id="tradeFee" class="form-input" placeholder="0.00" step="0.01">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Trade Date</label>
+                        <input type="date" id="tradeDate" class="form-input">
+                    </div>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label class="form-label">Currency</label>
+                            <select id="tradeCurrency" class="form-input" style="appearance: none; padding-right: 30px;">
+                                <option value="USD">USD</option>
+                                <option value="CNY">CNY</option>
+                                <option value="JPY">JPY</option>
+                                <option value="HKD">HKD</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Market</label>
+                            <select id="tradeMarket" class="form-input" style="appearance: none; padding-right: 30px;">
+                                <option value="STOCK">Stock</option>
+                                <option value="ETF">ETF</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label class="form-label">Region</label>
+                            <select id="tradeRegion" class="form-input" style="appearance: none; padding-right: 30px;">
+                                <option value="美国">US</option>
+                                <option value="中国">China</option>
+                                <option value="日本">Japan</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Type</label>
+                            <input type="text" id="tradeAttribute" class="form-input" placeholder="e.g.: Tech">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Sector</label>
+                        <input type="text" id="tradeSector" class="form-input" placeholder="e.g.: Tech">
+                    </div>
+                    <div class="modal-buttons">
+                        <button class="btn-secondary" onclick="closeModal('tradeModal')">Cancel</button>
+                        <button class="btn-primary" onclick="submitTrade()">Save Trade</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal" id="alertModal">
+                <div class="modal-content" style="position: relative;">
+                    <button class="modal-close" onclick="closeModal('alertModal')">×</button>
+                    <div class="modal-header">New Alert</div>
+                    <div class="form-group">
+                        <label class="form-label">Stock Symbol</label>
+                        <input type="text" id="alertSymbol" class="form-input" placeholder="e.g.: AAPL" onblur="autoFillAlert()" style="text-transform:uppercase;">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Stock Name</label>
+                        <input type="text" id="alertName" class="form-input" placeholder="e.g.: Apple Inc">
+                    </div>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label class="form-label">Condition</label>
+                            <select id="alertCondition" class="form-input" style="appearance: none; padding-right: 30px;">
+                                <option value="ABOVE">Above</option>
+                                <option value="BELOW">Below</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Price (USD)</label>
+                            <input type="number" id="alertPrice" class="form-input" placeholder="0.00" step="0.01">
+                        </div>
+                    </div>
+                    <div class="modal-buttons">
+                        <button class="btn-secondary" onclick="closeModal('alertModal')">Cancel</button>
+                        <button class="btn-primary" onclick="submitAlert()">Submit</button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        renderTab0();
+
+        // Set today's date as default
+        const today = new Date().toISOString().split('T')[0];
+        const dateInput = document.getElementById('tradeDate');
+        if (dateInput) dateInput.value = today;
+    }
+
+    function filterRegion(region) {
+        APP.regionFilter = region;
+        renderTab0();
+    }
+
+    function filterCurrency(cur) {
+        APP.currencyFilter = cur;
+        renderTab0();
+    }
+
+    function sortHoldings(key) {
+        const ss = APP.holdingsSort;
+        if (ss.key === key) { ss.dir = ss.dir === 'asc' ? 'desc' : 'asc'; }
+        else { ss.key = key; ss.dir = 'desc'; }
+        renderTab0();
+    }
+
+    function switchTab(index) {
+        // Hide all tabs
+        for (let i = 0; i < 7; i++) {
+            const tab = document.getElementById(`tab-${i}`);
+            const tabBtn = document.querySelectorAll('.tab')[i];
+            if (tab) tab.classList.add('hidden');
+            if (tabBtn) tabBtn.classList.remove('active');
+        }
+
+        // Show selected tab
+        const selectedTab = document.getElementById(`tab-${index}`);
+        const selectedBtn = document.querySelectorAll('.tab')[index];
+        if (selectedTab) selectedTab.classList.remove('hidden');
+        if (selectedBtn) selectedBtn.classList.add('active');
+
+        // Render tab content
+        switch (index) {
+            case 0: renderTab0(); break;
+            case 1: renderTab1(); break;
+            case 2: renderTab2(); break;
+            case 3: renderTab3(); break;
+            case 4: renderTab4(); break;
+            case 5: renderTab5Portfolio(); break;
+            case 6: renderTab5(); break;
+        }
+    }
+
+    function renderTab0() {
+        const container = document.getElementById('tab-0');
+
+        // Calculate stats (exclude sold stocks from totals)
+        const activeHoldings = APP.holdings.filter(h => h.qty > 0);
+        const totalValue = activeHoldings.reduce((sum, h) => {
+            const price = APP.prices[h.symbol]?.price || h.avg_cost;
+            return sum + (h.qty * price * (APP.FX_RATES[h.currency] || 1));
+        }, 0);
+
+        const totalCost = activeHoldings.reduce((sum, h) => {
+            return sum + (h.qty * h.avg_cost * (APP.FX_RATES[h.currency] || 1));
+        }, 0);
+
+        const totalPL = totalValue - totalCost;
+        const totalPLPercent = totalCost > 0 ? (totalPL / totalCost) * 100 : 0;
+
+        // Update market light bar color
+        const lightBar = document.getElementById('marketLightBar');
+        if (lightBar) {
+            lightBar.className = totalPL >= 0 ? 'market-light-bar' : 'market-light-bar negative';
+        }
+
+        // Find top 3 best and worst performing stocks today
+        const sortedByChange = [...activeHoldings].sort((a, b) => (APP.prices[b.symbol]?.change || 0) - (APP.prices[a.symbol]?.change || 0));
+        const top3Best = sortedByChange.slice(0, 3);
+        const top3Worst = sortedByChange.slice(-3).reverse();
+
+        // Regional breakdowns (active only)
+        const regionStats = {};
+        activeHoldings.forEach(h => {
+            const r = h.region || '其他';
+            if (!regionStats[r]) regionStats[r] = { value: 0, cost: 0, count: 0 };
+            const p = APP.prices[h.symbol]?.price || h.avg_cost;
+            const rate = APP.FX_RATES[h.currency] || 1;
+            regionStats[r].value += h.qty * p * rate;
+            regionStats[r].cost += h.qty * h.avg_cost * rate;
+            regionStats[r].count++;
+        });
+
+        // Update badge (active holdings only)
+        const badge = document.getElementById('holdingsBadge');
+        if (badge) {
+            badge.textContent = activeHoldings.length > 0 ? activeHoldings.length : '';
+            badge.style.display = activeHoldings.length > 0 ? 'inline-block' : 'none';
+        }
+
+        let html = `
+            <div class="stat-cards">
+                <div class="stat-card">
+                    <div class="stat-label">Total Value</div>
+                    <div class="stat-value" style="color:#e2e8f0;">$${fmtNum(totalValue)}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Total Cost</div>
+                    <div class="stat-value" style="color:#94a3b8;">$${fmtNum(totalCost)}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Unrealized P&L</div>
+                    <div class="stat-value ${totalPL >= 0 ? 'price-positive' : 'price-negative'}">${totalPL >= 0 ? '+' : ''}$${fmtNum(totalPL)}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Return Rate</div>
+                    <div class="stat-value ${totalPLPercent >= 0 ? 'price-positive' : 'price-negative'}">${formatPercent(totalPLPercent)}</div>
+                </div>
+            </div>
+            ${top3Best.length > 0 ? `<div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
+                <div style="flex:1;min-width:300px;padding:10px 16px;border-radius:10px;background:rgba(74,222,128,0.06);border:1px solid rgba(74,222,128,0.15);">
+                    <div style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Top Performers</div>
+                    <div style="display:flex;gap:14px;flex-wrap:wrap;">
+                        ${top3Best.map(h => `<span style="display:inline-flex;align-items:center;gap:6px;">
+                            <span style="color:#cbd5e1;font-size:12px;">${h.name}</span>
+                            <span class="price-positive" style="font-weight:600;font-size:12px;">${formatPercent(APP.prices[h.symbol]?.change||0)}</span>
+                        </span>`).join('<span style="color:#1e293b;">|</span>')}
+                    </div>
+                </div>
+                <div style="flex:1;min-width:300px;padding:10px 16px;border-radius:10px;background:rgba(248,113,113,0.06);border:1px solid rgba(248,113,113,0.15);">
+                    <div style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Worst Performers</div>
+                    <div style="display:flex;gap:14px;flex-wrap:wrap;">
+                        ${top3Worst.map(h => `<span style="display:inline-flex;align-items:center;gap:6px;">
+                            <span style="color:#cbd5e1;font-size:12px;">${h.name}</span>
+                            <span class="price-negative" style="font-weight:600;font-size:12px;">${formatPercent(APP.prices[h.symbol]?.change||0)}</span>
+                        </span>`).join('<span style="color:#1e293b;">|</span>')}
+                    </div>
+                </div>
+            </div>` : ''}
+
+            <div class="stat-cards" style="margin-top:12px;">
+                ${Object.entries(regionStats).map(([r, s]) => {
+                    const pl = s.value - s.cost;
+                    const pct = s.cost > 0 ? (pl / s.cost * 100) : 0;
+                    const flag = r==='美国'?'🇺🇸':r==='中国'?'🇨🇳':r==='日本'?'🇯🇵':'🌐';
+                    const barColor = r==='美国'?'#C1A673':r==='中国'?'#fbbf24':'#f87171';
+                    // Best/worst stock in this region
+                    const regionHoldings = activeHoldings.filter(h => h.region === r);
+                    let rBest = null, rWorst = null;
+                    regionHoldings.forEach(h => {
+                        const chg = APP.prices[h.symbol]?.change || 0;
+                        if (!rBest || chg > (APP.prices[rBest.symbol]?.change || 0)) rBest = h;
+                        if (!rWorst || chg < (APP.prices[rWorst.symbol]?.change || 0)) rWorst = h;
+                    });
+                    const bestInfo = rBest ? (rBest.name||rBest.symbol)+' '+formatPercent(APP.prices[rBest.symbol]?.change||0) : '';
+                    const worstInfo = rWorst ? (rWorst.name||rWorst.symbol)+' '+formatPercent(APP.prices[rWorst.symbol]?.change||0) : '';
+                    return `<div class="stat-card" style="position:relative;">
+                        <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+                            <div class="stat-label">${flag} ${r} Assets (${s.count} stocks)</div>
+                            <div style="text-align:right;">
+                                <div class="${pct>=0?'price-positive':'price-negative'}" style="font-size:22px;font-weight:bold;line-height:1.1;">${formatPercent(pct)}</div>
+                                <div class="${pl>=0?'price-positive':'price-negative'}" style="font-size:12px;margin-top:2px;">${pl>=0?'+':''}$${fmtNum(pl)}</div>
+                            </div>
+                        </div>
+                        <div class="stat-value" style="font-size:18px;margin-top:4px;">$${fmtNum(s.value)}</div>
+                        <div style="font-size:12px;color:#64748b;margin-top:2px;">Cost $${fmtNum(s.cost)}</div>
+                        <div style="margin-top:6px;background:rgba(30,41,59,0.6);border-radius:4px;height:4px;overflow:hidden;">
+                            <div style="width:${Math.min(100, s.value/totalValue*100)}%;height:100%;background:${barColor};border-radius:4px;"></div>
+                        </div>
+                        <div style="display:flex;justify-content:space-between;font-size:10px;margin-top:6px;color:#475569;">
+                            <span>Weight ${fmtNum(totalValue>0?s.value/totalValue*100:0,1)}%</span>
+                            <span>${rBest && rWorst && rBest.symbol !== rWorst.symbol ? '<span class="price-positive">▲'+bestInfo+'</span> <span class="price-negative">▼'+worstInfo+'</span>' : (rBest ? '<span class="price-positive">▲'+bestInfo+'</span>' : '')}</span>
+                        </div>
+                    </div>`;
+                }).join('')}
+            </div>
+
+            <div class="charts-row">
+                <div class="chart-card" style="position:relative;overflow:hidden;">
+                    <div style="position:absolute;top:-40px;right:-40px;width:120px;height:120px;border-radius:50%;background:radial-gradient(circle,rgba(193,166,115,0.08),transparent 70%);pointer-events:none;"></div>
+                    <div class="chart-title" style="display:flex;align-items:center;gap:10px;">
+                        <svg width="18" height="18" viewBox="0 0 18 18"><circle cx="9" cy="9" r="7" fill="none" stroke="var(--gold)" stroke-width="1.5" opacity="0.6"/><circle cx="9" cy="9" r="3" fill="var(--gold)" opacity="0.8"/><circle cx="9" cy="3" r="1.2" fill="var(--gold-light)"/></svg>
+                        Regional Allocation
+                    </div>
+                    <div id="region-viz" style="display:flex;flex-direction:column;align-items:center;gap:20px;"></div>
+                </div>
+                <div class="chart-card" style="position:relative;overflow:hidden;">
+                    <div style="position:absolute;bottom:-30px;left:-30px;width:100px;height:100px;border-radius:50%;background:radial-gradient(circle,rgba(193,166,115,0.06),transparent 70%);pointer-events:none;"></div>
+                    <div class="chart-title" style="display:flex;align-items:center;gap:10px;">
+                        <svg width="18" height="18" viewBox="0 0 18 18"><rect x="2" y="3" width="14" height="2.5" rx="1.2" fill="var(--gold)" opacity="0.9"/><rect x="2" y="8" width="10" height="2.5" rx="1.2" fill="var(--gold-light)" opacity="0.7"/><rect x="2" y="13" width="6" height="2.5" rx="1.2" fill="var(--gold-dark)" opacity="0.5"/></svg>
+                        Currency Exposure
+                    </div>
+                    <div id="currency-viz" style="display:flex;flex-direction:column;gap:16px;padding-top:8px;"></div>
+                </div>
+            </div>
+        `;
+
+        if (APP.holdings.length > 0) {
+            const regions = ['全部', ...new Set(APP.holdings.map(h => h.region).filter(Boolean))];
+            const allCurrencies = ['全部', ...new Set(APP.holdings.map(h => h.currency).filter(Boolean))];
+            const ss = APP.holdingsSort;
+            const sIco = (k) => ss.key===k ? (ss.dir==='asc'?' ▲':' ▼') : ' ↕';
+            const sHd = (k) => `onclick="sortHoldings('${k}')" style="cursor:pointer;user-select:none;white-space:nowrap;"`;
+
+            const isLocalCur0 = APP.currencyFilter !== '全部';
+            const curLabel0 = isLocalCur0 ? APP.currencyFilter : 'USD';
+            const curSym0fn = (c) => c==='CNY'?'¥':c==='JPY'?'¥':c==='HKD'?'HK$':'$';
+            const dispSym0 = isLocalCur0 ? curSym0fn(APP.currencyFilter) : '$';
+
+            // Enrich data (include qty=0 sold stocks)
+            let enriched = APP.holdings.map(h => {
+                const currentPrice = APP.prices[h.symbol]?.price || h.avg_cost;
+                const priceChange = APP.prices[h.symbol]?.change || 0;
+                const rate = APP.FX_RATES[h.currency] || 1;
+                const isSold = h.qty <= 0;
+                const mv = h.qty * currentPrice * rate;
+                const cv = h.qty * h.avg_cost * rate;
+                const mvLocal = h.qty * currentPrice;
+                const cvLocal = h.qty * h.avg_cost;
+                // For sold stocks, use realized P&L from server
+                const pl = isSold ? (h.realized_pl || 0) * rate : mv - cv;
+                const plLocal = isSold ? (h.realized_pl || 0) : mvLocal - cvLocal;
+                const plPct = isSold ? (h.realized_cost > 0 ? (h.realized_pl / h.realized_cost * 100) : 0) : (cv > 0 ? (pl / cv * 100) : 0);
+                return { ...h, currentPrice, priceChange, mv, cv, mvLocal, cvLocal, pl, plLocal, plPct, isSold };
+            });
+
+            // Total for weight calc (exclude sold stocks)
+            const grandTotal = enriched.filter(d => !d.isSold).reduce((s, d) => s + d.mv, 0);
+
+            // Region filter
+            if (APP.regionFilter !== '全部') enriched = enriched.filter(d => d.region === APP.regionFilter);
+            // Currency filter
+            if (APP.currencyFilter !== '全部') enriched = enriched.filter(d => d.currency === APP.currencyFilter);
+
+            // Sort
+            if (ss.key) {
+                const dir = ss.dir === 'asc' ? 1 : -1;
+                enriched.sort((a, b) => ((a[ss.key]||0) - (b[ss.key]||0)) * dir);
+            }
+
+            html += `
+                <div class="chart-card">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+                        <div class="chart-title" style="margin-bottom:0;">Holdings Detail</div>
+                        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                            ${regions.map(r => `<button onclick="filterRegion('${r}')" style="padding:6px 16px;border-radius:20px;border:1px solid ${APP.regionFilter===r?'#C1A673':'#334155'};background:${APP.regionFilter===r?'#C1A673':'transparent'};color:${APP.regionFilter===r?'#fff':'#94a3b8'};cursor:pointer;font-size:13px;transition:all 0.2s;">${r}${r!=='全部'?' ('+APP.holdings.filter(h=>h.region===r).length+')':''}</button>`).join('')}
+                        </div>
+                    </div>
+                    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;align-items:center;">
+                        <span style="color:#94a3b8;font-size:13px;">Currency:</span>
+                        ${allCurrencies.map(c => `<button onclick="filterCurrency('${c}')" style="padding:4px 14px;border-radius:16px;border:1px solid ${APP.currencyFilter===c?'#C1A673':'#334155'};background:${APP.currencyFilter===c?'#C1A673':'transparent'};color:${APP.currencyFilter===c?'#fff':'#94a3b8'};cursor:pointer;font-size:12px;">${c}</button>`).join('')}
+                    </div>
+                    <div style="overflow:auto;max-height:70vh;">
+                    <table class="holdings-table" style="font-size:13px;table-layout:fixed;width:100%;">
+                        <colgroup>
+                            <col style="width:80px;">
+                            <col style="width:160px;">
+                            <col style="width:58px;">
+                            <col style="width:52px;">
+                            <col style="width:52px;">
+                            <col style="width:62px;">
+                            <col style="width:82px;">
+                            <col style="width:82px;">
+                            <col style="width:72px;">
+                            <col style="width:95px;">
+                            <col style="width:90px;">
+                            <col style="width:62px;">
+                            <col style="width:55px;">
+                            <col style="width:55px;">
+                            <col style="width:50px;">
+                        </colgroup>
+                        <thead>
+                            <tr>
+                                <th>Symbol</th>
+                                <th>Name</th>
+                                <th>Region</th>
+                                <th>Ccy</th>
+                                <th>Type</th>
+                                <th style="text-align:right;">Shares</th>
+                                <th style="text-align:right;">Avg Cost</th>
+                                <th style="text-align:right;">Price</th>
+                                <th ${sHd('priceChange')} style="text-align:right;">Chg%${sIco('priceChange')}</th>
+                                <th ${sHd('mvLocal')} style="text-align:right;">Mkt Value${sIco('mvLocal')}</th>
+                                <th ${sHd('plLocal')} style="text-align:right;">P&L${sIco('plLocal')}</th>
+                                <th ${sHd('plPct')} style="text-align:right;">P&L%${sIco('plPct')}</th>
+                                <th style="text-align:right;">Target</th>
+                                <th style="text-align:right;">Weight</th>
+                                <th style="text-align:right;">Diff</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+
+            // Split into active and sold
+            const activeList = enriched.filter(d => !d.isSold);
+            const soldList = enriched.filter(d => d.isSold);
+
+            let filteredValue = 0, filteredCost = 0, filteredLocalValue = 0, filteredLocalCost = 0;
+            activeList.forEach(d => {
+                const curSym = curSym0fn(d.currency);
+                const tw = d.target_weight || 0;
+                const cw = grandTotal > 0 ? (d.mv / grandTotal * 100) : 0;
+                const diff = cw - tw;
+                filteredValue += d.mv;
+                filteredCost += d.cv;
+                filteredLocalValue += d.mvLocal;
+                filteredLocalCost += d.cvLocal;
+
+                html += `
+                    <tr style="cursor:pointer;" onclick="showStockDetail('${d.symbol}')">
+                        <td class="symbol-cell">${d.symbol}</td>
+                        <td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${d.name}">${d.name}</td>
+                        <td><span class="region-badge">${d.region}</span></td>
+                        <td>${d.currency}</td>
+                        <td>${d.attribute || '-'}</td>
+                        <td style="text-align:right;">${fmtNum(d.qty, 0)}</td>
+                        <td style="text-align:right;">${curSym}${fmtNum(d.avg_cost)}</td>
+                        <td style="text-align:right;">${curSym}${fmtNum(d.currentPrice)}</td>
+                        <td class="${d.priceChange>=0?'price-positive':'price-negative'}" style="text-align:right;">${formatPercent(d.priceChange)}</td>
+                        <td style="text-align:right;">${curSym}${fmtNum(d.mvLocal)}</td>
+                        <td class="${d.plLocal>=0?'price-positive':'price-negative'}" style="text-align:right;">${d.plLocal>=0?'+':''}${curSym}${fmtNum(d.plLocal)}</td>
+                        <td class="${d.plPct>=0?'price-positive':'price-negative'}" style="text-align:right;">${formatPercent(d.plPct)}</td>
+                        <td style="text-align:right;">${tw > 0 ? fmtNum(tw,1)+'%' : '-'}</td>
+                        <td style="text-align:right;">${fmtNum(cw,1)}%</td>
+                        <td style="text-align:right;color:${Math.abs(diff)<1?'#94a3b8':diff>0?'#4ade80':'#f87171'}">${(diff>=0?'+':'')+fmtNum(diff,1)}%</td>
+                    </tr>
+                `;
+            });
+
+            const filteredPL = filteredValue - filteredCost;
+            const filteredPLPct = filteredCost > 0 ? (filteredPL / filteredCost * 100) : 0;
+            const filteredLocalPL = filteredLocalValue - filteredLocalCost;
+            const filteredLocalPLPct = filteredLocalCost > 0 ? (filteredLocalPL / filteredLocalCost * 100) : 0;
+            const filterLabel = [APP.regionFilter!=='全部'?APP.regionFilter:'', APP.currencyFilter!=='全部'?APP.currencyFilter:''].filter(Boolean).join(' ') || '全部';
+
+            // Sold stocks realized P&L totals
+            let soldTotalPL = 0;
+            soldList.forEach(d => { soldTotalPL += (d.pl || 0); });
+
+            html += `</tbody><tfoot>`;
+            html += `<tr style="border-top:2px solid rgba(193,166,115,0.3);font-weight:bold;">
+                <td colspan="5">${filterLabel} Total (${activeList.length} stocks) — USD</td>
+                <td></td><td></td><td></td><td></td>
+                <td style="text-align:right;">$${fmtNum(filteredValue)}</td>
+                <td class="${filteredPL>=0?'price-positive':'price-negative'}" style="text-align:right;">${filteredPL>=0?'+':''}$${fmtNum(filteredPL)}</td>
+                <td class="${filteredPLPct>=0?'price-positive':'price-negative'}" style="text-align:right;">${formatPercent(filteredPLPct)}</td>
+                <td colspan="3"></td>
+            </tr>`;
+            html += `</tfoot></table></div></div>
+
+            <!-- 已清仓股票 -->
+            ${soldList.length > 0 ? `
+            <div class="chart-card" style="margin-top:16px;border-left:3px solid #f97316;">
+                <div class="chart-title" style="color:#f97316;">Closed Positions (${soldList.length} stocks) — Realized P&L: <span class="${soldTotalPL>=0?'price-positive':'price-negative'}">${soldTotalPL>=0?'+':''}$${fmtNum(soldTotalPL)}</span></div>
+                <table class="holdings-table" style="font-size:13px;background:#1a1520;">
+                    <thead><tr>
+                        <th>Symbol</th><th>Name</th><th>Region</th><th>Currency</th><th>Type</th>
+                        <th>Shares</th><th>Avg Cost</th><th>Realized P&L</th><th>P&L%</th>
+                    </tr></thead><tbody>
+                    ${soldList.map(d => {
+                        const curSym = curSym0fn(d.currency);
+                        return `<tr style="cursor:pointer;opacity:0.85;" onclick="showStockDetail('${d.symbol}')">
+                            <td class="symbol-cell" style="color:#f97316;">${d.symbol}</td>
+                            <td>${d.name}</td>
+                            <td><span class="region-badge">${d.region}</span></td>
+                            <td>${d.currency}</td>
+                            <td>${d.attribute||'-'}</td>
+                            <td style="text-align:right;">0</td>
+                            <td style="text-align:right;">${curSym}${fmtNum(d.avg_cost)}</td>
+                            <td class="${d.plLocal>=0?'price-positive':'price-negative'}" style="text-align:right;">${d.plLocal>=0?'+':''}${curSym}${fmtNum(d.plLocal)}</td>
+                            <td class="${d.plPct>=0?'price-positive':'price-negative'}" style="text-align:right;">${formatPercent(d.plPct)}</td>
+                        </tr>`;
+                    }).join('')}
+                    </tbody>
+                </table>
+            </div>` : ''}
+
+                <div style="margin-top: 20px;">
+                    <div class="chart-card">
+                        <div class="chart-title">FX Rates</div>
+                        <div class="fx-rates">
+                            <div class="fx-rate">
+                                <div class="fx-rate-label">USD/JPY</div>
+                                <div class="fx-rate-value">1 USD = ${fmtNum(1 / APP.FX_RATES.JPY, 2)} JPY</div>
+                            </div>
+                            <div class="fx-rate">
+                                <div class="fx-rate-label">USD/CNY</div>
+                                <div class="fx-rate-value">1 USD = ${fmtNum(1 / APP.FX_RATES.CNY, 2)} CNY</div>
+                            </div>
+                            <div class="fx-rate">
+                                <div class="fx-rate-label">USD/HKD</div>
+                                <div class="fx-rate-value">1 USD = ${fmtNum(1 / APP.FX_RATES.HKD, 2)} HKD</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        } else {
+            html += `
+                <div class="empty-state">
+                    <div class="empty-icon">📈</div>
+                    <div class="empty-title">No Holdings Yet</div>
+                    <div class="empty-text">Start by adding your first trade</div>
+                </div>
+            `;
+        }
+
+        container.innerHTML = html;
+
+        // Render region orbital ring + currency exposure bars
+        if (activeHoldings.length > 0) {
+            const regionColors = {'美国':'#C1A673','中国':'#E8B84B','日本':'#D4A574','香港':'#A8C1A6'};
+            const regionFlags = {'美国':'🇺🇸','中国':'🇨🇳','日本':'🇯🇵','香港':'🇭🇰'};
+            const currencyColors = {'USD':'#C1A673','CNY':'#E8B84B','JPY':'#D4A574','HKD':'#A8C1A6'};
+            const currencySymbols = {'USD':'$','CNY':'¥','JPY':'¥','HKD':'HK$'};
+            const fallbackColor = '#8B9CB6';
+
+            // Region data
+            const regionGrouped = {};
+            activeHoldings.forEach(h => {
+                const key = h.region || 'Other';
+                const p = APP.prices[h.symbol]?.price || h.avg_cost;
+                regionGrouped[key] = (regionGrouped[key]||0) + h.qty * p * (APP.FX_RATES[h.currency]||1);
+            });
+            const regionTotal = Object.values(regionGrouped).reduce((a,b) => a+b, 0);
+            const regionData = Object.entries(regionGrouped).sort((a,b) => b[1]-a[1]).map(([label, value]) => ({
+                label, value, pct: regionTotal > 0 ? (value/regionTotal*100) : 0,
+                color: regionColors[label] || fallbackColor,
+                flag: regionFlags[label] || '🌐'
+            }));
+
+            // Build SVG orbital ring
+            const R = 78, SW = 16, CX = 100, CY = 100;
+            const circumference = 2 * Math.PI * R;
+            const gapDeg = 6; // gap in degrees between segments
+            const totalGapDeg = gapDeg * regionData.length;
+            const availableDeg = 360 - totalGapDeg;
+            let rotateOffset = -90; // start from top
+
+            let ringSegments = '';
+            let legendCards = '';
+            regionData.forEach((d, i) => {
+                const segDeg = (d.value / regionTotal) * availableDeg;
+                const segLen = (segDeg / 360) * circumference;
+                const dasharray = segLen + ' ' + (circumference - segLen);
+                const dashoffset = -(rotateOffset / 360) * circumference;
+                const glowId = 'rg' + i;
+                ringSegments += '<circle cx="'+CX+'" cy="'+CY+'" r="'+R+'" fill="none" stroke="'+d.color+'" stroke-width="'+SW+'" stroke-dasharray="'+dasharray+'" stroke-dashoffset="'+dashoffset+'" stroke-linecap="round" style="filter:drop-shadow(0 0 8px '+d.color+'60);transform-origin:center;opacity:0;animation:ringFadeIn 0.8s ease '+(0.2+i*0.15)+'s forwards;"/>';
+                rotateOffset += segDeg + gapDeg;
+
+                legendCards += '<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:rgba(20,25,32,0.5);border:1px solid '+d.color+'25;border-radius:10px;flex:1;min-width:120px;backdrop-filter:blur(4px);transition:all 0.3s ease;" onmouseover="this.style.borderColor=\''+d.color+'60\';this.style.background=\'rgba(20,25,32,0.8)\'" onmouseout="this.style.borderColor=\''+d.color+'25\';this.style.background=\'rgba(20,25,32,0.5)\'">'
+                    + '<div style="width:36px;height:36px;border-radius:50%;background:'+d.color+'15;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">'+d.flag+'</div>'
+                    + '<div style="flex:1;min-width:0;">'
+                    + '<div style="display:flex;justify-content:space-between;align-items:baseline;">'
+                    + '<span style="color:#e2e8f0;font-size:13px;font-weight:600;font-family:Montserrat,sans-serif;">'+d.label+'</span>'
+                    + '<span style="color:'+d.color+';font-size:15px;font-weight:700;font-family:Montserrat,sans-serif;">'+fmtNum(d.pct,1)+'%</span>'
+                    + '</div>'
+                    + '<div style="color:#64748b;font-size:11px;margin-top:2px;font-family:Montserrat,sans-serif;">$'+fmtNum(d.value)+'</div>'
+                    + '</div></div>';
+            });
+
+            const regionViz = document.getElementById('region-viz');
+            if (regionViz) {
+                regionViz.innerHTML = '<style>@keyframes ringFadeIn{from{opacity:0;transform:scale(0.85);}to{opacity:1;transform:scale(1);}}</style>'
+                    + '<svg viewBox="0 0 200 200" width="200" height="200" style="overflow:visible;">'
+                    + '<circle cx="'+CX+'" cy="'+CY+'" r="'+R+'" fill="none" stroke="rgba(193,166,115,0.06)" stroke-width="'+SW+'"/>'
+                    + ringSegments
+                    + '<text x="'+CX+'" y="'+(CY-8)+'" text-anchor="middle" fill="#e2e8f0" font-size="18" font-weight="700" font-family="Montserrat,sans-serif">$'+fmtNum(regionTotal)+'</text>'
+                    + '<text x="'+CX+'" y="'+(CY+10)+'" text-anchor="middle" fill="#64748b" font-size="10" letter-spacing="2" font-family="Montserrat,sans-serif">TOTAL VALUE</text>'
+                    + '</svg>'
+                    + '<div style="display:flex;gap:8px;flex-wrap:wrap;width:100%;">'+legendCards+'</div>';
+            }
+
+            // Currency data
+            const currencyGrouped = {};
+            activeHoldings.forEach(h => {
+                const key = h.currency || 'USD';
+                const p = APP.prices[h.symbol]?.price || h.avg_cost;
+                currencyGrouped[key] = (currencyGrouped[key]||0) + h.qty * p * (APP.FX_RATES[h.currency]||1);
+            });
+            const currencyTotal = Object.values(currencyGrouped).reduce((a,b) => a+b, 0);
+            const currencyData = Object.entries(currencyGrouped).sort((a,b) => b[1]-a[1]).map(([label, value]) => ({
+                label, value, pct: currencyTotal > 0 ? (value/currencyTotal*100) : 0,
+                color: currencyColors[label] || fallbackColor,
+                sym: currencySymbols[label] || label
+            }));
+
+            // Stacked bar at top
+            const currencyViz = document.getElementById('currency-viz');
+            if (currencyViz) {
+                let stackedBar = '<div style="display:flex;height:8px;border-radius:4px;overflow:hidden;gap:2px;margin-bottom:4px;">';
+                currencyData.forEach((d,i) => {
+                    stackedBar += '<div style="flex:'+d.pct+';background:'+d.color+';border-radius:4px;min-width:4px;opacity:0;animation:barSlideIn 0.6s ease '+(0.3+i*0.1)+'s forwards;"></div>';
+                });
+                stackedBar += '</div>';
+
+                let barCards = '';
+                currencyData.forEach((d, i) => {
+                    const barWidth = Math.max(d.pct, 3);
+                    barCards += '<div style="opacity:0;animation:barSlideIn 0.5s ease '+(0.2+i*0.12)+'s forwards;">'
+                        + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">'
+                        + '<div style="display:flex;align-items:center;gap:8px;">'
+                        + '<div style="width:28px;height:28px;border-radius:8px;background:'+d.color+'18;border:1px solid '+d.color+'30;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'
+                        + '<span style="font-size:12px;font-weight:700;color:'+d.color+';font-family:Montserrat,sans-serif;">'+d.sym+'</span></div>'
+                        + '<div><div style="color:#e2e8f0;font-size:13px;font-weight:600;font-family:Montserrat,sans-serif;">'+d.label+'</div>'
+                        + '<div style="color:#64748b;font-size:11px;font-family:Montserrat,sans-serif;">$'+fmtNum(d.value)+'</div></div>'
+                        + '</div>'
+                        + '<div style="text-align:right;">'
+                        + '<span style="color:'+d.color+';font-size:18px;font-weight:700;font-family:Montserrat,sans-serif;">'+fmtNum(d.pct,1)+'%</span>'
+                        + '</div></div>'
+                        + '<div style="height:6px;background:rgba(30,41,59,0.6);border-radius:3px;overflow:hidden;">'
+                        + '<div style="width:'+barWidth+'%;height:100%;background:linear-gradient(90deg,'+d.color+','+d.color+'90);border-radius:3px;box-shadow:0 0 12px '+d.color+'40;transition:width 1s ease;"></div>'
+                        + '</div></div>';
+                });
+
+                currencyViz.innerHTML = '<style>@keyframes barSlideIn{from{opacity:0;transform:translateX(-12px);}to{opacity:1;transform:translateX(0);}}</style>'
+                    + stackedBar + barCards
+                    + '<div style="text-align:center;padding-top:8px;border-top:1px solid rgba(193,166,115,0.1);">'
+                    + '<span style="color:#64748b;font-size:10px;letter-spacing:2px;font-family:Montserrat,sans-serif;">TOTAL EXPOSURE</span>'
+                    + '<div style="color:#C1A673;font-size:20px;font-weight:700;font-family:Montserrat,sans-serif;margin-top:2px;">$'+fmtNum(currencyTotal)+'</div>'
+                    + '</div>';
+            }
+        }
+    }
+
+    function renderTab1() {
+        const container = document.getElementById('tab-1');
+        if (!APP._tab1State) APP._tab1State = { region: '全部', currency: '全部', sortDir: 'desc' };
+        const st = APP._tab1State;
+
+        // Build enriched list
+        let list = APP.holdings.map(h => {
+            const pd = APP.prices[h.symbol] || {};
+            return { ...h, price: pd.price || h.avg_cost, change: pd.change || 0, prevClose: pd.prevClose || h.avg_cost };
+        });
+
+        // Filters
+        if (st.region !== '全部') list = list.filter(d => d.region === st.region);
+        if (st.currency !== '全部') list = list.filter(d => d.currency === st.currency);
+
+        // Sort by change
+        list.sort((a, b) => st.sortDir === 'desc' ? b.change - a.change : a.change - b.change);
+
+        const regions = ['全部', '中国', '日本', '美国'];
+        const currencies = ['全部', 'USD', 'CNY', 'HKD', 'JPY'];
+
+        let html = '';
+        // Search
+        html += `<div style="margin-bottom:12px;"><input type="text" id="tab1Search" class="form-input" style="width:100%;max-width:400px;background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:8px 12px;border-radius:8px;" placeholder="Search stock symbol or name..."></div>`;
+
+        // Region filter
+        html += `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">`;
+        html += `<span style="color:#94a3b8;font-size:13px;line-height:32px;">Region:</span>`;
+        regions.forEach(r => {
+            const active = st.region === r;
+            html += `<button onclick="APP._tab1State.region='${r}';renderTab1()" style="padding:4px 14px;border-radius:16px;border:1px solid ${active?'#C1A673':'#334155'};background:${active?'#C1A673':'transparent'};color:${active?'#fff':'#94a3b8'};cursor:pointer;font-size:12px;">${r}</button>`;
+        });
+        html += `</div>`;
+
+        // Currency filter
+        html += `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">`;
+        html += `<span style="color:#94a3b8;font-size:13px;line-height:32px;">Currency:</span>`;
+        currencies.forEach(c => {
+            const active = st.currency === c;
+            html += `<button onclick="APP._tab1State.currency='${c}';renderTab1()" style="padding:4px 14px;border-radius:16px;border:1px solid ${active?'#C1A673':'#334155'};background:${active?'#C1A673':'transparent'};color:${active?'#fff':'#94a3b8'};cursor:pointer;font-size:12px;">${c}</button>`;
+        });
+        html += `</div>`;
+
+        if (list.length === 0) {
+            html += `<div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-title">No matching stocks</div></div>`;
+        } else {
+            const sortArrow = st.sortDir === 'desc' ? '▼' : '▲';
+            const thSticky = 'position:sticky;top:0;background:#0f172a;z-index:10;';
+            html += `<div style="overflow:auto;max-height:70vh;"><table style="width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed;">`;
+            html += `<thead><tr style="border-bottom:1px solid #334155;color:#94a3b8;font-size:12px;">`;
+            html += `<th style="${thSticky}text-align:left;padding:8px 6px;width:12%;">Symbol</th>`;
+            html += `<th style="${thSticky}text-align:left;padding:8px 6px;width:12%;">Name</th>`;
+            html += `<th style="${thSticky}text-align:right;padding:8px 2px;width:14%;">Price</th>`;
+            html += `<th style="${thSticky}text-align:right;padding:8px 2px;width:11%;cursor:pointer;user-select:none;" onclick="APP._tab1State.sortDir=APP._tab1State.sortDir==='desc'?'asc':'desc';renderTab1()">Change% ${sortArrow}</th>`;
+            html += `<th style="${thSticky}text-align:left;padding:8px 6px;width:10%;">Region</th>`;
+            html += `<th style="${thSticky}text-align:left;padding:8px 6px;width:9%;">Currency</th>`;
+            html += `<th style="${thSticky}text-align:left;padding:8px 6px;width:10%;">Type</th>`;
+            html += `</tr></thead><tbody>`;
+
+            list.forEach(d => {
+                const color = d.change >= 0 ? '#22c55e' : '#ef4444';
+                const sign = d.change >= 0 ? '+' : '';
+                const curSym = d.currency==='CNY'?'¥':d.currency==='JPY'?'¥':d.currency==='HKD'?'HK$':'$';
+                html += `<tr style="border-bottom:1px solid #1e293b;" class="tab1-row">`;
+                html += `<td style="padding:10px 6px;color:#e2e8f0;font-weight:600;">${d.symbol}</td>`;
+                html += `<td style="padding:10px 6px;color:#cbd5e1;">${d.name}</td>`;
+                html += `<td style="padding:10px 2px;text-align:right;color:#e2e8f0;">${curSym}${fmtNum(d.price, 2)}</td>`;
+                html += `<td style="padding:10px 2px;text-align:right;color:${color};font-weight:600;">${sign}${d.change.toFixed(2)}%</td>`;
+                html += `<td style="padding:10px 6px;color:#94a3b8;">${d.region}</td>`;
+                html += `<td style="padding:10px 6px;color:#94a3b8;">${d.currency}</td>`;
+                html += `<td style="padding:10px 6px;color:#94a3b8;">${d.attribute||'-'}</td>`;
+                html += `</tr>`;
+            });
+
+            html += `</tbody></table></div>`;
+            html += `<div style="color:#64748b;font-size:11px;margin-top:8px;text-align:right;">Total ${list.length} stocks</div>`;
+        }
+
+        container.innerHTML = html;
+
+        // Search filter
+        const si = document.getElementById('tab1Search');
+        if (si) {
+            si.addEventListener('input', (e) => {
+                const q = e.target.value.toLowerCase();
+                document.querySelectorAll('.tab1-row').forEach(row => {
+                    row.style.display = row.textContent.toLowerCase().includes(q) ? '' : 'none';
+                });
+            });
+        }
+    }
+
+    function renderTab2() {
+        const container = document.getElementById('tab-2');
+
+        let html = `
+            <button class="btn-primary" onclick="openModal('tradeModal')" style="margin-bottom: 20px; padding: 10px 20px;">+ New Trade</button>
+        `;
+
+        if (APP.trades.length > 0) {
+            html += `
+                <table class="trades-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Symbol</th>
+                            <th>Name</th>
+                            <th>Type</th>
+                            <th>Quantity</th>
+                            <th>Price</th>
+                            <th>Fee</th>
+                            <th>Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            // Sort trades by date descending
+            const sortedTrades = [...APP.trades].sort((a, b) => new Date(b.date) - new Date(a.date));
+
+            sortedTrades.forEach(t => {
+                const total = (t.qty * t.price) + (t.fee || 0);
+                const isBuy = t.type === 'BUY' || t.type === '买入';
+                const isDividend = t.type === '分红' || t.type === 'DIVIDEND';
+                const typeClass = isDividend ? 'trade-type-dividend' : (isBuy ? 'trade-type-buy' : 'trade-type-sell');
+                const typeText = isDividend ? 'Dividend' : (isBuy ? 'Buy' : 'Sell');
+
+                html += `
+                    <tr>
+                        <td>${new Date(t.date).toLocaleDateString('zh-CN')}</td>
+                        <td class="symbol-cell">${t.symbol}</td>
+                        <td>${t.name}</td>
+                        <td class="${typeClass}"><strong>${typeText}</strong></td>
+                        <td>${t.qty.toFixed(4)}</td>
+                        <td>$${t.price.toFixed(2)}</td>
+                        <td>$${(t.fee || 0).toFixed(2)}</td>
+                        <td>$${total.toFixed(2)}</td>
+                    </tr>
+                `;
+            });
+
+            html += `
+                    </tbody>
+                </table>
+            `;
+        } else {
+            html += `
+                <div class="empty-state">
+                    <div class="empty-icon">📊</div>
+                    <div class="empty-title">No Trades Yet</div>
+                    <div class="empty-text">Click "+ New Trade" to add your first trade</div>
+                </div>
+            `;
+        }
+
+        container.innerHTML = html;
+    }
+
+    function renderTab3() {
+        const container = document.getElementById('tab-3');
+
+        let html = `
+            <button class="btn-primary" onclick="openModal('alertModal')" style="margin-bottom: 20px; padding: 10px 20px;">+ New Alert</button>
+        `;
+
+        if (APP.alerts.length > 0) {
+            html += `
+                <div class="alert-cards">
+            `;
+
+            APP.alerts.forEach(a => {
+                const typeText = a.condition === 'ABOVE' ? 'Above' : 'Below';
+                html += `
+                    <div class="alert-card">
+                        <div class="alert-card-header">
+                            <div class="alert-card-symbol">${a.symbol}</div>
+                            <button class="alert-card-close" onclick="deleteAlert('${a.id}')">×</button>
+                        </div>
+                        <div class="alert-card-condition">${a.name}</div>
+                        <div style="font-size:22px;font-weight:bold;color:#4ade80;margin:8px 0;">$${fmtNum(a.price, 2)}</div>
+                        <div class="alert-card-condition">When price ${typeText} reaches this level</div>
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div class="text-sm text-muted">Status: ${a.active ? 'Active' : 'Inactive'}</div>
+                            <div class="toggle-switch ${a.active ? 'active' : ''}" onclick="toggleAlert('${a.id}', ${!a.active})">
+                                <div class="toggle-slider"></div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            html += `
+                </div>
+            `;
+        } else {
+            html += `
+                <div class="empty-state">
+                    <div class="empty-icon">🔔</div>
+                    <div class="empty-title">No Price Alerts</div>
+                    <div class="empty-text">Click "+ New Alert" to create your first price alert</div>
+                </div>
+            `;
+        }
+
+        container.innerHTML = html;
+    }
+
+    // ===== 分析 Tab 状态 =====
+    if (!APP.analysisState) APP.analysisState = { regionFilter: '全部', currencyFilter: '全部', sortKey: 'marketValueUSD', sortDir: 'desc' };
+
+    function renderTab4() {
+        const container = document.getElementById('tab-4');
+        if (APP.holdings.length === 0) {
+            container.innerHTML = `<div class="empty-state"><div class="empty-icon">📈</div><div class="empty-title">No data to analyze</div></div>`;
+            return;
+        }
+
+        const st = APP.analysisState;
+        const regions = ['全部', ...new Set(APP.holdings.map(h => h.region).filter(Boolean))];
+        const currencies = ['全部', ...new Set(APP.holdings.map(h => h.currency).filter(Boolean))];
+
+        // Build enriched data
+        let allData = APP.holdings.map(h => {
+            const currentPrice = APP.prices[h.symbol]?.price || h.avg_cost;
+            const priceChange = APP.prices[h.symbol]?.change || 0;
+            const rate = APP.FX_RATES[h.currency] || 1;
+            const isSold = h.qty <= 0;
+            const marketValueLocal = isSold ? 0 : h.qty * currentPrice;
+            const costLocal = isSold ? 0 : h.qty * h.avg_cost;
+            const plLocal = isSold ? (h.realized_pl || 0) : marketValueLocal - costLocal;
+            const marketValueUSD = isSold ? 0 : marketValueLocal * rate;
+            const costUSD = isSold ? 0 : costLocal * rate;
+            const plUSD = isSold ? (h.realized_pl || 0) * rate : marketValueUSD - costUSD;
+            const plPct = isSold ? (h.realized_cost > 0 ? (h.realized_pl / h.realized_cost * 100) : 0) : (costUSD > 0 ? (plUSD / costUSD * 100) : 0);
+            return { ...h, currentPrice, priceChange, marketValueLocal, costLocal, plLocal, marketValueUSD, costUSD, plUSD, plPct, isSold };
+        });
+        let data = allData.filter(d => !d.isSold);
+        let soldData = allData.filter(d => d.isSold);
+
+        // Apply filters
+        if (st.regionFilter !== '全部') { data = data.filter(d => d.region === st.regionFilter); soldData = soldData.filter(d => d.region === st.regionFilter); }
+        if (st.currencyFilter !== '全部') { data = data.filter(d => d.currency === st.currencyFilter); soldData = soldData.filter(d => d.currency === st.currencyFilter); }
+
+        // Sort
+        const dir = st.sortDir === 'asc' ? 1 : -1;
+        data.sort((a, b) => {
+            let va = a[st.sortKey], vb = b[st.sortKey];
+            if (typeof va === 'string') return va.localeCompare(vb) * dir;
+            return ((va || 0) - (vb || 0)) * dir;
+        });
+
+        // Totals
+        const totalMV = data.reduce((s, d) => s + d.marketValueUSD, 0);
+        const totalCost = data.reduce((s, d) => s + d.costUSD, 0);
+        const totalPL = totalMV - totalCost;
+        const totalPLPct = totalCost > 0 ? (totalPL / totalCost * 100) : 0;
+
+        const isLocalCur = st.currencyFilter !== '全部';
+        const curLabel = isLocalCur ? st.currencyFilter : 'USD';
+        const curSym4 = (c) => c === 'CNY' ? '¥' : c === 'JPY' ? '¥' : c === 'HKD' ? 'HK$' : '$';
+        const displaySym = isLocalCur ? curSym4(st.currencyFilter) : '$';
+
+        // Totals in local currency
+        const totalLocalMV = data.reduce((s, d) => s + d.marketValueLocal, 0);
+        const totalLocalCost = data.reduce((s, d) => s + d.costLocal, 0);
+        const totalLocalPL = totalLocalMV - totalLocalCost;
+        const totalLocalPLPct = totalLocalCost > 0 ? (totalLocalPL / totalLocalCost * 100) : 0;
+
+        const sortIcon = (key) => st.sortKey === key ? (st.sortDir === 'asc' ? ' ▲' : ' ▼') : '';
+        const thClick = (key) => `onclick="toggleAnalysisSort('${key}')" style="cursor:pointer;user-select:none;white-space:nowrap;"`;
+
+        let html = `
+        <div class="chart-card" style="margin-bottom:16px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
+                <div class="chart-title" style="margin-bottom:0;">Holdings Analysis</div>
+                <button class="btn-primary" onclick="copyAnalysisTable()" style="font-size:13px;padding:6px 14px;">📋 Copy to Clipboard</button>
+            </div>
+            <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center;">
+                <span style="color:#94a3b8;font-size:13px;">Region:</span>
+                ${regions.map(r => `<button onclick="setAnalysisFilter('region','${r}')" style="padding:4px 12px;border-radius:16px;border:1px solid ${st.regionFilter===r?'#C1A673':'#334155'};background:${st.regionFilter===r?'#C1A673':'transparent'};color:${st.regionFilter===r?'#fff':'#94a3b8'};cursor:pointer;font-size:12px;">${r}</button>`).join('')}
+                <span style="color:#94a3b8;font-size:13px;margin-left:12px;">Currency:</span>
+                ${currencies.map(c => `<button onclick="setAnalysisFilter('currency','${c}')" style="padding:4px 12px;border-radius:16px;border:1px solid ${st.currencyFilter===c?'#C1A673':'#334155'};background:${st.currencyFilter===c?'#C1A673':'transparent'};color:${st.currencyFilter===c?'#fff':'#94a3b8'};cursor:pointer;font-size:12px;">${c}</button>`).join('')}
+            </div>
+            <div style="overflow:auto;max-height:70vh;">
+            <table class="holdings-table" id="analysisTable" style="font-size:13px;">
+                <thead><tr>
+                    <th ${thClick('symbol')}>Symbol${sortIcon('symbol')}</th>
+                    <th ${thClick('name')}>Name${sortIcon('name')}</th>
+                    <th ${thClick('region')}>Region${sortIcon('region')}</th>
+                    <th ${thClick('currency')}>Currency${sortIcon('currency')}</th>
+                    <th ${thClick('attribute')}>Type${sortIcon('attribute')}</th>
+                    <th ${thClick('sector')}>Sector${sortIcon('sector')}</th>
+                    <th ${thClick('qty')}>Shares${sortIcon('qty')}</th>
+                    <th ${thClick('avg_cost')}>Avg Cost${sortIcon('avg_cost')}</th>
+                    <th ${thClick('currentPrice')}>Price${sortIcon('currentPrice')}</th>
+                    <th ${thClick('priceChange')}>Change%${sortIcon('priceChange')}</th>
+                    <th ${thClick(isLocalCur?'costLocal':'costUSD')}>Cost(${curLabel})${sortIcon(isLocalCur?'costLocal':'costUSD')}</th>
+                    <th ${thClick(isLocalCur?'marketValueLocal':'marketValueUSD')}>Mkt Value(${curLabel})${sortIcon(isLocalCur?'marketValueLocal':'marketValueUSD')}</th>
+                    <th ${thClick(isLocalCur?'plLocal':'plUSD')}>P&L(${curLabel})${sortIcon(isLocalCur?'plLocal':'plUSD')}</th>
+                    <th ${thClick('plPct')}>P&L%${sortIcon('plPct')}</th>
+                </tr></thead><tbody>`;
+
+        data.forEach(d => {
+            const cs = curSym4(d.currency);
+            const dCost = isLocalCur ? d.costLocal : d.costUSD;
+            const dMV = isLocalCur ? d.marketValueLocal : d.marketValueUSD;
+            const dPL = isLocalCur ? d.plLocal : d.plUSD;
+            const ds = isLocalCur ? displaySym : '$';
+            html += `<tr style="cursor:pointer;" onclick="showStockDetail('${d.symbol}')">
+                <td class="symbol-cell">${d.symbol}</td>
+                <td>${d.name}</td>
+                <td><span class="region-badge">${d.region}</span></td>
+                <td>${d.currency}</td>
+                <td>${d.attribute||'-'}</td>
+                <td>${d.sector||'-'}</td>
+                <td style="text-align:right;">${fmtNum(d.qty, 0)}</td>
+                <td style="text-align:right;">${cs}${fmtNum(d.avg_cost)}</td>
+                <td style="text-align:right;">${cs}${fmtNum(d.currentPrice)}</td>
+                <td class="${d.priceChange>=0?'price-positive':'price-negative'}" style="text-align:right;">${formatPercent(d.priceChange)}</td>
+                <td style="text-align:right;">${ds}${fmtNum(dCost)}</td>
+                <td style="text-align:right;">${ds}${fmtNum(dMV)}</td>
+                <td class="${dPL>=0?'price-positive':'price-negative'}" style="text-align:right;">${dPL>=0?'+':''}${ds}${fmtNum(dPL)}</td>
+                <td class="${d.plPct>=0?'price-positive':'price-negative'}" style="text-align:right;">${formatPercent(d.plPct)}</td>
+            </tr>`;
+        });
+
+        // Footer: local currency totals + USD converted row when filtering by currency
+        if (isLocalCur) {
+            html += `</tbody><tfoot>
+                <tr style="border-top:2px solid #334155;font-weight:bold;">
+                    <td colspan="6">Total (${data.length} stocks) — ${curLabel}</td>
+                    <td></td><td></td><td></td><td></td>
+                    <td style="text-align:right;">${displaySym}${fmtNum(totalLocalCost)}</td>
+                    <td style="text-align:right;">${displaySym}${fmtNum(totalLocalMV)}</td>
+                    <td class="${totalLocalPL>=0?'price-positive':'price-negative'}" style="text-align:right;">${totalLocalPL>=0?'+':''}${displaySym}${fmtNum(totalLocalPL)}</td>
+                    <td class="${totalLocalPLPct>=0?'price-positive':'price-negative'}" style="text-align:right;">${formatPercent(totalLocalPLPct)}</td>
+                </tr>
+                <tr style="font-weight:bold;color:#64748b;">
+                    <td colspan="6">USD Equivalent</td>
+                    <td></td><td></td><td></td><td></td>
+                    <td style="text-align:right;">$${fmtNum(totalCost)}</td>
+                    <td style="text-align:right;">$${fmtNum(totalMV)}</td>
+                    <td class="${totalPL>=0?'price-positive':'price-negative'}" style="text-align:right;">${totalPL>=0?'+':''}$${fmtNum(totalPL)}</td>
+                    <td class="${totalPLPct>=0?'price-positive':'price-negative'}" style="text-align:right;">${formatPercent(totalPLPct)}</td>
+                </tr>
+            </tfoot>`;
+        } else {
+            html += `</tbody><tfoot><tr style="border-top:2px solid #334155;font-weight:bold;">
+                <td colspan="6">Total (${data.length} stocks)</td>
+                <td></td><td></td><td></td><td></td>
+                <td style="text-align:right;">$${fmtNum(totalCost)}</td>
+                <td style="text-align:right;">$${fmtNum(totalMV)}</td>
+                <td class="${totalPL>=0?'price-positive':'price-negative'}" style="text-align:right;">${totalPL>=0?'+':''}$${fmtNum(totalPL)}</td>
+                <td class="${totalPLPct>=0?'price-positive':'price-negative'}" style="text-align:right;">${formatPercent(totalPLPct)}</td>
+            </tr></tfoot>`;
+        }
+        html += `</table></div>
+        </div>
+
+        <div class="charts-row">
+            <div class="chart-card">
+                <div class="chart-title">Distribution by Sector</div>
+                <canvas id="chart-sector" width="400" height="300"></canvas>
+            </div>
+            <div class="chart-card">
+                <div class="chart-title">Distribution by Region</div>
+                <canvas id="chart-region" width="400" height="300"></canvas>
+            </div>
+        </div>
+        <div class="chart-card">
+            <div class="chart-title">P&L Ranking (Top 10)</div>
+            <canvas id="chart-pl" width="800" height="400"></canvas>
+        </div>`;
+
+        // Sold stocks section in analysis
+        if (soldData.length > 0) {
+            const soldTotalPL = soldData.reduce((s, d) => s + d.plUSD, 0);
+            const ds4 = isLocalCur ? displaySym : '$';
+            html += `
+            <div class="chart-card" style="margin-top:16px;border-left:3px solid #f97316;">
+                <div class="chart-title" style="color:#f97316;">Closed Positions (${soldData.length} stocks) — Realized P&L: <span class="${soldTotalPL>=0?'price-positive':'price-negative'}">${soldTotalPL>=0?'+':''}$${fmtNum(soldTotalPL)}</span></div>
+                <table class="holdings-table" style="font-size:13px;background:#1a1520;">
+                    <thead><tr>
+                        <th>Symbol</th><th>Name</th><th>Region</th><th>Currency</th><th>Type</th><th>Sector</th>
+                        <th>Avg Cost</th><th>Realized P&L</th><th>P&L%</th>
+                    </tr></thead><tbody>
+                    ${soldData.map(d => {
+                        const cs = curSym4(d.currency);
+                        const dPL = isLocalCur ? d.plLocal : d.plUSD;
+                        return `<tr style="cursor:pointer;opacity:0.85;" onclick="showStockDetail('${d.symbol}')">
+                            <td class="symbol-cell" style="color:#f97316;">${d.symbol}</td>
+                            <td>${d.name}</td>
+                            <td><span class="region-badge">${d.region}</span></td>
+                            <td>${d.currency}</td>
+                            <td>${d.attribute||'-'}</td>
+                            <td>${d.sector||'-'}</td>
+                            <td style="text-align:right;">${cs}${fmtNum(d.avg_cost)}</td>
+                            <td class="${dPL>=0?'price-positive':'price-negative'}" style="text-align:right;">${dPL>=0?'+':''}${ds4}${fmtNum(dPL)}</td>
+                            <td class="${d.plPct>=0?'price-positive':'price-negative'}" style="text-align:right;">${formatPercent(d.plPct)}</td>
+                        </tr>`;
+                    }).join('')}
+                    </tbody>
+                </table>
+            </div>`;
+        }
+
+        container.innerHTML = html;
+
+        // Charts use filtered data (active only)
+        const sectorData = {}, regionData = {}, plBars = [];
+        data.forEach(d => {
+            const sec = d.sector || '未分类';
+            sectorData[sec] = (sectorData[sec] || 0) + d.marketValueUSD;
+            regionData[d.region] = (regionData[d.region] || 0) + d.marketValueUSD;
+            plBars.push({ label: d.symbol, value: d.plUSD, color: d.plUSD >= 0 ? '#4ade80' : '#f87171' });
+        });
+        const sectorBars = Object.entries(sectorData).map(([label, value]) => ({ label: label.substring(0,8), value }));
+        const regionPie = Object.entries(regionData).map(([label, value]) => {
+            const colors = { '美国':'#C1A673','中国':'#fbbf24','日本':'#f87171' };
+            return { label, value, color: colors[label] || '#64748b' };
+        });
+        const topPL = plBars.sort((a, b) => Math.abs(b.value) - Math.abs(a.value)).slice(0, 10);
+
+        setTimeout(() => {
+            drawBar('chart-sector', sectorBars);
+            drawPie('chart-region', regionPie);
+            drawHBar('chart-pl', topPL);
+        }, 0);
+    }
+
+    function toggleAnalysisSort(key) {
+        const st = APP.analysisState;
+        if (st.sortKey === key) { st.sortDir = st.sortDir === 'asc' ? 'desc' : 'asc'; }
+        else { st.sortKey = key; st.sortDir = 'desc'; }
+        renderTab4();
+    }
+
+    function setAnalysisFilter(type, val) {
+        if (type === 'region') APP.analysisState.regionFilter = val;
+        else APP.analysisState.currencyFilter = val;
+        renderTab4();
+    }
+
+    function copyAnalysisTable() {
+        const table = document.getElementById('analysisTable');
+        if (!table) return;
+        let tsv = '';
+        const rows = table.querySelectorAll('tr');
+        rows.forEach(row => {
+            const cells = row.querySelectorAll('th, td');
+            const vals = [];
+            cells.forEach(c => vals.push(c.innerText.replace(/\t/g, ' ').replace(/\n/g, ' ')));
+            tsv += vals.join('\t') + '\n';
+        });
+        navigator.clipboard.writeText(tsv).then(() => {
+            alert('Table copied to clipboard! You can paste it directly into Excel');
+        }).catch(() => {
+            // Fallback
+            const ta = document.createElement('textarea');
+            ta.value = tsv; document.body.appendChild(ta);
+            ta.select(); document.execCommand('copy');
+            document.body.removeChild(ta);
+            alert('Table copied to clipboard!');
+        });
+    }
+
+    // ===== 股票详情弹窗 =====
+    function showStockDetail(symbol) {
+        const holding = APP.holdings.find(h => h.symbol === symbol);
+        if (!holding) return;
+        const trades = APP.trades.filter(t => t.symbol === symbol).sort((a, b) => new Date(a.date) - new Date(b.date));
+        if (trades.length === 0) { alert('No trades found for this stock'); return; }
+
+        const rate = APP.FX_RATES[holding.currency] || 1;
+        const curSym = holding.currency==='CNY'?'¥':holding.currency==='JPY'?'¥':holding.currency==='HKD'?'HK$':'$';
+        const isSold = holding.qty <= 0;
+        const currentPrice = APP.prices[symbol]?.price || holding.avg_cost;
+
+        // Calculate running position
+        let runQty = 0, totalBuyCost = 0, totalBuyQty = 0;
+        let totalSellRevenue = 0, totalSellQty = 0, totalDividend = 0;
+        const timeline = trades.map(t => {
+            const isBuy = t.type === '买入' || t.type === 'BUY';
+            const isDividend = t.type === '分红' || t.type === 'DIVIDEND';
+            if (isBuy) {
+                runQty += t.qty;
+                totalBuyCost += t.qty * t.price;
+                totalBuyQty += t.qty;
+            } else if (isDividend) {
+                totalDividend += t.qty * t.price;
+            } else {
+                runQty -= t.qty;
+                totalSellRevenue += t.qty * t.price;
+                totalSellQty += t.qty;
+            }
+            return { ...t, runQty: Math.max(0, runQty) };
+        });
+
+        const avgBuyCost = totalBuyQty > 0 ? totalBuyCost / totalBuyQty : 0;
+        const currentMV = holding.qty * currentPrice;
+        const unrealizedPL = isSold ? 0 : currentMV - (holding.qty * avgBuyCost);
+        const realizedPL = totalSellQty > 0 ? totalSellRevenue - (totalSellQty * avgBuyCost) : 0;
+        const totalPL = unrealizedPL + realizedPL + totalDividend;
+        const totalInvested = totalBuyCost;
+        const totalReturn = totalInvested > 0 ? (totalPL / totalInvested * 100) : 0;
+
+        let html = `
+        <div class="modal show" id="stockDetailModal" onclick="if(event.target===this)this.classList.remove('show')" style="z-index:1001;">
+            <div class="modal-content" style="max-width:700px;position:relative;">
+                <button class="modal-close" onclick="document.getElementById('stockDetailModal').classList.remove('show')">×</button>
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;">
+                    <div>
+                        <h2 style="color:#C1A673;margin-bottom:4px;">${holding.symbol}</h2>
+                        <div style="color:#cbd5e1;font-size:16px;">${holding.name}</div>
+                        <div style="color:#94a3b8;font-size:13px;margin-top:4px;">${holding.region} · ${holding.currency} · ${holding.attribute||''}</div>
+                    </div>
+                    <div style="text-align:right;">
+                        <div style="font-size:13px;color:#94a3b8;">${isSold ? '已清仓' : '当前持有 '+fmtNum(holding.qty,0)+' 股'}</div>
+                        ${!isSold ? `<div style="font-size:20px;font-weight:bold;color:#e2e8f0;">${curSym}${fmtNum(currentPrice)}</div>` : ''}
+                    </div>
+                </div>
+
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:16px;">
+                    <div style="background:#0f172a;border-radius:8px;padding:12px;">
+                        <div style="font-size:11px;color:#94a3b8;">总投入</div>
+                        <div style="font-size:16px;font-weight:bold;color:#e2e8f0;">${curSym}${fmtNum(totalBuyCost)}</div>
+                    </div>
+                    <div style="background:#0f172a;border-radius:8px;padding:12px;">
+                        <div style="font-size:11px;color:#94a3b8;">已实现盈亏</div>
+                        <div style="font-size:16px;font-weight:bold;" class="${realizedPL>=0?'price-positive':'price-negative'}">${realizedPL>=0?'+':''}${curSym}${fmtNum(realizedPL)}</div>
+                    </div>
+                    <div style="background:#0f172a;border-radius:8px;padding:12px;">
+                        <div style="font-size:11px;color:#94a3b8;">未实现盈亏</div>
+                        <div style="font-size:16px;font-weight:bold;" class="${unrealizedPL>=0?'price-positive':'price-negative'}">${isSold?'-':(unrealizedPL>=0?'+':'')+curSym+fmtNum(unrealizedPL)}</div>
+                    </div>
+                    <div style="background:#0f172a;border-radius:8px;padding:12px;">
+                        <div style="font-size:11px;color:#94a3b8;">分红收入</div>
+                        <div style="font-size:16px;font-weight:bold;color:#fbbf24;">${totalDividend > 0 ? '+'+curSym+fmtNum(totalDividend) : '-'}</div>
+                    </div>
+                    <div style="background:#0f172a;border-radius:8px;padding:12px;">
+                        <div style="font-size:11px;color:#94a3b8;">总收益</div>
+                        <div style="font-size:16px;font-weight:bold;" class="${totalPL>=0?'price-positive':'price-negative'}">${totalPL>=0?'+':''}${curSym}${fmtNum(totalPL)}</div>
+                    </div>
+                    <div style="background:#0f172a;border-radius:8px;padding:12px;">
+                        <div style="font-size:11px;color:#94a3b8;">总收益率</div>
+                        <div style="font-size:16px;font-weight:bold;" class="${totalReturn>=0?'price-positive':'price-negative'}">${formatPercent(totalReturn)}</div>
+                    </div>
+                </div>
+
+                <div style="font-size:14px;font-weight:600;color:#cbd5e1;margin-bottom:10px;">交易时间线</div>
+                <div style="max-height:300px;overflow-y:auto;">
+                <table class="trades-table" style="font-size:12px;">
+                    <thead><tr>
+                        <th>日期</th><th>类型</th><th>数量</th><th>单价</th><th>金额</th><th>持仓</th>
+                    </tr></thead><tbody>
+                    ${timeline.map(t => {
+                        const isBuy = t.type === '买入' || t.type === 'BUY';
+                        const isDiv = t.type === '分红' || t.type === 'DIVIDEND';
+                        const cls = isDiv ? 'trade-type-dividend' : (isBuy ? 'trade-type-buy' : 'trade-type-sell');
+                        const label = isDiv ? '分红' : (isBuy ? '买入' : '卖出');
+                        const amount = t.qty * t.price;
+                        return `<tr>
+                            <td>${new Date(t.date).toLocaleDateString('zh-CN')}</td>
+                            <td class="${cls}"><strong>${label}</strong></td>
+                            <td style="text-align:right;">${fmtNum(t.qty, isDiv ? 0 : 2)}</td>
+                            <td style="text-align:right;">${curSym}${fmtNum(t.price)}</td>
+                            <td style="text-align:right;">${curSym}${fmtNum(amount)}</td>
+                            <td style="text-align:right;">${fmtNum(t.runQty, 0)}</td>
+                        </tr>`;
+                    }).join('')}
+                    </tbody>
+                </table>
+                </div>
+            </div>
+        </div>`;
+
+        // Remove existing modal if any
+        const old = document.getElementById('stockDetailModal');
+        if (old) old.remove();
+        document.body.insertAdjacentHTML('beforeend', html);
+    }
+
+    // ===== 投资组合 Tab =====
+    function renderTab5Portfolio() {
+        const container = document.getElementById('tab-5');
+        const regions = [...new Set(APP.holdings.map(h => h.region).filter(Boolean))];
+
+        let html = `<div class="chart-card" style="margin-bottom:16px;">
+            <div class="chart-title">Portfolio Allocation</div>
+            <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">
+                <label style="color:#94a3b8;">Total Budget (USD):</label>
+                <input type="number" id="totalBudget" class="form-input" style="width:200px;" value="${APP.portfolioBudget||0}" onchange="saveBudget(this.value)" placeholder="Total investment budget">
+            </div>
+        </div>`;
+
+        regions.forEach(region => {
+            const regionHoldings = APP.holdings.filter(h => h.region === region);
+            const currencySymbol = regionHoldings[0]?.currency === 'CNY' ? '¥' : regionHoldings[0]?.currency === 'JPY' ? '¥' : regionHoldings[0]?.currency === 'HKD' ? 'HK$' : '$';
+            const cur = regionHoldings[0]?.currency || 'USD';
+            const fxRate = APP.FX_RATES[cur] || 1;
+            const budget = parseFloat(APP.portfolioBudget) || 0;
+
+            let regionTotalWeight = 0;
+            let regionTargetUSD = 0;
+            let regionCurrentUSD = 0;
+
+            html += `<div class="chart-card" style="margin-bottom:16px;">
+                <div class="chart-title" style="margin-bottom:12px;">🏴 ${region} Allocation (${cur})</div>
+                <table class="holdings-table" style="font-size:13px;">
+                    <thead><tr>
+                        <th>Symbol</th><th>Name</th><th>Currency</th>
+                        <th>Target Wt</th><th>Target Amount(${cur})</th>
+                        <th>Current Value(${cur})</th><th>Achievement%</th>
+                        <th>Need to Buy(${cur})</th><th>USD Equivalent</th>
+                    </tr></thead><tbody>`;
+
+            regionHoldings.forEach(h => {
+                const tw = h.target_weight || 0;
+                const targetUSD = budget * tw / 100;
+                const targetLocal = targetUSD / fxRate;
+                const currentPrice = APP.prices[h.symbol]?.price || h.avg_cost;
+                const currentLocal = h.qty * currentPrice;
+                const currentUSD = currentLocal * fxRate;
+                const completion = targetLocal > 0 ? (currentLocal / targetLocal * 100) : 0;
+                const toBuyLocal = Math.max(0, targetLocal - currentLocal);
+                const toBuyUSD = toBuyLocal * fxRate;
+
+                regionTotalWeight += tw;
+                regionTargetUSD += targetUSD;
+                regionCurrentUSD += currentUSD;
+
+                html += `<tr>
+                    <td class="symbol-cell">${h.symbol}</td>
+                    <td>${h.name}</td>
+                    <td>${h.currency}</td>
+                    <td><input type="number" value="${tw}" min="0" max="100" step="0.5" style="width:60px;background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:4px;padding:3px 6px;text-align:right;" onchange="saveTargetWeight('${h.symbol}',this.value)">%</td>
+                    <td style="text-align:right;">${fmtNum(targetLocal, 0)}</td>
+                    <td style="text-align:right;">${fmtNum(currentLocal, 0)}</td>
+                    <td style="text-align:right;color:${completion>=100?'#4ade80':completion>=50?'#fbbf24':'#f87171'}">${fmtNum(completion,1)}%</td>
+                    <td style="text-align:right;">${fmtNum(toBuyLocal, 0)}</td>
+                    <td style="text-align:right;">$${fmtNum(toBuyUSD, 0)}</td>
+                </tr>`;
+            });
+
+            const regionToBuyUSD = Math.max(0, regionTargetUSD - regionCurrentUSD);
+            html += `</tbody><tfoot><tr style="border-top:2px solid #334155;font-weight:bold;">
+                <td colspan="3">${region} Subtotal</td>
+                <td style="text-align:right;">${fmtNum(regionTotalWeight,1)}%</td>
+                <td></td><td></td><td></td><td></td>
+                <td style="text-align:right;">$${fmtNum(regionToBuyUSD, 0)}</td>
+            </tr></tfoot></table></div>`;
+        });
+
+        container.innerHTML = html;
+    }
+
+    async function saveBudget(val) {
+        APP.portfolioBudget = val;
+        try { await apiCall('/portfolio-config', 'POST', { key: 'totalBudget', value: val }); } catch(e) {}
+        renderTab5Portfolio();
+    }
+
+    async function saveTargetWeight(symbol, weight) {
+        const h = APP.holdings.find(x => x.symbol === symbol);
+        if (h) h.target_weight = parseFloat(weight) || 0;
+        try { await apiCall('/holdings/target-weight', 'POST', { symbol, target_weight: parseFloat(weight) || 0 }); } catch(e) {}
+        renderTab5Portfolio();
+    }
+
+    // ===== 数据管理 Tab =====
+    function renderTab5() {
+        const container = document.getElementById('tab-6');
+
+        const html = `
+            <div class="data-management">
+                <div class="data-section">
+                    <div class="data-section-title">User Info</div>
+                    <div class="user-info">
+                        <div><strong>Username:</strong> ${APP.username}</div>
+                        <div><strong>Holdings:</strong> ${APP.holdings.length}</div>
+                        <div><strong>Trades:</strong> ${APP.trades.length}</div>
+                        <div><strong>Alerts:</strong> ${APP.alerts.length}</div>
+                    </div>
+                </div>
+
+                <div class="data-section">
+                    <div class="data-section-title">Change Password</div>
+                    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+                        <div class="form-group" style="margin-bottom:0;">
+                            <label class="form-label">Current Password</label>
+                            <input type="password" id="oldPwd" class="form-input" style="width:160px;" placeholder="Current password">
+                        </div>
+                        <div class="form-group" style="margin-bottom:0;">
+                            <label class="form-label">New Password</label>
+                            <input type="password" id="newPwd" class="form-input" style="width:160px;" placeholder="New password (min 4 chars)">
+                        </div>
+                        <div class="form-group" style="margin-bottom:0;">
+                            <label class="form-label">Confirm Password</label>
+                            <input type="password" id="confirmPwd" class="form-input" style="width:160px;" placeholder="Confirm new password">
+                        </div>
+                        <button class="btn-primary" onclick="changePassword()">Update</button>
+                    </div>
+                </div>
+
+                <div class="data-section">
+                    <div class="data-section-title">Data Management</div>
+                    <div class="data-buttons">
+                        <button class="btn-primary" onclick="exportData()">Export Data</button>
+                        <button class="btn-primary" onclick="document.getElementById('importFile').click()">Import Data</button>
+                        <input type="file" id="importFile" accept=".json" onchange="importData(event)">
+                    </div>
+                </div>
+            </div>
+        `;
+
+        container.innerHTML = html;
+    }
+
+    async function changePassword() {
+        const oldPwd = document.getElementById('oldPwd').value;
+        const newPwd = document.getElementById('newPwd').value;
+        const confirmPwd = document.getElementById('confirmPwd').value;
+        if (!oldPwd || !newPwd) return alert('Please enter old and new password');
+        if (newPwd.length < 4) return alert('New password must be at least 4 characters');
+        if (newPwd !== confirmPwd) return alert('Passwords do not match, please try again');
+        try {
+            await apiCall('/change-password', 'POST', { oldPassword: oldPwd, newPassword: newPwd });
+            alert('Password changed successfully! Please sign in again with your new password.');
+            // Force logout and re-login with new password
+            APP.token = null;
+            APP.username = null;
+            localStorage.removeItem('kxm_token');
+            localStorage.removeItem('kxm_user');
+            showLogin();
+        } catch(e) { alert('Change failed, please check if old password is correct'); }
+    }
+
+    function openModal(modalId) {
+        const modal = document.getElementById(modalId);
+        if (modal) modal.classList.add('show');
+    }
+
+    function closeModal(modalId) {
+        const modal = document.getElementById(modalId);
+        if (modal) modal.classList.remove('show');
+    }
+
+    async function autoFillTrade() {
+        let sym = document.getElementById('tradeSymbol').value.trim();
+        if (!sym) return;
+        sym = sym.toUpperCase();
+        document.getElementById('tradeSymbol').value = sym;
+
+        // Look up from existing holdings
+        const match = APP.holdings.find(h => h.symbol.toUpperCase() === sym);
+        if (match) {
+            document.getElementById('tradeName').value = match.name;
+            document.getElementById('tradeCurrency').value = match.currency;
+            document.getElementById('tradeRegion').value = match.region;
+            if (match.attribute) document.getElementById('tradeAttribute').value = match.attribute;
+            if (match.sector) document.getElementById('tradeSector').value = match.sector;
+            const pd = APP.prices[match.symbol];
+            const price = pd && pd.price ? pd.price : match.avg_cost;
+            document.getElementById('tradePrice').value = price.toFixed(2);
+            return;
+        }
+
+        // Not in holdings — call server lookup API
+        try {
+            const nameEl = document.getElementById('tradeName');
+            nameEl.value = '查询中...';
+            const data = await fetch(`${API_BASE}/stock-lookup?symbol=${encodeURIComponent(sym)}`).then(r => r.json());
+            if (data.found) {
+                nameEl.value = data.name;
+                document.getElementById('tradeCurrency').value = data.currency;
+                document.getElementById('tradeRegion').value = data.region;
+                if (data.price > 0) document.getElementById('tradePrice').value = data.price.toFixed(2);
+                // Correct the symbol if Yahoo returns a different one
+                if (data.symbol && data.symbol !== sym) {
+                    document.getElementById('tradeSymbol').value = data.symbol;
+                }
+            } else {
+                nameEl.value = '';
+                // Fallback: detect from suffix
+                if (sym.endsWith('.HK')) {
+                    document.getElementById('tradeCurrency').value = 'HKD';
+                    document.getElementById('tradeRegion').value = '中国';
+                } else if (sym.endsWith('.T')) {
+                    document.getElementById('tradeCurrency').value = 'JPY';
+                    document.getElementById('tradeRegion').value = '日本';
+                } else if (sym.endsWith('.SS') || sym.endsWith('.SZ')) {
+                    document.getElementById('tradeCurrency').value = 'CNY';
+                    document.getElementById('tradeRegion').value = '中国';
+                } else {
+                    document.getElementById('tradeCurrency').value = 'USD';
+                    document.getElementById('tradeRegion').value = '美国';
+                }
+            }
+        } catch(e) {
+            console.warn('Stock lookup failed:', e.message);
+            document.getElementById('tradeName').value = '';
+        }
+    }
+
+    async function autoFillAlert() {
+        let sym = document.getElementById('alertSymbol').value.trim().toUpperCase();
+        if (!sym) return;
+        document.getElementById('alertSymbol').value = sym;
+        const match = APP.holdings.find(h => h.symbol.toUpperCase() === sym);
+        if (match) {
+            document.getElementById('alertName').value = match.name;
+            return;
+        }
+        try {
+            document.getElementById('alertName').value = '查询中...';
+            const data = await fetch(`${API_BASE}/stock-lookup?symbol=${encodeURIComponent(sym)}`).then(r => r.json());
+            document.getElementById('alertName').value = data.found ? data.name : '';
+            if (data.symbol && data.symbol !== sym) document.getElementById('alertSymbol').value = data.symbol;
+        } catch(e) {
+            document.getElementById('alertName').value = '';
+        }
+    }
+
+    async function submitTrade() {
+        const symbol = document.getElementById('tradeSymbol').value;
+        const name = document.getElementById('tradeName').value;
+        const type = document.getElementById('tradeType').value;
+        const qty = parseFloat(document.getElementById('tradeQty').value);
+        const price = parseFloat(document.getElementById('tradePrice').value);
+        const fee = parseFloat(document.getElementById('tradeFee').value) || 0;
+        const date = document.getElementById('tradeDate').value;
+        const currency = document.getElementById('tradeCurrency').value;
+        const market = document.getElementById('tradeMarket').value;
+        const region = document.getElementById('tradeRegion').value;
+        const attribute = document.getElementById('tradeAttribute').value;
+        const sector = document.getElementById('tradeSector').value;
+
+        if (!symbol || !name || !qty || !price || !date) {
+            alert('Please fill all required fields');
+            return;
+        }
+
+        try {
+            await apiCall('/trade', 'POST', {
+                symbol, name, type, qty, price, fee, date, currency, market, region, attribute, sector
+            });
+
+            // Reload all data in parallel then re-render
+            await Promise.all([loadHoldings(), loadTrades(), updateFXRates()]);
+            await updatePrices();
+
+            closeModal('tradeModal');
+
+            // Re-render ALL tabs to sync data
+            renderTab0();
+            renderTab1();
+            renderTab2();
+            renderTab4();
+            if (typeof renderTab5Portfolio === 'function') {
+                try { renderTab5Portfolio(); } catch(e) {}
+            }
+
+            // Reset form
+            document.getElementById('tradeSymbol').value = '';
+            document.getElementById('tradeName').value = '';
+            document.getElementById('tradeQty').value = '';
+            document.getElementById('tradePrice').value = '';
+            document.getElementById('tradeFee').value = '';
+            document.getElementById('tradeAttribute').value = '';
+            document.getElementById('tradeSector').value = '';
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('tradeDate').value = today;
+        } catch (error) {
+            alert('Failed to save trade: ' + error.message);
+        }
+    }
+
+    async function submitAlert() {
+        const symbol = document.getElementById('alertSymbol').value;
+        const name = document.getElementById('alertName').value;
+        const condition = document.getElementById('alertCondition').value;
+        const price = parseFloat(document.getElementById('alertPrice').value);
+
+        if (!symbol || !name || !price) {
+            alert('Please fill all required fields');
+            return;
+        }
+
+        try {
+            await apiCall('/alert', 'POST', { symbol, name, condition, price });
+
+            await loadAlerts();
+
+            closeModal('alertModal');
+            renderTab3();
+
+            // Reset form
+            document.getElementById('alertSymbol').value = '';
+            document.getElementById('alertName').value = '';
+            document.getElementById('alertPrice').value = '';
+        } catch (error) {
+            alert('Failed to create alert: ' + error.message);
+        }
+    }
+
+    async function toggleAlert(id, active) {
+        try {
+            await apiCall(`/alert/${id}`, 'PUT', { active });
+            await loadAlerts();
+            renderTab3();
+        } catch (error) {
+            alert('Failed to update alert: ' + error.message);
+        }
+    }
+
+    async function deleteAlert(id) {
+        if (!confirm('确定要删除这个提醒吗？')) return;
+
+        try {
+            await apiCall(`/alert/${id}`, 'DELETE');
+            await loadAlerts();
+            renderTab3();
+        } catch (error) {
+            alert('Failed to delete alert: ' + error.message);
+        }
+    }
+
+    function selectStock(stock) {
+        APP.selectedStock = stock;
+        renderTab1();
+    }
+
+    async function exportData() {
+        try {
+            const data = await apiCall('/export');
+            const json = JSON.stringify(data, null, 2);
+            const blob = new Blob([json], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `kxm-data-${new Date().toISOString().split('T')[0]}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        } catch (error) {
+            alert('Failed to export data: ' + error.message);
+        }
+    }
+
+    async function importData(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        try {
+            const json = await file.text();
+            const data = JSON.parse(json);
+
+            if (!data.holdings || !Array.isArray(data.holdings)) {
+                alert('Invalid data format');
+                return;
+            }
+
+            await apiCall('/import-holdings', 'POST', { holdings: data.holdings });
+            await loadHoldings();
+            await updatePrices();
+            renderTab0();
+
+            alert('Import successful');
+        } catch (error) {
+            alert('Import failed: ' + error.message);
+        }
+
+        event.target.value = '';
+    }
+
+    // ============ Init ============
+    window.addEventListener('load', async () => {
+        if (APP.token) {
+            // 验证token是否仍然有效（服务器重启后session会清空）
+            try {
+                const resp = await fetch(API_BASE + '/verify', {
+                    headers: { 'x-token': APP.token }
+                });
+                const data = await resp.json();
+                if (data.valid) {
+                    showApp();
+                } else {
+                    // token无效，清除本地存储，显示登录页
+                    localStorage.removeItem('kxm_token');
+                    localStorage.removeItem('kxm_user');
+                    APP.token = null;
+                    APP.username = null;
+                    showLogin();
+                }
+            } catch (e) {
+                // 网络错误，显示登录页
+                localStorage.removeItem('kxm_token');
+                localStorage.removeItem('kxm_user');
+                APP.token = null;
+                APP.username = null;
+                showLogin();
+            }
+        } else {
+            showLogin();
+        }
+    });
+</script>
+</body>
+</html>
