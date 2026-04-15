@@ -1881,7 +1881,7 @@
         }
 
         let html = `
-            <div style="display:grid;grid-template-columns:1fr 1fr 1fr 0.3fr 1fr;gap:15px;margin-bottom:30px;align-items:stretch;">
+            <div class="stat-cards">
                 <div class="stat-card">
                     <div class="stat-label">Total Value</div>
                     <div class="stat-value" style="color:#e2e8f0;">$${fmtNum(totalValue)}</div>
@@ -1894,7 +1894,6 @@
                     <div class="stat-label">Unrealized P&L</div>
                     <div class="stat-value ${totalPL >= 0 ? 'price-positive' : 'price-negative'}">${totalPL >= 0 ? '+' : ''}$${fmtNum(totalPL)}</div>
                 </div>
-                <div></div>
                 <div class="stat-card">
                     <div class="stat-label">Return Rate</div>
                     <div class="stat-value ${totalPLPercent >= 0 ? 'price-positive' : 'price-negative'}">${formatPercent(totalPLPercent)}</div>
@@ -1906,8 +1905,11 @@
                     const pct = s.cost > 0 ? (pl / s.cost * 100) : 0;
                     const flag = r==='美国'?'🇺🇸':r==='中国'?'🇨🇳':r==='日本'?'🇯🇵':'🌐';
                     const barColor = r==='美国'?'#C1A673':r==='中国'?'#E8B84B':r==='日本'?'#D4A574':'#8B9CB6';
-                    // Region budget
-                    const regionBudget = parseFloat(APP.regionBudgets[r]) || 0;
+                    // Region budget (stored in local currency, convert to USD for comparison)
+                    const regionBudgetLocal = parseFloat(APP.regionBudgets[r]) || 0;
+                    const rCur = getRegionCurrency(r);
+                    const rCurSym = getRegionCurrencySymbol(rCur);
+                    const regionBudget = regionBudgetLocal * (APP.FX_RATES[rCur] || 1); // USD
                     const budgetUsedPct = regionBudget > 0 ? (s.value / regionBudget * 100) : 0;
                     const budgetRemaining = regionBudget - s.value;
                     // Today's P&L for this region
@@ -1934,14 +1936,15 @@
                         </div>
                         <div style="margin-top:8px;padding:6px 8px;background:rgba(193,166,115,0.06);border-radius:6px;border:1px solid rgba(193,166,115,0.08);">
                             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
-                                <span style="font-size:9px;color:#64748b;letter-spacing:0.5px;">BUDGET</span>
+                                <span style="font-size:9px;color:#64748b;letter-spacing:0.5px;">BUDGET (${rCur})</span>
                                 <div style="display:flex;align-items:center;gap:4px;">
-                                    <span style="font-size:11px;color:#64748b;">$</span>
-                                    <input type="number" value="${regionBudget||''}" placeholder="Set budget"
+                                    <span style="font-size:11px;color:#64748b;">${rCurSym}</span>
+                                    <input type="number" value="${regionBudgetLocal||''}" placeholder="Set budget"
                                         style="width:90px;background:rgba(15,23,42,0.6);border:1px solid rgba(193,166,115,0.15);color:#C1A673;border-radius:4px;padding:2px 6px;font-size:11px;font-weight:600;font-family:Montserrat,sans-serif;text-align:right;outline:none;"
                                         onfocus="this.style.borderColor='rgba(193,166,115,0.4)'"
                                         onblur="this.style.borderColor='rgba(193,166,115,0.15)'"
                                         onchange="saveRegionBudget('${r}',this.value)">
+                                    ${rCur !== 'USD' ? `<span style="font-size:9px;color:#94a3b8;margin-left:2px;">≈$${fmtNum(regionBudget)}</span>` : ''}
                                 </div>
                             </div>
                             ${regionBudget > 0 ? `
@@ -2380,8 +2383,8 @@
 
                     blocksHtml += '<div style="padding:10px 10px;border:1px solid rgba(193,166,115,0.10);border-radius:10px;'+(ri>0?'margin-top:12px;':'')+';position:relative;">'
                         + '<div style="display:flex;align-items:stretch;gap:0;">'
-                        // Flag + country - positioned at the far left edge
-                        + '<div style="display:flex;align-items:center;gap:4px;flex-shrink:0;padding:0 8px 0 0;margin-left:-6px;">'
+                        // Flag + country - shifted right ~20mm (75px)
+                        + '<div style="display:flex;align-items:center;gap:4px;flex-shrink:0;padding:0 12px 0 75px;">'
                         + '<span style="font-size:13px;">'+flag+'</span>'
                         + '<span style="color:'+rColor+';font-weight:600;font-size:11px;font-family:Montserrat,sans-serif;">'+r+'</span>'
                         + '</div>'
@@ -2992,13 +2995,29 @@
     }
 
     // ===== 投资组合 Tab =====
+    // Region → primary local currency mapping
+    function getRegionCurrency(region) {
+        const map = {'中国':'CNY','日本':'JPY','美国':'USD'};
+        return map[region] || 'USD';
+    }
+    function getRegionCurrencySymbol(cur) {
+        return cur==='CNY'?'¥':cur==='JPY'?'¥':cur==='HKD'?'HK$':'$';
+    }
+    // Convert local budget to USD
+    function regionBudgetToUSD(region) {
+        const localVal = parseFloat(APP.regionBudgets[region]) || 0;
+        const cur = getRegionCurrency(region);
+        const fxRate = APP.FX_RATES[cur] || 1;
+        return localVal * fxRate;
+    }
+
     function renderTab5Portfolio() {
         const container = document.getElementById('tab-5');
         const regions = [...new Set(APP.holdings.map(h => h.region).filter(Boolean))];
 
-        // Total budget = sum of all region budgets (auto-calculated)
+        // Total budget USD = sum of each region's local budget converted to USD
         let totalBudget = 0;
-        regions.forEach(r => { totalBudget += parseFloat(APP.regionBudgets[r]) || 0; });
+        regions.forEach(r => { totalBudget += regionBudgetToUSD(r); });
         APP.portfolioBudget = totalBudget;
 
         const flags = {'美国':'🇺🇸','中国':'🇨🇳','日本':'🇯🇵','香港':'🇭🇰'};
@@ -3015,17 +3034,21 @@
             <div style="display:flex;gap:10px;flex-wrap:wrap;">
                 ${regions.map(r => {
                     const rb = parseFloat(APP.regionBudgets[r]) || 0;
+                    const cur = getRegionCurrency(r);
+                    const curSym = getRegionCurrencySymbol(cur);
+                    const rbUSD = regionBudgetToUSD(r);
                     const flag = flags[r] || '🌐';
-                    const pct = totalBudget > 0 ? (rb / totalBudget * 100) : 0;
-                    return '<div style="flex:1;min-width:200px;padding:10px 14px;background:rgba(30,41,59,0.4);border:1px solid rgba(193,166,115,0.10);border-radius:10px;">'
+                    const pct = totalBudget > 0 ? (rbUSD / totalBudget * 100) : 0;
+                    return '<div style="flex:1;min-width:240px;padding:10px 14px;background:rgba(30,41,59,0.4);border:1px solid rgba(193,166,115,0.10);border-radius:10px;">'
                         + '<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">'
                         + '<span style="font-size:14px;">'+flag+'</span>'
                         + '<span style="color:#e2e8f0;font-size:13px;font-weight:600;font-family:Montserrat,sans-serif;">'+r+'</span>'
                         + '<span style="color:#64748b;font-size:10px;margin-left:auto;">'+fmtNum(pct,1)+'% of total</span>'
                         + '</div>'
-                        + '<div style="display:flex;align-items:center;gap:6px;">'
-                        + '<label style="color:#94a3b8;font-size:11px;">Budget (USD):</label>'
+                        + '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'
+                        + '<label style="color:#94a3b8;font-size:11px;">Budget ('+cur+'):</label>'
                         + '<input type="number" class="form-input" style="width:140px;font-size:13px;" value="'+rb+'" onchange="saveRegionBudget(\''+r+'\',this.value)" placeholder="0">'
+                        + (cur !== 'USD' ? '<span style="color:#C1A673;font-size:12px;font-weight:600;">≈ $'+fmtNum(rbUSD)+'</span>' : '')
                         + '</div>'
                         + '</div>';
                 }).join('')}
@@ -3035,10 +3058,10 @@
         regions.forEach(region => {
             const regionHoldings = APP.holdings.filter(h => h.region === region && h.qty > 0);
             if (regionHoldings.length === 0) return;
-            const cur = regionHoldings[0]?.currency || 'USD';
+            const cur = getRegionCurrency(region);
             const fxRate = APP.FX_RATES[cur] || 1;
-            const regionBudgetUSD = parseFloat(APP.regionBudgets[region]) || 0;
-            const regionBudgetLocal = regionBudgetUSD / fxRate;
+            const regionBudgetLocal = parseFloat(APP.regionBudgets[region]) || 0;
+            const regionBudgetUSD = regionBudgetLocal * fxRate;
             const flag = flags[region] || '🌐';
 
             let regionTotalWeight = 0;
@@ -3114,9 +3137,10 @@
 
     async function saveRegionBudget(region, val) {
         APP.regionBudgets[region] = parseFloat(val) || 0;
-        // Auto-calculate total budget as sum of all region budgets
+        // Auto-calculate total budget USD = sum of each region's local budget * FX rate
         let total = 0;
-        Object.values(APP.regionBudgets).forEach(v => { total += parseFloat(v) || 0; });
+        const allRegions = [...new Set(APP.holdings.map(h => h.region).filter(Boolean))];
+        allRegions.forEach(r => { total += regionBudgetToUSD(r); });
         APP.portfolioBudget = total;
         try {
             await apiCall('/portfolio-config', 'POST', { key: 'budget_' + region, value: val });
