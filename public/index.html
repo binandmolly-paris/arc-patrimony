@@ -1089,6 +1089,7 @@
         currencyFilter: '全部',
         holdingsSort: { key: null, dir: 'desc' },
         portfolioBudget: 0,
+        regionBudgets: {},
         FX_RATES: {
             'JPY': 0.0067,
             'CNY': 0.138,
@@ -1524,6 +1525,11 @@
         try {
             const config = await apiCall('/portfolio-config');
             APP.portfolioBudget = config.totalBudget || 0;
+            // Load per-region budgets
+            APP.regionBudgets = {};
+            Object.keys(config).forEach(k => {
+                if (k.startsWith('budget_')) APP.regionBudgets[k.replace('budget_','')] = parseFloat(config[k]) || 0;
+            });
         } catch(e) {}
 
         // Update prices every 30 seconds
@@ -1875,7 +1881,7 @@
         }
 
         let html = `
-            <div class="stat-cards">
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr 0.3fr 1fr;gap:15px;margin-bottom:30px;align-items:stretch;">
                 <div class="stat-card">
                     <div class="stat-label">Total Value</div>
                     <div class="stat-value" style="color:#e2e8f0;">$${fmtNum(totalValue)}</div>
@@ -1888,6 +1894,7 @@
                     <div class="stat-label">Unrealized P&L</div>
                     <div class="stat-value ${totalPL >= 0 ? 'price-positive' : 'price-negative'}">${totalPL >= 0 ? '+' : ''}$${fmtNum(totalPL)}</div>
                 </div>
+                <div></div>
                 <div class="stat-card">
                     <div class="stat-label">Return Rate</div>
                     <div class="stat-value ${totalPLPercent >= 0 ? 'price-positive' : 'price-negative'}">${formatPercent(totalPLPercent)}</div>
@@ -1899,6 +1906,10 @@
                     const pct = s.cost > 0 ? (pl / s.cost * 100) : 0;
                     const flag = r==='美国'?'🇺🇸':r==='中国'?'🇨🇳':r==='日本'?'🇯🇵':'🌐';
                     const barColor = r==='美国'?'#C1A673':r==='中国'?'#E8B84B':r==='日本'?'#D4A574':'#8B9CB6';
+                    // Region budget
+                    const regionBudget = parseFloat(APP.regionBudgets[r]) || 0;
+                    const budgetUsedPct = regionBudget > 0 ? (s.value / regionBudget * 100) : 0;
+                    const budgetRemaining = regionBudget - s.value;
                     // Today's P&L for this region
                     let todayPL = 0;
                     activeHoldings.filter(h => h.region === r).forEach(h => {
@@ -1921,8 +1932,33 @@
                                 <div class="${pl>=0?'price-positive':'price-negative'}" style="font-size:11px;margin-top:2px;opacity:0.7;">${pl>=0?'+':''}$${fmtNum(pl)}</div>
                             </div>
                         </div>
-                        <div style="margin-top:8px;background:rgba(30,41,59,0.6);border-radius:4px;height:3px;overflow:hidden;">
-                            <div style="width:${Math.min(100, s.value/totalValue*100)}%;height:100%;background:${barColor};border-radius:4px;box-shadow:0 0 8px ${barColor}40;"></div>
+                        <div style="margin-top:8px;padding:6px 8px;background:rgba(193,166,115,0.06);border-radius:6px;border:1px solid rgba(193,166,115,0.08);">
+                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+                                <span style="font-size:9px;color:#64748b;letter-spacing:0.5px;">BUDGET</span>
+                                <div style="display:flex;align-items:center;gap:4px;">
+                                    <span style="font-size:11px;color:#64748b;">$</span>
+                                    <input type="number" value="${regionBudget||''}" placeholder="Set budget"
+                                        style="width:90px;background:rgba(15,23,42,0.6);border:1px solid rgba(193,166,115,0.15);color:#C1A673;border-radius:4px;padding:2px 6px;font-size:11px;font-weight:600;font-family:Montserrat,sans-serif;text-align:right;outline:none;"
+                                        onfocus="this.style.borderColor='rgba(193,166,115,0.4)'"
+                                        onblur="this.style.borderColor='rgba(193,166,115,0.15)'"
+                                        onchange="saveRegionBudget('${r}',this.value)">
+                                </div>
+                            </div>
+                            ${regionBudget > 0 ? `
+                            <div style="background:rgba(30,41,59,0.8);border-radius:3px;height:4px;overflow:hidden;">
+                                <div style="width:${Math.min(100, budgetUsedPct)}%;height:100%;background:${budgetUsedPct>100?'#f87171':budgetUsedPct>80?'#fbbf24':barColor};border-radius:3px;transition:width 0.3s;"></div>
+                            </div>
+                            <div style="display:flex;justify-content:space-between;margin-top:3px;">
+                                <span style="font-size:10px;color:${budgetUsedPct>100?'#f87171':budgetUsedPct>80?'#fbbf24':'#94a3b8'};">${fmtNum(budgetUsedPct,1)}% invested</span>
+                                <span style="font-size:10px;color:${budgetRemaining>=0?'#4ade80':'#f87171'};">${budgetRemaining>=0?'Remaining':'Over'}: $${fmtNum(Math.abs(budgetRemaining))}</span>
+                            </div>` : `
+                            <div style="background:rgba(30,41,59,0.6);border-radius:3px;height:4px;overflow:hidden;">
+                                <div style="width:${Math.min(100, s.value/totalValue*100)}%;height:100%;background:${barColor};border-radius:3px;box-shadow:0 0 8px ${barColor}40;"></div>
+                            </div>
+                            <div style="display:flex;justify-content:space-between;margin-top:3px;">
+                                <span style="font-size:10px;color:#94a3b8;">Portfolio share: ${fmtNum(s.value/totalValue*100,1)}%</span>
+                                <span style="font-size:10px;color:#64748b;">No budget set</span>
+                            </div>`}
                         </div>
                         <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;padding-top:6px;border-top:1px solid rgba(193,166,115,0.06);">
                             <div style="text-align:left;">
@@ -1955,7 +1991,7 @@
                         <svg width="18" height="18" viewBox="0 0 18 18"><path d="M3,3 L8,3 L8,8 L3,8Z" fill="#4ade80" opacity="0.7" rx="1"/><path d="M10,3 L15,3 L15,7 L10,7Z" fill="#f87171" opacity="0.7" rx="1"/><path d="M3,10 L8,10 L8,15 L3,15Z" fill="#4ade80" opacity="0.5" rx="1"/><path d="M10,9 L15,9 L15,15 L10,15Z" fill="#f87171" opacity="0.5" rx="1"/></svg>
                         Today's Movers by Region
                     </div>
-                    <div id="movers-viz" style="overflow-x:auto;padding-top:16px;"></div>
+                    <div id="movers-viz" style="overflow-x:auto;padding-top:32px;"></div>
                 </div>
             </div>
         `;
@@ -2015,6 +2051,50 @@
                         <span style="color:#94a3b8;font-size:13px;">Currency:</span>
                         ${allCurrencies.map(c => `<button onclick="filterCurrency('${c}')" style="padding:4px 14px;border-radius:16px;border:1px solid ${APP.currencyFilter===c?'#C1A673':'#334155'};background:${APP.currencyFilter===c?'#C1A673':'transparent'};color:${APP.currencyFilter===c?'#fff':'#94a3b8'};cursor:pointer;font-size:12px;">${c}</button>`).join('')}
                     </div>
+                    ${(() => {
+                        // Show region budget bar when a specific region is selected
+                        if (APP.regionFilter !== '全部') {
+                            const rb = parseFloat(APP.regionBudgets[APP.regionFilter]) || 0;
+                            if (rb > 0) {
+                                const regionActiveHoldings = enriched.filter(d => !d.isSold);
+                                const regionMV = regionActiveHoldings.reduce((s, d) => s + d.mv, 0);
+                                const usedPct = rb > 0 ? (regionMV / rb * 100) : 0;
+                                const rem = rb - regionMV;
+                                const bColor = usedPct > 100 ? '#f87171' : usedPct > 80 ? '#fbbf24' : '#C1A673';
+                                return '<div style="padding:10px 14px;margin-bottom:12px;background:rgba(193,166,115,0.06);border:1px solid rgba(193,166,115,0.12);border-radius:8px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;">'
+                                    + '<div style="font-size:12px;color:#94a3b8;">Budget:</div>'
+                                    + '<div style="font-size:14px;color:#C1A673;font-weight:600;font-family:Montserrat,sans-serif;">$' + fmtNum(rb) + '</div>'
+                                    + '<div style="flex:1;min-width:120px;background:rgba(30,41,59,0.8);border-radius:3px;height:6px;overflow:hidden;">'
+                                    + '<div style="width:' + Math.min(100,usedPct) + '%;height:100%;background:' + bColor + ';border-radius:3px;transition:width 0.3s;"></div></div>'
+                                    + '<div style="font-size:12px;color:' + bColor + ';font-weight:600;">' + fmtNum(usedPct,1) + '% used</div>'
+                                    + '<div style="font-size:12px;color:#94a3b8;">Invested: <span style="color:#e2e8f0;font-weight:600;">$' + fmtNum(regionMV) + '</span></div>'
+                                    + '<div style="font-size:12px;color:#94a3b8;">' + (rem >= 0 ? 'Remaining' : 'Over') + ': <span style="color:' + (rem >= 0 ? '#4ade80' : '#f87171') + ';font-weight:600;">$' + fmtNum(Math.abs(rem)) + '</span></div>'
+                                    + '</div>';
+                            }
+                        }
+                        // When showing all regions, show a compact summary
+                        // Total budget = sum of region budgets
+                        const allRegions = [...new Set(APP.holdings.filter(h => h.qty > 0).map(h => h.region).filter(Boolean))];
+                        let totalBudget = 0;
+                        allRegions.forEach(r => { totalBudget += parseFloat(APP.regionBudgets[r]) || 0; });
+                        if (totalBudget > 0 && APP.regionFilter === '全部') {
+                            const totalMV = enriched.filter(d => !d.isSold).reduce((s, d) => s + d.mv, 0);
+                            const totalUsedPct = totalBudget > 0 ? (totalMV / totalBudget * 100) : 0;
+                            return '<div style="padding:8px 14px;margin-bottom:12px;background:rgba(193,166,115,0.04);border:1px solid rgba(193,166,115,0.08);border-radius:8px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:12px;">'
+                                + '<span style="color:#94a3b8;">Total Budget:</span>'
+                                + '<span style="color:#C1A673;font-weight:600;">$' + fmtNum(totalBudget) + '</span>'
+                                + '<span style="color:#64748b;">|</span>'
+                                + allRegions.map(r => {
+                                    const rBudget = parseFloat(APP.regionBudgets[r]) || 0;
+                                    const flag = r==='美国'?'🇺🇸':r==='中国'?'🇨🇳':r==='日本'?'🇯🇵':'🌐';
+                                    return rBudget > 0 ? '<span>' + flag + ' $' + fmtNum(rBudget) + '</span>' : '';
+                                }).filter(Boolean).join('<span style="color:#334155;">·</span>')
+                                + '<span style="color:#64748b;">|</span>'
+                                + '<span style="color:#94a3b8;">Used: <span style="color:' + (totalUsedPct>100?'#f87171':'#e2e8f0') + ';font-weight:600;">' + fmtNum(totalUsedPct,1) + '%</span></span>'
+                                + '</div>';
+                        }
+                        return '';
+                    })()}
                     <div style="overflow:auto;max-height:70vh;">
                     <table class="holdings-table" style="font-size:13px;table-layout:fixed;width:100%;">
                         <colgroup>
@@ -2103,6 +2183,21 @@
             soldList.forEach(d => { soldTotalPL += (d.pl || 0); });
 
             html += `</tbody><tfoot>`;
+            // Budget row for filtered region
+            if (APP.regionFilter !== '全部') {
+                const rb = parseFloat(APP.regionBudgets[APP.regionFilter]) || 0;
+                if (rb > 0) {
+                    const usedPct = rb > 0 ? (filteredValue / rb * 100) : 0;
+                    const rem = rb - filteredValue;
+                    html += `<tr style="border-top:1px solid rgba(193,166,115,0.15);color:#C1A673;">
+                        <td colspan="5" style="font-size:12px;">Budget: $${fmtNum(rb)}</td>
+                        <td></td><td></td><td></td><td></td>
+                        <td style="text-align:right;font-size:12px;">${fmtNum(usedPct,1)}% used</td>
+                        <td style="text-align:right;font-size:12px;color:${rem>=0?'#4ade80':'#f87171'};">${rem>=0?'Rem':'Over'}: $${fmtNum(Math.abs(rem))}</td>
+                        <td colspan="3"></td>
+                    </tr>`;
+                }
+            }
             html += `<tr style="border-top:2px solid rgba(193,166,115,0.3);font-weight:bold;">
                 <td colspan="5">${filterLabel} Total (${activeList.length} stocks) — USD</td>
                 <td></td><td></td><td></td><td></td>
@@ -2283,10 +2378,10 @@
                     const best3 = rHoldings.slice(0, 3);
                     const worst3 = rHoldings.slice(-3).reverse();
 
-                    blocksHtml += '<div style="padding:8px 10px;border:1px solid rgba(193,166,115,0.10);border-radius:10px;'+(ri>0?'margin-top:6px;':'')+'">'
+                    blocksHtml += '<div style="padding:10px 10px;border:1px solid rgba(193,166,115,0.10);border-radius:10px;'+(ri>0?'margin-top:12px;':'')+';position:relative;">'
                         + '<div style="display:flex;align-items:stretch;gap:0;">'
-                        // Flag + country INSIDE box, between left border and stocks
-                        + '<div style="display:flex;align-items:center;gap:4px;flex-shrink:0;padding:0 12px 0 4px;">'
+                        // Flag + country - positioned at the far left edge
+                        + '<div style="display:flex;align-items:center;gap:4px;flex-shrink:0;padding:0 8px 0 0;margin-left:-6px;">'
                         + '<span style="font-size:13px;">'+flag+'</span>'
                         + '<span style="color:'+rColor+';font-weight:600;font-size:11px;font-family:Montserrat,sans-serif;">'+r+'</span>'
                         + '</div>'
@@ -2901,49 +2996,85 @@
         const container = document.getElementById('tab-5');
         const regions = [...new Set(APP.holdings.map(h => h.region).filter(Boolean))];
 
+        // Total budget = sum of all region budgets (auto-calculated)
+        let totalBudget = 0;
+        regions.forEach(r => { totalBudget += parseFloat(APP.regionBudgets[r]) || 0; });
+        APP.portfolioBudget = totalBudget;
+
+        const flags = {'美国':'🇺🇸','中国':'🇨🇳','日本':'🇯🇵','香港':'🇭🇰'};
+
         let html = `<div class="chart-card" style="margin-bottom:16px;">
             <div class="chart-title">Portfolio Allocation</div>
-            <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">
-                <label style="color:#94a3b8;">Total Budget (USD):</label>
-                <input type="number" id="totalBudget" class="form-input" style="width:200px;" value="${APP.portfolioBudget||0}" onchange="saveBudget(this.value)" placeholder="Total investment budget">
+            <div style="display:flex;gap:16px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <label style="color:#94a3b8;font-size:13px;">Total Budget (USD):</label>
+                    <span style="font-size:18px;color:#C1A673;font-weight:700;font-family:Montserrat,sans-serif;">$${fmtNum(totalBudget)}</span>
+                    <span style="font-size:11px;color:#64748b;margin-left:4px;">= sum of regions</span>
+                </div>
+            </div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                ${regions.map(r => {
+                    const rb = parseFloat(APP.regionBudgets[r]) || 0;
+                    const flag = flags[r] || '🌐';
+                    const pct = totalBudget > 0 ? (rb / totalBudget * 100) : 0;
+                    return '<div style="flex:1;min-width:200px;padding:10px 14px;background:rgba(30,41,59,0.4);border:1px solid rgba(193,166,115,0.10);border-radius:10px;">'
+                        + '<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">'
+                        + '<span style="font-size:14px;">'+flag+'</span>'
+                        + '<span style="color:#e2e8f0;font-size:13px;font-weight:600;font-family:Montserrat,sans-serif;">'+r+'</span>'
+                        + '<span style="color:#64748b;font-size:10px;margin-left:auto;">'+fmtNum(pct,1)+'% of total</span>'
+                        + '</div>'
+                        + '<div style="display:flex;align-items:center;gap:6px;">'
+                        + '<label style="color:#94a3b8;font-size:11px;">Budget (USD):</label>'
+                        + '<input type="number" class="form-input" style="width:140px;font-size:13px;" value="'+rb+'" onchange="saveRegionBudget(\''+r+'\',this.value)" placeholder="0">'
+                        + '</div>'
+                        + '</div>';
+                }).join('')}
             </div>
         </div>`;
 
         regions.forEach(region => {
-            const regionHoldings = APP.holdings.filter(h => h.region === region);
-            const currencySymbol = regionHoldings[0]?.currency === 'CNY' ? '¥' : regionHoldings[0]?.currency === 'JPY' ? '¥' : regionHoldings[0]?.currency === 'HKD' ? 'HK$' : '$';
+            const regionHoldings = APP.holdings.filter(h => h.region === region && h.qty > 0);
+            if (regionHoldings.length === 0) return;
             const cur = regionHoldings[0]?.currency || 'USD';
             const fxRate = APP.FX_RATES[cur] || 1;
-            const budget = parseFloat(APP.portfolioBudget) || 0;
+            const regionBudgetUSD = parseFloat(APP.regionBudgets[region]) || 0;
+            const regionBudgetLocal = regionBudgetUSD / fxRate;
+            const flag = flags[region] || '🌐';
 
             let regionTotalWeight = 0;
-            let regionTargetUSD = 0;
-            let regionCurrentUSD = 0;
+            let regionTargetLocal = 0;
+            let regionCurrentLocal = 0;
 
             html += `<div class="chart-card" style="margin-bottom:16px;">
-                <div class="chart-title" style="margin-bottom:12px;">🏴 ${region} Allocation (${cur})</div>
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                    <div class="chart-title" style="margin-bottom:0;">${flag} ${region} Allocation (${cur})</div>
+                    <div style="font-size:12px;color:#94a3b8;">
+                        Budget: <span style="color:#C1A673;font-weight:600;">$${fmtNum(regionBudgetUSD)}</span>
+                        <span style="color:#64748b;margin-left:4px;">(${cur === 'USD' ? '' : cur+' '}${fmtNum(regionBudgetLocal,0)})</span>
+                    </div>
+                </div>
                 <table class="holdings-table" style="font-size:13px;">
                     <thead><tr>
                         <th>Symbol</th><th>Name</th><th>Currency</th>
-                        <th>Target Wt</th><th>Target Amount(${cur})</th>
-                        <th>Current Value(${cur})</th><th>Achievement%</th>
-                        <th>Need to Buy(${cur})</th><th>USD Equivalent</th>
+                        <th>Target Wt</th><th>Target(${cur})</th>
+                        <th>Current(${cur})</th><th>Achievement</th>
+                        <th>Gap(${cur})</th><th>Gap(USD)</th>
                     </tr></thead><tbody>`;
 
             regionHoldings.forEach(h => {
                 const tw = h.target_weight || 0;
-                const targetUSD = budget * tw / 100;
-                const targetLocal = targetUSD / fxRate;
+                const targetLocal = regionBudgetLocal * tw / 100;
+                const targetUSD = targetLocal * fxRate;
                 const currentPrice = APP.prices[h.symbol]?.price || h.avg_cost;
                 const currentLocal = h.qty * currentPrice;
                 const currentUSD = currentLocal * fxRate;
                 const completion = targetLocal > 0 ? (currentLocal / targetLocal * 100) : 0;
-                const toBuyLocal = Math.max(0, targetLocal - currentLocal);
-                const toBuyUSD = toBuyLocal * fxRate;
+                const gapLocal = targetLocal - currentLocal;
+                const gapUSD = gapLocal * fxRate;
 
                 regionTotalWeight += tw;
-                regionTargetUSD += targetUSD;
-                regionCurrentUSD += currentUSD;
+                regionTargetLocal += targetLocal;
+                regionCurrentLocal += currentLocal;
 
                 html += `<tr>
                     <td class="symbol-cell">${h.symbol}</td>
@@ -2953,17 +3084,22 @@
                     <td style="text-align:right;">${fmtNum(targetLocal, 0)}</td>
                     <td style="text-align:right;">${fmtNum(currentLocal, 0)}</td>
                     <td style="text-align:right;color:${completion>=100?'#4ade80':completion>=50?'#fbbf24':'#f87171'}">${fmtNum(completion,1)}%</td>
-                    <td style="text-align:right;">${fmtNum(toBuyLocal, 0)}</td>
-                    <td style="text-align:right;">$${fmtNum(toBuyUSD, 0)}</td>
+                    <td style="text-align:right;color:${gapLocal>0?'#fbbf24':'#4ade80'}">${gapLocal>0?'+':''}${fmtNum(gapLocal, 0)}</td>
+                    <td style="text-align:right;color:${gapUSD>0?'#fbbf24':'#4ade80'}">$${gapLocal>0?'+':''}${fmtNum(gapUSD, 0)}</td>
                 </tr>`;
             });
 
-            const regionToBuyUSD = Math.max(0, regionTargetUSD - regionCurrentUSD);
-            html += `</tbody><tfoot><tr style="border-top:2px solid #334155;font-weight:bold;">
+            const regionGapLocal = regionTargetLocal - regionCurrentLocal;
+            const regionGapUSD = regionGapLocal * fxRate;
+            const regionCompletion = regionTargetLocal > 0 ? (regionCurrentLocal / regionTargetLocal * 100) : 0;
+            html += `</tbody><tfoot><tr style="border-top:2px solid rgba(193,166,115,0.2);font-weight:bold;">
                 <td colspan="3">${region} Subtotal</td>
                 <td style="text-align:right;">${fmtNum(regionTotalWeight,1)}%</td>
-                <td></td><td></td><td></td><td></td>
-                <td style="text-align:right;">$${fmtNum(regionToBuyUSD, 0)}</td>
+                <td style="text-align:right;">${fmtNum(regionTargetLocal, 0)}</td>
+                <td style="text-align:right;">${fmtNum(regionCurrentLocal, 0)}</td>
+                <td style="text-align:right;color:${regionCompletion>=100?'#4ade80':regionCompletion>=50?'#fbbf24':'#f87171'}">${fmtNum(regionCompletion,1)}%</td>
+                <td style="text-align:right;color:${regionGapLocal>0?'#fbbf24':'#4ade80'}">${regionGapLocal>0?'+':''}${fmtNum(regionGapLocal, 0)}</td>
+                <td style="text-align:right;color:${regionGapUSD>0?'#fbbf24':'#4ade80'}">$${regionGapLocal>0?'+':''}${fmtNum(regionGapUSD, 0)}</td>
             </tr></tfoot></table></div>`;
         });
 
@@ -2974,6 +3110,21 @@
         APP.portfolioBudget = val;
         try { await apiCall('/portfolio-config', 'POST', { key: 'totalBudget', value: val }); } catch(e) {}
         renderTab5Portfolio();
+    }
+
+    async function saveRegionBudget(region, val) {
+        APP.regionBudgets[region] = parseFloat(val) || 0;
+        // Auto-calculate total budget as sum of all region budgets
+        let total = 0;
+        Object.values(APP.regionBudgets).forEach(v => { total += parseFloat(v) || 0; });
+        APP.portfolioBudget = total;
+        try {
+            await apiCall('/portfolio-config', 'POST', { key: 'budget_' + region, value: val });
+            await apiCall('/portfolio-config', 'POST', { key: 'totalBudget', value: String(total) });
+        } catch(e) {}
+        renderTab5Portfolio();
+        // Also refresh dashboard if on tab 0
+        if (APP.currentTab === 0) renderDashboard();
     }
 
     async function saveTargetWeight(symbol, weight) {
