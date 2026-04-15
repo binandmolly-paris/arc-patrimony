@@ -1939,11 +1939,11 @@
                                 <span style="font-size:9px;color:#64748b;letter-spacing:0.5px;">BUDGET (${rCur})</span>
                                 <div style="display:flex;align-items:center;gap:4px;">
                                     <span style="font-size:11px;color:#64748b;">${rCurSym}</span>
-                                    <input type="number" value="${regionBudgetLocal||''}" placeholder="Set budget"
-                                        style="width:90px;background:rgba(15,23,42,0.6);border:1px solid rgba(193,166,115,0.15);color:#C1A673;border-radius:4px;padding:2px 6px;font-size:11px;font-weight:600;font-family:Montserrat,sans-serif;text-align:right;outline:none;"
-                                        onfocus="this.style.borderColor='rgba(193,166,115,0.4)'"
-                                        onblur="this.style.borderColor='rgba(193,166,115,0.15)'"
-                                        onchange="saveRegionBudget('${r}',this.value)">
+                                    <input type="text" value="${fmtBudgetInput(regionBudgetLocal)}" placeholder="Set budget"
+                                        style="width:${rCur==='JPY'?'110':'90'}px;background:rgba(15,23,42,0.6);border:1px solid rgba(193,166,115,0.15);color:#C1A673;border-radius:4px;padding:2px 6px;font-size:11px;font-weight:600;font-family:Montserrat,sans-serif;text-align:right;outline:none;"
+                                        onfocus="this.style.borderColor='rgba(193,166,115,0.4)';this.value=String(${regionBudgetLocal||0}||'')"
+                                        onblur="this.style.borderColor='rgba(193,166,115,0.15)';this.value=fmtBudgetInput(this.value)"
+                                        onchange="saveRegionBudget('${r}',parseBudgetInput(this.value))">
                                     ${rCur !== 'USD' ? `<span style="font-size:9px;color:#94a3b8;margin-left:2px;">≈$${fmtNum(regionBudget)}</span>` : ''}
                                 </div>
                             </div>
@@ -2995,6 +2995,17 @@
     }
 
     // ===== 投资组合 Tab =====
+    // Format budget value with thousand separators for display in input
+    function fmtBudgetInput(val) {
+        const n = parseFloat(val) || 0;
+        if (n === 0) return '';
+        return n.toLocaleString('en-US', { maximumFractionDigits: 0 });
+    }
+    // Parse budget input (strip commas/spaces) back to number
+    function parseBudgetInput(str) {
+        return parseFloat(String(str).replace(/[,\s]/g, '')) || 0;
+    }
+
     // Region → primary local currency mapping
     function getRegionCurrency(region) {
         const map = {'中国':'CNY','日本':'JPY','美国':'USD'};
@@ -3047,7 +3058,7 @@
                         + '</div>'
                         + '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'
                         + '<label style="color:#94a3b8;font-size:11px;">Budget ('+cur+'):</label>'
-                        + '<input type="number" class="form-input" style="width:140px;font-size:13px;" value="'+rb+'" onchange="saveRegionBudget(\''+r+'\',this.value)" placeholder="0">'
+                        + '<input type="text" class="form-input" style="width:'+(cur==='JPY'?'180':'150')+'px;font-size:13px;" value="'+fmtBudgetInput(rb)+'" onfocus="this.value=String('+rb+'||\'\')" onblur="this.value=fmtBudgetInput(this.value)" onchange="saveRegionBudget(\''+r+'\',parseBudgetInput(this.value))" placeholder="0">'
                         + (cur !== 'USD' ? '<span style="color:#C1A673;font-size:12px;font-weight:600;">≈ $'+fmtNum(rbUSD)+'</span>' : '')
                         + '</div>'
                         + '</div>';
