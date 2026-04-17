@@ -2059,27 +2059,30 @@
                         if (APP.regionFilter !== '全部') {
                             const rb = parseFloat(APP.regionBudgets[APP.regionFilter]) || 0;
                             if (rb > 0) {
+                                const cur = getRegionCurrency(APP.regionFilter);
+                                const curSym = getRegionCurrencySymbol(cur);
+                                const rbUSD = regionBudgetToUSD(APP.regionFilter);
                                 const regionActiveHoldings = enriched.filter(d => !d.isSold);
                                 const regionMV = regionActiveHoldings.reduce((s, d) => s + d.mv, 0);
-                                const usedPct = rb > 0 ? (regionMV / rb * 100) : 0;
-                                const rem = rb - regionMV;
+                                const usedPct = rbUSD > 0 ? (regionMV / rbUSD * 100) : 0;
+                                const remUSD = rbUSD - regionMV;
                                 const bColor = usedPct > 100 ? '#f87171' : usedPct > 80 ? '#fbbf24' : '#C1A673';
                                 return '<div style="padding:10px 14px;margin-bottom:12px;background:rgba(193,166,115,0.06);border:1px solid rgba(193,166,115,0.12);border-radius:8px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;">'
                                     + '<div style="font-size:12px;color:#94a3b8;">Budget:</div>'
-                                    + '<div style="font-size:14px;color:#C1A673;font-weight:600;font-family:Montserrat,sans-serif;">$' + fmtNum(rb) + '</div>'
+                                    + '<div style="font-size:14px;color:#C1A673;font-weight:600;font-family:Montserrat,sans-serif;">' + curSym + fmtNum(rb) + (cur !== 'USD' ? ' <span style="font-size:11px;color:#94a3b8;font-weight:400;">≈ $' + fmtNum(rbUSD) + '</span>' : '') + '</div>'
                                     + '<div style="flex:1;min-width:120px;background:rgba(30,41,59,0.8);border-radius:3px;height:6px;overflow:hidden;">'
                                     + '<div style="width:' + Math.min(100,usedPct) + '%;height:100%;background:' + bColor + ';border-radius:3px;transition:width 0.3s;"></div></div>'
                                     + '<div style="font-size:12px;color:' + bColor + ';font-weight:600;">' + fmtNum(usedPct,1) + '% used</div>'
                                     + '<div style="font-size:12px;color:#94a3b8;">Invested: <span style="color:#e2e8f0;font-weight:600;">$' + fmtNum(regionMV) + '</span></div>'
-                                    + '<div style="font-size:12px;color:#94a3b8;">' + (rem >= 0 ? 'Remaining' : 'Over') + ': <span style="color:' + (rem >= 0 ? '#4ade80' : '#f87171') + ';font-weight:600;">$' + fmtNum(Math.abs(rem)) + '</span></div>'
+                                    + '<div style="font-size:12px;color:#94a3b8;">' + (remUSD >= 0 ? 'Remaining' : 'Over') + ': <span style="color:' + (remUSD >= 0 ? '#4ade80' : '#f87171') + ';font-weight:600;">$' + fmtNum(Math.abs(remUSD)) + '</span></div>'
                                     + '</div>';
                             }
                         }
                         // When showing all regions, show a compact summary
-                        // Total budget = sum of region budgets
+                        // Total budget = sum of region budgets converted to USD
                         const allRegions = [...new Set(APP.holdings.filter(h => h.qty > 0).map(h => h.region).filter(Boolean))];
                         let totalBudget = 0;
-                        allRegions.forEach(r => { totalBudget += parseFloat(APP.regionBudgets[r]) || 0; });
+                        allRegions.forEach(r => { totalBudget += regionBudgetToUSD(r); });
                         if (totalBudget > 0 && APP.regionFilter === '全部') {
                             const totalMV = enriched.filter(d => !d.isSold).reduce((s, d) => s + d.mv, 0);
                             const totalUsedPct = totalBudget > 0 ? (totalMV / totalBudget * 100) : 0;
@@ -2089,8 +2092,10 @@
                                 + '<span style="color:#64748b;">|</span>'
                                 + allRegions.map(r => {
                                     const rBudget = parseFloat(APP.regionBudgets[r]) || 0;
+                                    const rCur = getRegionCurrency(r);
+                                    const rCurSym = getRegionCurrencySymbol(rCur);
                                     const flag = r==='美国'?'🇺🇸':r==='中国'?'🇨🇳':r==='日本'?'🇯🇵':'🌐';
-                                    return rBudget > 0 ? '<span>' + flag + ' $' + fmtNum(rBudget) + '</span>' : '';
+                                    return rBudget > 0 ? '<span>' + flag + ' ' + rCurSym + fmtNum(rBudget) + '</span>' : '';
                                 }).filter(Boolean).join('<span style="color:#334155;">·</span>')
                                 + '<span style="color:#64748b;">|</span>'
                                 + '<span style="color:#94a3b8;">Used: <span style="color:' + (totalUsedPct>100?'#f87171':'#e2e8f0') + ';font-weight:600;">' + fmtNum(totalUsedPct,1) + '%</span></span>'
@@ -2190,10 +2195,13 @@
             if (APP.regionFilter !== '全部') {
                 const rb = parseFloat(APP.regionBudgets[APP.regionFilter]) || 0;
                 if (rb > 0) {
-                    const usedPct = rb > 0 ? (filteredValue / rb * 100) : 0;
-                    const rem = rb - filteredValue;
+                    const ftCur = getRegionCurrency(APP.regionFilter);
+                    const ftCurSym = getRegionCurrencySymbol(ftCur);
+                    const rbUSD = regionBudgetToUSD(APP.regionFilter);
+                    const usedPct = rbUSD > 0 ? (filteredValue / rbUSD * 100) : 0;
+                    const rem = rbUSD - filteredValue;
                     html += `<tr style="border-top:1px solid rgba(193,166,115,0.15);color:#C1A673;">
-                        <td colspan="5" style="font-size:12px;">Budget: $${fmtNum(rb)}</td>
+                        <td colspan="5" style="font-size:12px;">Budget: ${ftCurSym}${fmtNum(rb)}${ftCur !== 'USD' ? ' <span style="color:#94a3b8;">≈ $' + fmtNum(rbUSD) + '</span>' : ''}</td>
                         <td></td><td></td><td></td><td></td>
                         <td style="text-align:right;font-size:12px;">${fmtNum(usedPct,1)}% used</td>
                         <td style="text-align:right;font-size:12px;color:${rem>=0?'#4ade80':'#f87171'};">${rem>=0?'Rem':'Over'}: $${fmtNum(Math.abs(rem))}</td>
