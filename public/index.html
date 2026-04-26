@@ -162,6 +162,9 @@
             -webkit-text-fill-color: transparent;
             background-clip: text;
             letter-spacing: 6px;
+            /* Compress vertical footprint ~30% (default ~1.2 → 0.85) */
+            line-height: 0.85;
+            padding: 0;
         }
 
         .login-subtitle {
@@ -171,7 +174,9 @@
             text-align: center;
             color: var(--gold-dark);
             margin-bottom: 30px;
-            letter-spacing: 6px;
+            letter-spacing: 5px;
+            line-height: 1;
+            margin-top: 6px;
         }
 
         .form-group {
@@ -1299,6 +1304,103 @@
             .header-user-badge { font-size: 10px; padding: 3px 8px; }
         }
 
+        /* ============ Foldable phones ============ */
+
+        /* Z Flip closed / Z Fold cover screen / very narrow ≤320px */
+        @media (max-width: 320px) {
+            .login-card { padding: 22px 16px; }
+            .login-brand-icon { width: 64px; height: 64px; margin-bottom: 8px; }
+            .login-title { font-size: 17px; letter-spacing: 2px; }
+            .login-subtitle { font-size: 9px; letter-spacing: 3px; margin-bottom: 18px; }
+            .button-group { flex-direction: column; gap: 8px; }
+            .button-group button { width: 100%; }
+            .form-input { padding: 10px 12px; font-size: 13px; }
+
+            .app-header { padding: 8px 10px; }
+            .app-logo-mini { width: 22px; height: 22px; }
+            .app-title { font-size: 11px; letter-spacing: 0.5px; }
+            .header-user-badge { font-size: 9px; padding: 2px 6px; }
+            .btn-logout { font-size: 10px; padding: 4px 8px; }
+
+            .tabs { padding: 6px 8px; gap: 4px; }
+            .tab { padding: 6px 9px; font-size: 11px; border-radius: 8px; }
+            .tab-content { padding: 10px; }
+
+            .stat-card { padding: 12px 14px; border-radius: 10px; }
+            .stat-value-xl { font-size: 19px; }
+            .stat-value-lg { font-size: 15px; }
+            .stat-label { font-size: 9px; letter-spacing: 1px; }
+            .stat-sub { font-size: 10px; }
+
+            .chart-card { padding: 12px 12px; border-radius: 10px; }
+            .chart-title { font-size: 12px; }
+
+            .modal { padding: 8px; }
+            .modal-content { padding: 18px 14px; border-radius: 12px; }
+            .modal-header { font-size: 16px; }
+
+            .trade-action-grid { gap: 4px; margin-bottom: 16px; }
+            .trade-action-card { padding: 10px 4px; border-radius: 9px; }
+            .trade-action-icon { font-size: 18px; margin-bottom: 4px; }
+            .trade-action-en { font-size: 9px; letter-spacing: 0.5px; }
+            .trade-action-zh { font-size: 9px; }
+
+            .holdings-table th, .holdings-table td,
+            .trades-table th, .trades-table td { padding: 5px 4px; font-size: 10px; }
+        }
+
+        /* Z Fold inner screen ~717x738 (square-ish, wide enough but short) and similar
+           — wide enough to be "tablet-like" but aspect is unusual */
+        @media (min-width: 600px) and (max-width: 900px) and (max-aspect-ratio: 5/4) {
+            .stat-grid {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 10px;
+            }
+            .stat-grid .stat-hero { grid-column: span 2; }
+            .stat-value-xl { font-size: 24px; }
+            .stat-value-lg { font-size: 18px; }
+
+            /* Use vertical real estate instead of horizontal */
+            .charts-row { grid-template-columns: 1fr; }
+            .tab-content { padding: 14px; }
+
+            /* Modal narrower so it doesn't span the fold */
+            .modal-content { max-width: 92vw; }
+        }
+
+        /* True foldable detection — CSS Viewport Segments API.
+           Browsers that support it (Chrome on dual-screen / Edge) get this; others fall back. */
+        @media (horizontal-viewport-segments: 2) {
+            /* Layout uses left segment for primary content, right for secondary
+               Using env() variables for segment widths */
+            .stat-grid {
+                grid-template-columns:
+                    calc(env(viewport-segment-width 0 0, 50%))
+                    calc(env(viewport-segment-width 1 0, 50%));
+                column-gap: env(viewport-segment-left 1 0, 16px);
+            }
+            .stat-grid .stat-hero { grid-column: 1 / -1; }
+            /* Push modal to one segment so the hinge doesn't cut form fields */
+            .modal-content { max-width: env(viewport-segment-width 0 0, 92vw); }
+            .charts-row {
+                grid-template-columns:
+                    calc(env(viewport-segment-width 0 0, 50%))
+                    calc(env(viewport-segment-width 1 0, 50%));
+                column-gap: env(viewport-segment-left 1 0, 16px);
+            }
+        }
+        @media (vertical-viewport-segments: 2) {
+            /* Stacked horizontal fold (book mode): top segment for header/stats, bottom for content */
+            .stat-grid { grid-template-columns: repeat(2, 1fr); }
+            .stat-grid .stat-hero { grid-column: span 2; }
+        }
+
+        /* Fallback: legacy "spanning" CSS spec (Surface Duo old prefix) */
+        @media (spanning: single-fold-vertical) {
+            .stat-grid { grid-template-columns: 1fr 1fr; }
+            .stat-grid .stat-hero { grid-column: span 2; }
+        }
+
         /* Utility */
         .mt-20 {
             margin-top: 20px;
@@ -1672,13 +1774,13 @@
         const loginBtn = document.querySelector('button[data-action="login"]');
 
         if (APP.isRegister) {
-            title.textContent = 'Create Account';
-            subtitle.textContent = 'Create Your Account';
+            title.textContent = 'CREATE ACCOUNT';
+            subtitle.textContent = 'JOIN ARC PATRIMONY';
             loginBtn.textContent = 'Sign Up';
             btn.textContent = 'Have account? Sign In';
         } else {
-            title.textContent = 'Arc Patrimony';
-            subtitle.textContent = 'Value Beyond Generations';
+            title.textContent = 'ARC PATRIMONY';
+            subtitle.textContent = 'VALUE BY GENERATIONS';
             loginBtn.textContent = 'Sign In';
             btn.textContent = 'Create Account';
         }
@@ -1847,7 +1949,7 @@
                         </svg>
                     </div>
                     <div class="login-title">ARC PATRIMONY</div>
-                    <div class="login-subtitle">FAMILY OFFICE</div>
+                    <div class="login-subtitle">VALUE BY GENERATIONS</div>
 
                     <div class="form-group">
                         <label class="form-label">Username</label>
