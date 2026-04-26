@@ -424,11 +424,11 @@
             margin-bottom: 30px;
         }
 
-        /* Stat grid: 3 cards in order Budget · Today · YTD+Cumulative.
-           All three cards equal width. */
+        /* Stat grid: 4 equal-width cards.
+           Order: Budget · Today P&L · YTD Total P&L · Cumulative P&L. */
         .stat-grid {
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
+            grid-template-columns: repeat(4, 1fr);
             gap: 14px;
             margin-bottom: 24px;
         }
@@ -2310,7 +2310,7 @@
         const totalShares = activeHoldings.reduce((s, h) => s + h.qty, 0);
         const portfolioAvgCostUSD = totalShares > 0 ? (totalCost / totalShares) : 0;
 
-        // === YTD activity (best-effort from trades this year) ===
+        // === YTD totals (best-effort from trades this year) ===
         const yearStart = `${new Date().getFullYear()}-01-01`;
         let ytdRealized = 0, ytdDividends = 0;
         APP.trades.filter(t => t.date >= yearStart).forEach(t => {
@@ -2321,11 +2321,40 @@
             if (isDiv) {
                 ytdDividends += t.qty * t.price * fx;
             } else if (isSell && h) {
-                // Approximate: use current avg_cost as cost basis at sell time
                 ytdRealized += (t.price - (h.avg_cost || 0)) * t.qty * fx;
             }
         });
-        const ytdActivity = ytdRealized + ytdDividends;
+
+        // YTD unrealized: for positions FIRST opened this year, their full unrealized counts.
+        // (Positions held since before this year would need start-of-year prices, which we don't have.)
+        const firstBuyDateBySymbol = {};
+        APP.trades.forEach(t => {
+            const isBuy = t.type === '买入' || t.type === 'BUY';
+            if (!isBuy) return;
+            if (!firstBuyDateBySymbol[t.symbol] || t.date < firstBuyDateBySymbol[t.symbol]) {
+                firstBuyDateBySymbol[t.symbol] = t.date;
+            }
+        });
+        let ytdUnrealized = 0;
+        activeHoldings.forEach(h => {
+            const firstBuy = firstBuyDateBySymbol[h.symbol];
+            if (firstBuy && firstBuy >= yearStart) {
+                const px = APP.prices[h.symbol]?.price || h.avg_cost;
+                ytdUnrealized += (px - h.avg_cost) * h.qty * (APP.FX_RATES[h.currency] || 1);
+            }
+        });
+        const ytdTotalPL = ytdUnrealized + ytdRealized + ytdDividends;
+        // YTD invested = sum of buy amounts in current year (denominator for YTD %)
+        let ytdInvested = 0;
+        APP.trades.filter(t => t.date >= yearStart).forEach(t => {
+            const isBuy = t.type === '买入' || t.type === 'BUY';
+            if (isBuy) {
+                const h = APP.holdings.find(x => x.symbol === t.symbol);
+                const fx = APP.FX_RATES[h?.currency || 'USD'] || 1;
+                ytdInvested += t.qty * t.price * fx;
+            }
+        });
+        const ytdReturnPct = ytdInvested > 0 ? (ytdTotalPL / ytdInvested * 100) : 0;
 
         // === Today P&L ===
         let todayPL = 0;
@@ -2384,7 +2413,9 @@
 
         const cumCls = cumulativePL >= 0 ? 'price-positive' : 'price-negative';
         const todayCls = todayPL >= 0 ? 'price-positive' : 'price-negative';
-        const ytdActCls = ytdActivity >= 0 ? 'price-positive' : 'price-negative';
+        const ytdCls = ytdTotalPL >= 0 ? 'price-positive' : 'price-negative';
+        const unrealCls = unrealizedPL >= 0 ? 'price-positive' : 'price-negative';
+        const realizedCls = realizedPL_USD >= 0 ? 'price-positive' : 'price-negative';
         const budgetBarColor = budgetUsedPct > 100 ? '#f87171' : budgetUsedPct > 80 ? '#fbbf24' : '#C1A673';
         const budgetTextColor = budgetUsedPct > 100 ? '#f87171' : budgetUsedPct > 80 ? '#fbbf24' : '#94a3b8';
 
@@ -2424,36 +2455,29 @@
                     </div>
                 </div>
 
-                <!-- ===== Card 3 (HERO): YTD + Cumulative (since inception) =====
-                     Primary: YTD Activity — Secondary: Inception cumulative -->
-                <div class="stat-card stat-hero">
+                <!-- ===== Card 3: YTD Total P&L (Unrealized + Realized + Dividends, this year scope) ===== -->
+                <div class="stat-card">
                     <div class="stat-label-row">
-                        <span class="stat-label">YTD & Cumulative / 本年 & 累计</span>
-                        <span class="stat-chip" title="本年含本年已实现+本年分红；累计含已实现+未实现+分红">★ RETURN</span>
+                        <span class="stat-label">YTD Total P&L / 本年总盈亏</span>
+                        <span class="stat-chip" title="浮盈亏(本年新仓)+本年已实现+本年分红">YTD</span>
                     </div>
-                    <!-- Primary: YTD -->
-                    <div class="stat-value-xl ${ytdActCls}">${ytdActivity>=0?'+':''}$${fmtNum(ytdActivity)}</div>
-                    <div class="stat-sub" style="margin-bottom:10px;">
-                        <span style="color:#94a3b8;font-size:11px;letter-spacing:0.5px;">YTD ACTIVITY · </span>
-                        <span style="color:#64748b;">已实现 ${ytdRealized>=0?'+':''}$${fmtNum(ytdRealized,0)}</span>
-                        <span style="color:#64748b;">· 分红 +$${fmtNum(ytdDividends,0)}</span>
+                    <div class="stat-value-lg ${ytdCls}">${ytdTotalPL>=0?'+':''}$${fmtNum(ytdTotalPL)}</div>
+                    <div class="stat-sub" style="display:block;font-size:11px;line-height:1.5;">
+                        ${ytdInvested > 0 ? `<div><span class="${ytdCls}" style="font-weight:700;">${formatPercent(ytdReturnPct)}</span> <span style="color:#64748b;">on $${fmtNum(ytdInvested,0)} new</span></div>` : ''}
+                        <div style="color:#64748b;">浮 ${ytdUnrealized>=0?'+':''}$${fmtNum(ytdUnrealized,0)} · 实 ${ytdRealized>=0?'+':''}$${fmtNum(ytdRealized,0)} · 红 +$${fmtNum(ytdDividends,0)}</div>
                     </div>
-                    <div class="hero-meta-grid">
-                        <div class="hero-meta">
-                            <div class="hero-meta-label">累计收益 INCEPTION</div>
-                            <div class="hero-meta-value ${cumCls}">${cumulativePL>=0?'+':''}$${fmtNum(cumulativePL)}</div>
-                            <div class="hero-meta-sub ${cumCls}" style="opacity:0.85;">${formatPercent(cumulativeReturnPct)} on $${fmtNum(totalInvestedEver,0)}</div>
-                        </div>
-                        <div class="hero-meta">
-                            <div class="hero-meta-label">当天市值 MKT VALUE</div>
-                            <div class="hero-meta-value" style="color:#e2e8f0;">$${fmtNum(totalValue)}</div>
-                            <div class="hero-meta-sub">${activeHoldings.length} active positions</div>
-                        </div>
-                        <div class="hero-meta">
-                            <div class="hero-meta-label">总成本 COST BASIS</div>
-                            <div class="hero-meta-value" style="color:#cbd5e1;">$${fmtNum(totalCost)}</div>
-                            <div class="hero-meta-sub">avg $${fmtNum(portfolioAvgCostUSD,2)}/share</div>
-                        </div>
+                </div>
+
+                <!-- ===== Card 4: Cumulative Total P&L (since inception, same formula) ===== -->
+                <div class="stat-card">
+                    <div class="stat-label-row">
+                        <span class="stat-label">Cumulative P&L / 累计总盈亏</span>
+                        <span class="stat-chip" title="浮盈亏+已实现+分红，自成立以来">★ INCEPTION</span>
+                    </div>
+                    <div class="stat-value-lg ${cumCls}">${cumulativePL>=0?'+':''}$${fmtNum(cumulativePL)}</div>
+                    <div class="stat-sub" style="display:block;font-size:11px;line-height:1.5;">
+                        <div><span class="${cumCls}" style="font-weight:700;">${formatPercent(cumulativeReturnPct)}</span> <span style="color:#64748b;">on $${fmtNum(totalInvestedEver,0)} invested</span></div>
+                        <div style="color:#64748b;">浮 ${unrealizedPL>=0?'+':''}$${fmtNum(unrealizedPL,0)} · 实 ${realizedPL_USD>=0?'+':''}$${fmtNum(realizedPL_USD,0)} · 红 +$${fmtNum(dividends_USD,0)}</div>
                     </div>
                 </div>
             </div>
