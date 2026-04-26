@@ -440,6 +440,72 @@ app.post("/api/trade", auth, async (req, res) => {
   }
 });
 
+// Recompute a holding's qty + avg_cost from full trade history (chronological).
+// Used after deleting a trade to keep holdings consistent.
+async function recomputeHoldingFromTrades(userId, symbol) {
+  const tr = await pool.query(
+    "SELECT type, qty, price FROM trades WHERE user_id=$1 AND symbol=$2 ORDER BY date, id",
+    [userId, symbol]
+  );
+  let qty = 0, avgCost = 0;
+  for (const t of tr.rows) {
+    if (t.type === "分红" || t.type === "DIVIDEND") continue;
+    if (t.type === "买入" || t.type === "BUY") {
+      const newQty = qty + t.qty;
+      avgCost = newQty > 0 ? (qty * avgCost + t.qty * t.price) / newQty : 0;
+      qty = newQty;
+    } else { // 卖出
+      qty = Math.max(0, qty - t.qty);
+      // avgCost unchanged on sells (moving weighted-avg method)
+      if (qty === 0) avgCost = avgCost; // keep last avg_cost so realized PL on prior sells stays valid
+    }
+  }
+  // Round avg_cost
+  avgCost = Math.round(avgCost * 100) / 100;
+  // Update if a holding row exists (preserving metadata)
+  const h = await pool.query("SELECT id FROM holdings WHERE user_id=$1 AND symbol=$2", [userId, symbol]);
+  if (h.rows.length > 0) {
+    await pool.query("UPDATE holdings SET qty=$1, avg_cost=$2 WHERE id=$3", [qty, avgCost, h.rows[0].id]);
+  }
+  return { qty, avg_cost: avgCost, tradesRemaining: tr.rows.length };
+}
+
+app.delete("/api/trade/:id", auth, async (req, res) => {
+  try {
+    const tradeId = parseInt(req.params.id);
+    if (!tradeId) return res.status(400).json({ error: "Invalid trade id" });
+
+    // Look up the trade first (must belong to this user)
+    const lookup = await pool.query(
+      "SELECT symbol FROM trades WHERE id=$1 AND user_id=$2",
+      [tradeId, req.userId]
+    );
+    if (lookup.rows.length === 0) return res.status(404).json({ error: "Trade not found" });
+    const symbol = lookup.rows[0].symbol;
+
+    // Delete the trade
+    await pool.query("DELETE FROM trades WHERE id=$1 AND user_id=$2", [tradeId, req.userId]);
+
+    // Recompute that symbol's holding from remaining trade history
+    const result = await recomputeHoldingFromTrades(req.userId, symbol);
+
+    // If the symbol has no buy/sell trades left at all, remove the holding row
+    const remainingNonDiv = await pool.query(
+      "SELECT COUNT(*)::int AS c FROM trades WHERE user_id=$1 AND symbol=$2 AND type NOT IN ('分红','DIVIDEND')",
+      [req.userId, symbol]
+    );
+    if (remainingNonDiv.rows[0].c === 0) {
+      await pool.query("DELETE FROM holdings WHERE user_id=$1 AND symbol=$2", [req.userId, symbol]);
+    }
+
+    console.log(`✅ Trade ${tradeId} (${symbol}) deleted; holding recomputed: qty=${result.qty}, avg=${result.avg_cost}`);
+    res.json({ ok: true, recomputed: result });
+  } catch (e) {
+    console.error("Delete trade error:", e.message);
+    res.status(500).json({ error: "删除交易失败" });
+  }
+});
+
 // ===== 提醒 =====
 app.get("/api/alerts", auth, async (req, res) => {
   try {
