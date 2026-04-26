@@ -147,50 +147,31 @@
         .login-brand-icon {
             width: 100px;
             height: 100px;
-            /* Increase bottom margin so logo no longer overlaps title */
-            margin: 0 auto 36px;
+            margin: 0 auto 20px;
             animation: logoGlow 3s ease-in-out infinite;
-        }
-
-        /* Wrapper controls layout height; .login-title is scaleY-compressed */
-        .login-title-wrap {
-            text-align: center;
-            line-height: 0;
-            margin: 0 auto 14px;
         }
 
         .login-title {
             font-family: 'Cinzel', 'Times New Roman', serif;
             font-size: 26px;
             font-weight: 500;
-            display: inline-block;
+            text-align: center;
+            margin-bottom: 4px;
             background: linear-gradient(135deg, #C1A673, #EADDBC, #96845E);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
             letter-spacing: 6px;
-            line-height: 1;
-            padding: 0;
-            margin: 0;
-            /* Literal 30% character-height compression */
-            transform: scaleY(0.7);
-            transform-origin: center;
         }
 
         .login-subtitle {
-            /* Roman art-style serif (Cinzel already loaded) — weakened */
-            font-family: 'Cinzel', 'Trajan Pro', 'Times New Roman', serif;
-            font-size: 9px;
-            font-weight: 400;
-            font-style: normal;
+            font-family: 'Montserrat', sans-serif;
+            font-size: 11px;
+            font-weight: 300;
             text-align: center;
-            color: rgba(150, 132, 94, 0.42);
+            color: var(--gold-dark);
             margin-bottom: 30px;
-            letter-spacing: 4px;
-            line-height: 1.4;
-            margin-top: 4px;
-            text-transform: uppercase;
-            opacity: 0.85;
+            letter-spacing: 6px;
         }
 
         .form-group {
@@ -443,11 +424,11 @@
             margin-bottom: 30px;
         }
 
-        /* Stat grid: 3 cards. Hero takes 2x width on desktop, others 1x each.
-           Tablet: hero spans full row, other 2 share row. Mobile: stacked. */
+        /* Stat grid: 3 cards in order Budget · Today · YTD+Cumulative.
+           All three cards equal width. */
         .stat-grid {
             display: grid;
-            grid-template-columns: 2fr 1fr 1fr;
+            grid-template-columns: repeat(3, 1fr);
             gap: 14px;
             margin-bottom: 24px;
         }
@@ -1341,9 +1322,8 @@
 
             /* Login screen tighter */
             .login-card { padding: 28px 22px; }
-            .login-brand-icon { width: 80px; height: 80px; margin-bottom: 28px; }
+            .login-brand-icon { width: 80px; height: 80px; margin-bottom: 12px; }
             .login-title { font-size: 22px; letter-spacing: 4px; }
-            .login-subtitle { font-size: 9px; letter-spacing: 3.5px; }
         }
 
         /* Small phones: ≤380px */
@@ -1359,9 +1339,9 @@
         /* Z Flip closed / Z Fold cover screen / very narrow ≤320px */
         @media (max-width: 320px) {
             .login-card { padding: 22px 16px; }
-            .login-brand-icon { width: 64px; height: 64px; margin-bottom: 22px; }
+            .login-brand-icon { width: 64px; height: 64px; margin-bottom: 8px; }
             .login-title { font-size: 17px; letter-spacing: 2px; }
-            .login-subtitle { font-size: 8px; letter-spacing: 2.5px; margin-bottom: 18px; }
+            .login-subtitle { font-size: 9px; letter-spacing: 3px; margin-bottom: 18px; }
             .button-group { flex-direction: column; gap: 8px; }
             .button-group button { width: 100%; }
             .form-input { padding: 10px 12px; font-size: 13px; }
@@ -1824,13 +1804,13 @@
         const loginBtn = document.querySelector('button[data-action="login"]');
 
         if (APP.isRegister) {
-            title.textContent = 'CREATE ACCOUNT';
-            subtitle.textContent = 'JOIN ARC PATRIMONY';
+            title.textContent = 'Create Account';
+            subtitle.textContent = 'Create Your Account';
             loginBtn.textContent = 'Sign Up';
             btn.textContent = 'Have account? Sign In';
         } else {
-            title.textContent = 'ARC PATRIMONY';
-            subtitle.textContent = 'VALUE BY GENERATIONS';
+            title.textContent = 'Arc Patrimony';
+            subtitle.textContent = 'Value Beyond Generations';
             loginBtn.textContent = 'Sign In';
             btn.textContent = 'Create Account';
         }
@@ -1998,8 +1978,8 @@
                             <path d="M500,230 L504,246 L520,250 L504,254 L500,270 L496,254 L480,250 L496,246 Z" fill="url(#goldGrad)" style="animation:starPulse 4s infinite ease-in-out;transform-origin:500px 250px;"/>
                         </svg>
                     </div>
-                    <div class="login-title-wrap"><div class="login-title">ARC PATRIMONY</div></div>
-                    <div class="login-subtitle">VALUE BY GENERATIONS</div>
+                    <div class="login-title">ARC PATRIMONY</div>
+                    <div class="login-subtitle">FAMILY OFFICE</div>
 
                     <div class="form-group">
                         <label class="form-label">Username</label>
@@ -2410,51 +2390,7 @@
 
         let html = `
             <div class="stat-grid">
-                <!-- ===== Card 1 (HERO): Cumulative Return — primary metric =====
-                     Includes Realized PL + Unrealized PL + Dividends -->
-                <div class="stat-card stat-hero">
-                    <div class="stat-label-row">
-                        <span class="stat-label">Cumulative Return / 累计收益</span>
-                        <span class="stat-chip" title="包含已实现盈亏 + 未实现盈亏 + 分红">★ INCEPTION</span>
-                    </div>
-                    <div class="stat-value-xl ${cumCls}">${cumulativePL>=0?'+':''}$${fmtNum(cumulativePL)}</div>
-                    <div class="stat-sub" style="margin-bottom:10px;">
-                        <span class="${cumCls}" style="font-weight:700;font-size:14px;">${formatPercent(cumulativeReturnPct)}</span>
-                        <span style="color:#64748b;">on $${fmtNum(totalInvestedEver)} invested</span>
-                    </div>
-                    <div class="hero-meta-grid">
-                        <div class="hero-meta">
-                            <div class="hero-meta-label">本年活动 YTD</div>
-                            <div class="hero-meta-value ${ytdActCls}">${ytdActivity>=0?'+':''}$${fmtNum(ytdActivity)}</div>
-                            <div class="hero-meta-sub">已实现 ${ytdRealized>=0?'+':''}$${fmtNum(ytdRealized,0)} · 分红 +$${fmtNum(ytdDividends,0)}</div>
-                        </div>
-                        <div class="hero-meta">
-                            <div class="hero-meta-label">当天市值 Mkt Value</div>
-                            <div class="hero-meta-value" style="color:#e2e8f0;">$${fmtNum(totalValue)}</div>
-                            <div class="hero-meta-sub">${activeHoldings.length} active positions</div>
-                        </div>
-                        <div class="hero-meta">
-                            <div class="hero-meta-label">总成本 Cost Basis</div>
-                            <div class="hero-meta-value" style="color:#cbd5e1;">$${fmtNum(totalCost)}</div>
-                            <div class="hero-meta-sub">avg $${fmtNum(portfolioAvgCostUSD,2)}/share</div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- ===== Card 2: Today P&L ===== -->
-                <div class="stat-card stat-today ${todayPL>=0?'pulse-up':'pulse-down'}">
-                    <div class="stat-label-row">
-                        <span class="stat-label">Today P&L / 今日浮盈亏</span>
-                        <span class="stat-dot ${todayPL>=0?'dot-up':'dot-down'}"></span>
-                    </div>
-                    <div class="stat-value-lg ${todayCls}">${todayPL>=0?'+':''}$${fmtNum(todayPL)}</div>
-                    <div class="stat-sub">
-                        <span class="${todayCls}" style="font-weight:700;">${formatPercent(todayPLPct)}</span>
-                        <span style="color:#64748b;">vs prev close</span>
-                    </div>
-                </div>
-
-                <!-- ===== Card 3: Budget (used by COST not market value) ===== -->
+                <!-- ===== Card 1: Budget (used by COST not market value) ===== -->
                 <div class="stat-card stat-budget">
                     <div class="stat-label-row">
                         <span class="stat-label">Budget / 预算使用</span>
@@ -2473,6 +2409,52 @@
                         <div class="stat-value-lg" style="color:#64748b;">—</div>
                         <div class="stat-sub" style="color:#64748b;">Set region budgets in Allocation tab</div>
                     `}
+                </div>
+
+                <!-- ===== Card 2: Today P&L ===== -->
+                <div class="stat-card stat-today ${todayPL>=0?'pulse-up':'pulse-down'}">
+                    <div class="stat-label-row">
+                        <span class="stat-label">Today P&L / 今日浮盈亏</span>
+                        <span class="stat-dot ${todayPL>=0?'dot-up':'dot-down'}"></span>
+                    </div>
+                    <div class="stat-value-lg ${todayCls}">${todayPL>=0?'+':''}$${fmtNum(todayPL)}</div>
+                    <div class="stat-sub">
+                        <span class="${todayCls}" style="font-weight:700;">${formatPercent(todayPLPct)}</span>
+                        <span style="color:#64748b;">vs prev close</span>
+                    </div>
+                </div>
+
+                <!-- ===== Card 3 (HERO): YTD + Cumulative (since inception) =====
+                     Primary: YTD Activity — Secondary: Inception cumulative -->
+                <div class="stat-card stat-hero">
+                    <div class="stat-label-row">
+                        <span class="stat-label">YTD & Cumulative / 本年 & 累计</span>
+                        <span class="stat-chip" title="本年含本年已实现+本年分红；累计含已实现+未实现+分红">★ RETURN</span>
+                    </div>
+                    <!-- Primary: YTD -->
+                    <div class="stat-value-xl ${ytdActCls}">${ytdActivity>=0?'+':''}$${fmtNum(ytdActivity)}</div>
+                    <div class="stat-sub" style="margin-bottom:10px;">
+                        <span style="color:#94a3b8;font-size:11px;letter-spacing:0.5px;">YTD ACTIVITY · </span>
+                        <span style="color:#64748b;">已实现 ${ytdRealized>=0?'+':''}$${fmtNum(ytdRealized,0)}</span>
+                        <span style="color:#64748b;">· 分红 +$${fmtNum(ytdDividends,0)}</span>
+                    </div>
+                    <div class="hero-meta-grid">
+                        <div class="hero-meta">
+                            <div class="hero-meta-label">累计收益 INCEPTION</div>
+                            <div class="hero-meta-value ${cumCls}">${cumulativePL>=0?'+':''}$${fmtNum(cumulativePL)}</div>
+                            <div class="hero-meta-sub ${cumCls}" style="opacity:0.85;">${formatPercent(cumulativeReturnPct)} on $${fmtNum(totalInvestedEver,0)}</div>
+                        </div>
+                        <div class="hero-meta">
+                            <div class="hero-meta-label">当天市值 MKT VALUE</div>
+                            <div class="hero-meta-value" style="color:#e2e8f0;">$${fmtNum(totalValue)}</div>
+                            <div class="hero-meta-sub">${activeHoldings.length} active positions</div>
+                        </div>
+                        <div class="hero-meta">
+                            <div class="hero-meta-label">总成本 COST BASIS</div>
+                            <div class="hero-meta-value" style="color:#cbd5e1;">$${fmtNum(totalCost)}</div>
+                            <div class="hero-meta-sub">avg $${fmtNum(portfolioAvgCostUSD,2)}/share</div>
+                        </div>
+                    </div>
                 </div>
             </div>
             <div class="stat-cards" style="margin-top:12px;">
@@ -3104,10 +3086,12 @@
                             <th>Symbol</th>
                             <th>Name</th>
                             <th>Type</th>
-                            <th>Quantity</th>
-                            <th>Price</th>
-                            <th>Fee</th>
-                            <th>Total</th>
+                            <th>Ccy</th>
+                            <th style="text-align:right;">Quantity</th>
+                            <th style="text-align:right;">Price</th>
+                            <th style="text-align:right;">Fee</th>
+                            <th style="text-align:right;">Total</th>
+                            <th style="text-align:center;width:50px;">Del</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -3117,22 +3101,38 @@
             const sortedTrades = [...APP.trades].sort((a, b) => new Date(b.date) - new Date(a.date));
 
             sortedTrades.forEach(t => {
-                const total = (t.qty * t.price) + (t.fee || 0);
+                // Find currency from holdings (works for active and sold positions)
+                const h = APP.holdings.find(x => x.symbol === t.symbol);
+                const cur = h?.currency || 'USD';
+                const cs = cur==='CNY'?'¥':cur==='JPY'?'¥':cur==='HKD'?'HK$':'$';
+
                 const isBuy = t.type === 'BUY' || t.type === '买入';
                 const isDividend = t.type === '分红' || t.type === 'DIVIDEND';
                 const typeClass = isDividend ? 'trade-type-dividend' : (isBuy ? 'trade-type-buy' : 'trade-type-sell');
                 const typeText = isDividend ? 'Dividend' : (isBuy ? 'Buy' : 'Sell');
 
+                // Total: for dividend = shares × per-share div − tax;  for buy = qty×price + fee;  for sell = qty×price − fee
+                const gross = t.qty * t.price;
+                const total = isBuy ? gross + (t.fee || 0) : gross - (t.fee || 0);
+
                 html += `
                     <tr>
                         <td>${new Date(t.date).toLocaleDateString('zh-CN')}</td>
                         <td class="symbol-cell">${t.symbol}</td>
-                        <td>${t.name}</td>
+                        <td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:160px;" title="${t.name||''}">${t.name||''}</td>
                         <td class="${typeClass}"><strong>${typeText}</strong></td>
-                        <td>${t.qty.toFixed(4)}</td>
-                        <td>$${t.price.toFixed(2)}</td>
-                        <td>$${(t.fee || 0).toFixed(2)}</td>
-                        <td>$${total.toFixed(2)}</td>
+                        <td>${cur}</td>
+                        <td style="text-align:right;">${fmtNum(t.qty, 0)}</td>
+                        <td style="text-align:right;">${cs}${fmtNum(t.price)}</td>
+                        <td style="text-align:right;">${(t.fee||0)>0 ? cs+fmtNum(t.fee) : '-'}</td>
+                        <td style="text-align:right;font-weight:600;">${cs}${fmtNum(total)}</td>
+                        <td style="text-align:center;">
+                            <button onclick="deleteTrade(${t.id}, '${t.symbol}', '${typeText}', ${t.qty}, ${t.price})"
+                                    title="Delete this trade"
+                                    style="background:none;border:none;color:#f87171;cursor:pointer;font-size:16px;padding:2px 6px;border-radius:4px;opacity:0.6;transition:all 0.2s;"
+                                    onmouseover="this.style.opacity=1;this.style.background='rgba(248,113,113,0.12)';"
+                                    onmouseout="this.style.opacity=0.6;this.style.background='none';">×</button>
+                        </td>
                     </tr>
                 `;
             });
@@ -3140,6 +3140,7 @@
             html += `
                     </tbody>
                 </table>
+                <div style="font-size:11px;color:#64748b;margin-top:10px;">Price/Total displayed in stock's native currency · Click × to delete a trade</div>
             `;
         } else {
             html += `
@@ -3152,6 +3153,23 @@
         }
 
         container.innerHTML = html;
+    }
+
+    // ===== Delete a trade and recompute holdings consistently =====
+    async function deleteTrade(tradeId, symbol, typeText, qty, price) {
+        const msg = `确认删除该笔交易？\n\n${symbol} · ${typeText} · ${fmtNum(qty,0)} @ ${fmtNum(price)}\n\n此操作不可撤销，且会重算 avg_cost 与持仓数量。`;
+        if (!confirm(msg)) return;
+        try {
+            await apiCall(`/trade/${tradeId}`, 'DELETE');
+            await Promise.all([loadHoldings(), loadTrades()]);
+            await updatePrices();
+            renderTab0();
+            renderTab2();
+            renderTab4();
+            if (typeof renderTab5Portfolio === 'function') { try { renderTab5Portfolio(); } catch(e){} }
+        } catch (err) {
+            alert('Delete failed: ' + err.message);
+        }
     }
 
     function renderTab3() {
