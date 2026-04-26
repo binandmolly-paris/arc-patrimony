@@ -424,33 +424,153 @@
             margin-bottom: 30px;
         }
 
+        /* New stat grid: 4 columns on desktop, 2 on tablet, 1 on mobile.
+           Hero card spans 2 columns on desktop. */
+        .stat-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 14px;
+            margin-bottom: 24px;
+        }
+        .stat-grid .stat-hero { grid-column: span 2; }
+
         .stat-card {
             background: var(--bg-card);
             backdrop-filter: blur(16px);
             -webkit-backdrop-filter: blur(16px);
             border: 1px solid var(--gold-border);
-            border-radius: 12px;
-            padding: 20px;
+            border-radius: 14px;
+            padding: 18px 20px;
             transition: all 0.3s ease;
             box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+            position: relative;
+            overflow: hidden;
+        }
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(193,166,115,0.4), transparent);
+            opacity: 0.6;
         }
         .stat-card:hover {
             border-color: var(--gold-border-hover);
-            box-shadow: 0 8px 30px rgba(0,0,0,0.3), 0 0 15px var(--gold-glow);
+            box-shadow: 0 8px 30px rgba(0,0,0,0.35), 0 0 20px var(--gold-glow);
+            transform: translateY(-2px);
+        }
+
+        /* Hero card — emphasized */
+        .stat-hero {
+            background: linear-gradient(135deg, rgba(193,166,115,0.08), rgba(20,25,32,0.7));
+            border-color: rgba(193,166,115,0.3);
+        }
+        .stat-hero::after {
+            content: '';
+            position: absolute;
+            right: -40px; bottom: -40px;
+            width: 140px; height: 140px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(193,166,115,0.10), transparent 70%);
+            pointer-events: none;
+        }
+
+        /* Today card with pulsing dot */
+        .stat-today.pulse-up { border-color: rgba(74,222,128,0.25); }
+        .stat-today.pulse-down { border-color: rgba(248,113,113,0.25); }
+
+        .stat-budget { background: linear-gradient(135deg, rgba(193,166,115,0.05), rgba(20,25,32,0.6)); }
+
+        .stat-label-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            gap: 8px;
         }
 
         .stat-label {
-            font-size: 11px;
+            font-size: 10px;
             color: var(--gold-dark);
             text-transform: uppercase;
-            letter-spacing: 1px;
-            margin-bottom: 8px;
+            letter-spacing: 1.5px;
+            font-weight: 600;
+        }
+
+        .stat-chip {
+            font-size: 9px;
+            color: var(--gold-light);
+            background: rgba(193,166,115,0.08);
+            border: 1px solid rgba(193,166,115,0.25);
+            padding: 2px 8px;
+            border-radius: 10px;
+            letter-spacing: 0.8px;
+            font-weight: 600;
+        }
+
+        .stat-dot {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        .stat-dot.dot-up {
+            background: #4ade80;
+            box-shadow: 0 0 8px #4ade80;
+            animation: dotPulse 2s ease-in-out infinite;
+        }
+        .stat-dot.dot-down {
+            background: #f87171;
+            box-shadow: 0 0 8px #f87171;
+            animation: dotPulse 2s ease-in-out infinite;
+        }
+        @keyframes dotPulse {
+            0%, 100% { opacity: 0.6; transform: scale(0.85); }
+            50% { opacity: 1; transform: scale(1.15); }
         }
 
         .stat-value {
             font-size: 24px;
             font-weight: 700;
             color: var(--gold-light);
+        }
+        .stat-value-xl {
+            font-size: 32px;
+            font-weight: 700;
+            color: #f1f5f9;
+            font-family: 'Montserrat', sans-serif;
+            letter-spacing: -0.5px;
+            line-height: 1.1;
+            margin-bottom: 8px;
+        }
+        .stat-value-lg {
+            font-size: 22px;
+            font-weight: 700;
+            color: var(--gold-light);
+            font-family: 'Montserrat', sans-serif;
+            letter-spacing: -0.3px;
+            line-height: 1.1;
+            margin-bottom: 8px;
+        }
+        .stat-sub {
+            font-size: 12px;
+            color: #94a3b8;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .budget-bar-wrap {
+            background: rgba(15,23,42,0.7);
+            border-radius: 4px;
+            height: 6px;
+            overflow: hidden;
+            margin: 8px 0 6px;
+        }
+        .budget-bar-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.5s ease;
         }
 
         .stat-change {
@@ -775,6 +895,98 @@
             padding: 12px;
         }
 
+        /* ===== Trade Action Picker (3-card step 1) ===== */
+        .trade-action-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-bottom: 22px;
+        }
+        .trade-action-card {
+            background: rgba(20,25,32,0.5);
+            border: 1.5px solid rgba(193,166,115,0.18);
+            border-radius: 12px;
+            padding: 18px 10px;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            text-align: center;
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+        }
+        .trade-action-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(193,166,115,0.4), transparent);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .trade-action-card:hover::before { opacity: 1; }
+        .trade-action-card:hover {
+            border-color: rgba(193,166,115,0.5);
+            background: rgba(193,166,115,0.06);
+            transform: translateY(-2px);
+        }
+        .trade-action-card.active {
+            border-color: #C1A673;
+            background: linear-gradient(135deg, rgba(193,166,115,0.18), rgba(193,166,115,0.04));
+            box-shadow: 0 0 24px rgba(193,166,115,0.25), inset 0 1px 0 rgba(234,221,188,0.1);
+        }
+        .trade-action-card.active::before { opacity: 1; }
+        .trade-action-icon {
+            font-size: 26px;
+            line-height: 1;
+            margin-bottom: 8px;
+            filter: grayscale(0.3);
+            transition: filter 0.25s;
+        }
+        .trade-action-card.active .trade-action-icon { filter: grayscale(0); }
+        .trade-action-en {
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 1.5px;
+            color: var(--gold-light);
+        }
+        .trade-action-zh {
+            font-size: 11px;
+            color: #94a3b8;
+            margin-top: 2px;
+        }
+
+        /* Quick-pick chips for selecting from existing holdings */
+        .holding-pick-chip {
+            font-size: 11px;
+            padding: 5px 11px;
+            background: rgba(193,166,115,0.06);
+            border: 1px solid rgba(193,166,115,0.2);
+            color: var(--gold);
+            border-radius: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: 'Montserrat', sans-serif;
+        }
+        .holding-pick-chip:hover {
+            background: rgba(193,166,115,0.15);
+            border-color: var(--gold);
+            color: var(--gold-light);
+        }
+        .holding-pick-chip.selected {
+            background: var(--gold);
+            color: #0B0F12;
+            border-color: var(--gold);
+        }
+
+        /* Mobile-friendly: trade action grid stacks 3 columns but smaller */
+        @media (max-width: 480px) {
+            .trade-action-grid { gap: 6px; }
+            .trade-action-card { padding: 14px 6px; }
+            .trade-action-icon { font-size: 22px; }
+            .trade-action-en { font-size: 10px; letter-spacing: 1px; }
+            .trade-action-zh { font-size: 10px; }
+        }
+
         /* Alert Cards */
         .alert-cards {
             display: grid;
@@ -995,57 +1207,96 @@
             to { transform: rotate(360deg); }
         }
 
-        /* Responsive */
-        @media (max-width: 768px) {
+        /* ============ Responsive: Desktop / Tablet / Mobile ============ */
+
+        /* Tablet: 641px – 1024px (iPad portrait/landscape) */
+        @media (max-width: 1024px) {
+            .stat-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            .stat-grid .stat-hero { grid-column: span 2; }
+            .stat-value-xl { font-size: 28px; }
+            .stat-value-lg { font-size: 20px; }
+
+            .tab-content { padding: 16px; }
+            .charts-row { grid-template-columns: 1fr; }
+
+            /* Tables: enable horizontal scroll instead of squashing */
+            .holdings-table, .trades-table { font-size: 12px; }
+            .holdings-table th, .holdings-table td,
+            .trades-table th, .trades-table td { padding: 9px 8px; }
+
+            .app-header { padding: 10px 16px; }
+            .app-title { font-size: 16px; letter-spacing: 2px; }
+        }
+
+        /* Mobile: ≤640px (phones) */
+        @media (max-width: 640px) {
+            .stat-grid {
+                grid-template-columns: 1fr;
+                gap: 10px;
+                margin-bottom: 18px;
+            }
+            .stat-grid .stat-hero { grid-column: span 1; }
+            .stat-card { padding: 14px 16px; border-radius: 12px; }
+            .stat-value-xl { font-size: 26px; }
+            .stat-value-lg { font-size: 18px; }
+            .stat-label { font-size: 9px; letter-spacing: 1.2px; }
+            .stat-sub { font-size: 11px; }
+
+            /* Tabs: compact + scrollable */
             .tabs {
-                padding: 8px 10px;
+                padding: 8px 12px;
                 gap: 6px;
+                -webkit-overflow-scrolling: touch;
             }
-
             .tab {
-                padding: 8px 14px;
+                padding: 7px 12px;
                 font-size: 12px;
+                border-radius: 10px;
             }
 
-            .tab-content {
-                padding: 15px;
-            }
+            .tab-content { padding: 12px; }
 
-            .stat-cards {
-                grid-template-columns: 1fr;
-            }
+            /* Header collapses */
+            .app-header { padding: 10px 14px; }
+            .app-logo-mini { width: 26px; height: 26px; }
+            .app-title { font-size: 14px; letter-spacing: 1.5px; }
+            .header-user-badge { padding: 4px 10px; font-size: 11px; }
+            .btn-logout { padding: 5px 10px; font-size: 11px; }
 
-            .charts-row {
-                grid-template-columns: 1fr;
-            }
+            /* Layout */
+            .charts-row { grid-template-columns: 1fr; gap: 14px; }
+            .stock-cards { grid-template-columns: 1fr; }
+            .form-grid { grid-template-columns: 1fr; }
+            .data-buttons { flex-direction: column; }
+            .modal-content { padding: 20px 16px; max-height: 92vh; border-radius: 14px; }
+            .modal { padding: 10px; }
 
-            .stock-cards {
-                grid-template-columns: 1fr;
-            }
+            /* Tables: smaller font; horizontal scroll inside chart-card */
+            .holdings-table, .trades-table { font-size: 11px; }
+            .holdings-table th, .holdings-table td,
+            .trades-table th, .trades-table td { padding: 7px 6px; }
+            .chart-card { padding: 14px 14px; border-radius: 12px; }
+            .chart-title { font-size: 13px; }
 
-            .form-grid {
-                grid-template-columns: 1fr;
-            }
+            /* FX rates compact */
+            .fx-rates { grid-template-columns: 1fr; gap: 8px; }
+            .fx-rate { padding: 10px; }
+            .fx-rate-value { font-size: 14px; }
 
-            .data-buttons {
-                flex-direction: column;
-            }
+            /* Login screen tighter */
+            .login-card { padding: 28px 22px; }
+            .login-brand-icon { width: 80px; height: 80px; margin-bottom: 12px; }
+            .login-title { font-size: 22px; letter-spacing: 4px; }
+        }
 
-            .modal-content {
-                padding: 20px;
-            }
-
-            .holdings-table,
-            .trades-table {
-                font-size: 12px;
-            }
-
-            .holdings-table th,
-            .holdings-table td,
-            .trades-table th,
-            .trades-table td {
-                padding: 8px 10px;
-            }
+        /* Small phones: ≤380px */
+        @media (max-width: 380px) {
+            .stat-value-xl { font-size: 22px; }
+            .stat-value-lg { font-size: 16px; }
+            .app-title { font-size: 12px; letter-spacing: 1px; }
+            .header-user-badge { font-size: 10px; padding: 3px 8px; }
         }
 
         /* Utility */
@@ -1120,6 +1371,19 @@
 
         try {
             const response = await fetch(`${API_BASE}${endpoint}`, options);
+            if (response.status === 401 && isAuthorized) {
+                // Session expired (server restart wiped sessions, etc.) — force re-login
+                console.warn('Session expired, redirecting to login');
+                localStorage.removeItem('kxm_token');
+                localStorage.removeItem('kxm_user');
+                APP.token = null;
+                APP.username = null;
+                if (APP.priceUpdateInterval) clearInterval(APP.priceUpdateInterval);
+                if (APP._fxInterval) clearInterval(APP._fxInterval);
+                alert('登录已过期，请重新登录 / Session expired, please sign in again.');
+                showLogin();
+                throw new Error('Session expired');
+            }
             if (!response.ok) {
                 throw new Error(`API error: ${response.status}`);
             }
@@ -1666,84 +1930,137 @@
             </div>
 
             <div class="modal" id="tradeModal">
-                <div class="modal-content" style="position: relative;">
+                <div class="modal-content" style="position: relative; max-width: 540px;">
                     <button class="modal-close" onclick="closeModal('tradeModal')">×</button>
                     <div class="modal-header">New Trade</div>
-                    <div class="form-group">
-                        <label class="form-label">Stock Symbol</label>
-                        <input type="text" id="tradeSymbol" class="form-input" placeholder="US:AAPL HK:0700.HK A:600036.SS JP:7203.T" onblur="autoFillTrade()" style="text-transform:uppercase;">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Stock Name</label>
-                        <input type="text" id="tradeName" class="form-input" placeholder="e.g.: Apple Inc">
-                    </div>
-                    <div class="form-grid">
-                        <div class="form-group">
-                            <label class="form-label">Trade Type</label>
-                            <select id="tradeType" class="form-input" style="appearance: none; padding-right: 30px;">
-                                <option value="买入">Buy</option>
-                                <option value="卖出">Sell</option>
-                                <option value="分红">Dividend</option>
-                            </select>
+
+                    <!-- Step 1: Choose action -->
+                    <div class="trade-action-grid">
+                        <div class="trade-action-card" data-action="买入" onclick="setTradeAction('买入')">
+                            <div class="trade-action-icon">📈</div>
+                            <div class="trade-action-en">BUY</div>
+                            <div class="trade-action-zh">买入</div>
                         </div>
-                        <div class="form-group">
-                            <label class="form-label">Quantity</label>
-                            <input type="number" id="tradeQty" class="form-input" placeholder="0" step="0.01">
+                        <div class="trade-action-card" data-action="卖出" onclick="setTradeAction('卖出')">
+                            <div class="trade-action-icon">📉</div>
+                            <div class="trade-action-en">SELL</div>
+                            <div class="trade-action-zh">卖出</div>
+                        </div>
+                        <div class="trade-action-card" data-action="分红" onclick="setTradeAction('分红')">
+                            <div class="trade-action-icon">💰</div>
+                            <div class="trade-action-en">DIVIDEND</div>
+                            <div class="trade-action-zh">股息</div>
                         </div>
                     </div>
-                    <div class="form-grid">
+
+                    <!-- Hidden type carrier -->
+                    <input type="hidden" id="tradeType" value="">
+
+                    <!-- Step 2: Form (hidden until action picked) -->
+                    <div id="tradeFormBody" style="display:none;">
+
+                        <!-- Symbol input (Buy) / picker label (Sell + Dividend) -->
                         <div class="form-group">
-                            <label class="form-label">Unit Price (USD)</label>
-                            <input type="number" id="tradePrice" class="form-input" placeholder="0.00" step="0.01">
+                            <label class="form-label" id="tradeSymbolLabel">Stock Symbol</label>
+                            <input type="text" id="tradeSymbol" class="form-input" placeholder="e.g. AAPL / 0700.HK / 7203.T / 600036.SS" onblur="autoFillTrade()" style="text-transform:uppercase;">
+                            <!-- Quick pick chips for Sell/Dividend (only existing holdings) -->
+                            <div id="tradeHoldingPicker" style="display:none;margin-top:10px;">
+                                <div style="font-size:10px;color:#94a3b8;letter-spacing:0.8px;margin-bottom:6px;">QUICK PICK FROM HOLDINGS</div>
+                                <div id="tradeHoldingPickerChips" style="display:flex;flex-wrap:wrap;gap:6px;max-height:120px;overflow-y:auto;padding:4px 0;"></div>
+                            </div>
                         </div>
-                        <div class="form-group">
-                            <label class="form-label">Fee (USD)</label>
-                            <input type="number" id="tradeFee" class="form-input" placeholder="0.00" step="0.01">
+
+                        <!-- Stock Name (Buy only - new stocks need name) -->
+                        <div class="form-group" data-show-for="买入">
+                            <label class="form-label">Stock Name</label>
+                            <input type="text" id="tradeName" class="form-input" placeholder="e.g. Apple Inc">
                         </div>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Trade Date</label>
-                        <input type="date" id="tradeDate" class="form-input">
-                    </div>
-                    <div class="form-grid">
-                        <div class="form-group">
-                            <label class="form-label">Currency</label>
-                            <select id="tradeCurrency" class="form-input" style="appearance: none; padding-right: 30px;">
-                                <option value="USD">USD</option>
-                                <option value="CNY">CNY</option>
-                                <option value="JPY">JPY</option>
-                                <option value="HKD">HKD</option>
-                            </select>
+
+                        <!-- Auto-filled stock info card (Sell/Dividend) -->
+                        <div data-show-for="卖出,分红" id="tradeStockInfo" style="display:none;background:rgba(193,166,115,0.06);padding:12px 14px;border-radius:8px;border:1px solid rgba(193,166,115,0.18);margin-bottom:14px;"></div>
+
+                        <!-- Quantity + Price -->
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label class="form-label" id="tradeQtyLabel">Quantity</label>
+                                <input type="number" id="tradeQty" class="form-input" placeholder="0" step="0.01">
+                                <div id="tradeQtyHint" style="font-size:11px;color:#94a3b8;margin-top:4px;display:none;"></div>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" id="tradePriceLabel">Unit Price</label>
+                                <input type="number" id="tradePrice" class="form-input" placeholder="0.00" step="0.01">
+                            </div>
                         </div>
-                        <div class="form-group">
-                            <label class="form-label">Market</label>
-                            <select id="tradeMarket" class="form-input" style="appearance: none; padding-right: 30px;">
-                                <option value="STOCK">Stock</option>
-                                <option value="ETF">ETF</option>
-                            </select>
+
+                        <!-- Fee + Date -->
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label class="form-label" id="tradeFeeLabel">Fee</label>
+                                <input type="number" id="tradeFee" class="form-input" placeholder="0.00" step="0.01">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Trade Date</label>
+                                <input type="date" id="tradeDate" class="form-input">
+                            </div>
                         </div>
-                    </div>
-                    <div class="form-grid">
-                        <div class="form-group">
-                            <label class="form-label">Region</label>
-                            <select id="tradeRegion" class="form-input" style="appearance: none; padding-right: 30px;">
-                                <option value="美国">US</option>
-                                <option value="中国">China</option>
-                                <option value="日本">Japan</option>
-                            </select>
+
+                        <!-- Calculated total preview -->
+                        <div id="tradeTotalPreview" style="display:none;margin:6px 0 14px;padding:10px 14px;background:rgba(15,23,42,0.6);border:1px dashed rgba(193,166,115,0.2);border-radius:8px;font-size:12px;color:#94a3b8;"></div>
+
+                        <!-- Buy-only: full metadata -->
+                        <div data-show-for="买入" id="tradeBuyExtraFields">
+                            <div class="form-grid">
+                                <div class="form-group">
+                                    <label class="form-label">Currency</label>
+                                    <select id="tradeCurrency" class="form-input" style="appearance: none; padding-right: 30px;">
+                                        <option value="USD">USD</option>
+                                        <option value="CNY">CNY</option>
+                                        <option value="JPY">JPY</option>
+                                        <option value="HKD">HKD</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Market</label>
+                                    <select id="tradeMarket" class="form-input" style="appearance: none; padding-right: 30px;">
+                                        <option value="STOCK">Stock</option>
+                                        <option value="ETF">ETF</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-grid">
+                                <div class="form-group">
+                                    <label class="form-label">Region</label>
+                                    <select id="tradeRegion" class="form-input" style="appearance: none; padding-right: 30px;">
+                                        <option value="美国">US</option>
+                                        <option value="中国">China</option>
+                                        <option value="日本">Japan</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Type</label>
+                                    <input type="text" id="tradeAttribute" class="form-input" placeholder="e.g. 进攻 / 防守">
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Sector</label>
+                                <input type="text" id="tradeSector" class="form-input" placeholder="e.g. Tech">
+                            </div>
                         </div>
-                        <div class="form-group">
-                            <label class="form-label">Type</label>
-                            <input type="text" id="tradeAttribute" class="form-input" placeholder="e.g.: Tech">
+
+                        <!-- Hidden carriers for Sell/Dividend (auto-filled from picked holding, not shown) -->
+                        <div data-show-for="卖出,分红" style="display:none;">
+                            <select id="tradeCurrencyHidden"></select>
+                            <select id="tradeMarketHidden"></select>
+                            <select id="tradeRegionHidden"></select>
+                            <input id="tradeAttributeHidden">
+                            <input id="tradeSectorHidden">
+                            <input id="tradeNameHidden">
                         </div>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Sector</label>
-                        <input type="text" id="tradeSector" class="form-input" placeholder="e.g.: Tech">
-                    </div>
-                    <div class="modal-buttons">
-                        <button class="btn-secondary" onclick="closeModal('tradeModal')">Cancel</button>
-                        <button class="btn-primary" onclick="submitTrade()">Save Trade</button>
+
+                        <div class="modal-buttons">
+                            <button class="btn-secondary" onclick="closeModal('tradeModal')">Cancel</button>
+                            <button class="btn-primary" id="tradeSubmitBtn" onclick="submitTrade()">Save Trade</button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1850,10 +2167,29 @@
         const totalPL = totalValue - totalCost;
         const totalPLPercent = totalCost > 0 ? (totalPL / totalCost) * 100 : 0;
 
-        // Update market light bar color
+        // Today P&L (USD): sum of (price - prevClose) * qty * fxRate across all active holdings with quote data
+        let todayPL = 0;
+        activeHoldings.forEach(h => {
+            const pd = APP.prices[h.symbol];
+            if (pd && pd.prevClose && pd.price) {
+                todayPL += h.qty * (pd.price - pd.prevClose) * (APP.FX_RATES[h.currency] || 1);
+            }
+        });
+        const todayBase = totalValue - todayPL;
+        const todayPLPct = todayBase > 0 ? (todayPL / todayBase * 100) : 0;
+
+        // Total Budget USD = sum of region budgets (in local currency) converted to USD
+        const allRegionsForBudget = [...new Set(APP.holdings.filter(h => h.qty > 0).map(h => h.region).filter(Boolean))];
+        let totalBudgetUSD = 0;
+        allRegionsForBudget.forEach(r => { totalBudgetUSD += regionBudgetToUSD(r); });
+        const budgetUsedPct = totalBudgetUSD > 0 ? (totalValue / totalBudgetUSD * 100) : 0;
+        const budgetRemaining = totalBudgetUSD - totalValue;
+
+        // Update market light bar color (use today's PL for "live" feel; fall back to total PL)
         const lightBar = document.getElementById('marketLightBar');
         if (lightBar) {
-            lightBar.className = totalPL >= 0 ? 'market-light-bar' : 'market-light-bar negative';
+            const refPL = (todayPL !== 0) ? todayPL : totalPL;
+            lightBar.className = refPL >= 0 ? 'market-light-bar' : 'market-light-bar negative';
         }
 
         // Find top 3 best and worst performing stocks today
@@ -1880,23 +2216,70 @@
             badge.style.display = activeHoldings.length > 0 ? 'inline-block' : 'none';
         }
 
+        const todayCls = todayPL >= 0 ? 'price-positive' : 'price-negative';
+        const totalCls = totalPL >= 0 ? 'price-positive' : 'price-negative';
+        const budgetBarColor = budgetUsedPct > 100 ? '#f87171' : budgetUsedPct > 80 ? '#fbbf24' : '#C1A673';
+        const budgetTextColor = budgetUsedPct > 100 ? '#f87171' : budgetUsedPct > 80 ? '#fbbf24' : '#94a3b8';
+
         let html = `
-            <div class="stat-cards">
-                <div class="stat-card">
-                    <div class="stat-label">Total Value</div>
-                    <div class="stat-value" style="color:#e2e8f0;">$${fmtNum(totalValue)}</div>
+            <div class="stat-grid">
+                <!-- Hero card: Total Value -->
+                <div class="stat-card stat-hero">
+                    <div class="stat-label-row">
+                        <span class="stat-label">Total Value</span>
+                        <span class="stat-chip">USD</span>
+                    </div>
+                    <div class="stat-value-xl">$${fmtNum(totalValue)}</div>
+                    <div class="stat-sub">
+                        <span class="${totalCls}" style="font-weight:600;">${totalPL>=0?'+':''}$${fmtNum(totalPL)}</span>
+                        <span class="${totalCls}" style="opacity:0.75;">${formatPercent(totalPLPercent)}</span>
+                        <span style="color:#64748b;">cumulative</span>
+                    </div>
                 </div>
-                <div class="stat-card">
-                    <div class="stat-label">Total Cost</div>
-                    <div class="stat-value" style="color:#94a3b8;">$${fmtNum(totalCost)}</div>
+
+                <!-- Today's P&L -->
+                <div class="stat-card stat-today ${todayPL>=0?'pulse-up':'pulse-down'}">
+                    <div class="stat-label-row">
+                        <span class="stat-label">Today P&L</span>
+                        <span class="stat-dot ${todayPL>=0?'dot-up':'dot-down'}"></span>
+                    </div>
+                    <div class="stat-value-lg ${todayCls}">${todayPL>=0?'+':''}$${fmtNum(todayPL)}</div>
+                    <div class="stat-sub">
+                        <span class="${todayCls}" style="font-weight:600;">${formatPercent(todayPLPct)}</span>
+                        <span style="color:#64748b;">vs prev close</span>
+                    </div>
                 </div>
+
+                <!-- Total Cost -->
                 <div class="stat-card">
-                    <div class="stat-label">Unrealized P&L</div>
-                    <div class="stat-value ${totalPL >= 0 ? 'price-positive' : 'price-negative'}">${totalPL >= 0 ? '+' : ''}$${fmtNum(totalPL)}</div>
+                    <div class="stat-label-row">
+                        <span class="stat-label">Total Cost</span>
+                    </div>
+                    <div class="stat-value-lg" style="color:#cbd5e1;">$${fmtNum(totalCost)}</div>
+                    <div class="stat-sub">
+                        <span style="color:#64748b;">${activeHoldings.length} active positions</span>
+                    </div>
                 </div>
-                <div class="stat-card">
-                    <div class="stat-label">Return Rate</div>
-                    <div class="stat-value ${totalPLPercent >= 0 ? 'price-positive' : 'price-negative'}">${formatPercent(totalPLPercent)}</div>
+
+                <!-- Budget usage -->
+                <div class="stat-card stat-budget">
+                    <div class="stat-label-row">
+                        <span class="stat-label">Budget</span>
+                        <span class="stat-chip" style="color:${budgetTextColor};border-color:${budgetTextColor}40;">${totalBudgetUSD > 0 ? fmtNum(budgetUsedPct,1)+'%' : 'N/A'}</span>
+                    </div>
+                    ${totalBudgetUSD > 0 ? `
+                        <div class="stat-value-lg" style="color:#C1A673;">$${fmtNum(totalBudgetUSD)}</div>
+                        <div class="budget-bar-wrap">
+                            <div class="budget-bar-fill" style="width:${Math.min(100,budgetUsedPct)}%;background:${budgetBarColor};box-shadow:0 0 8px ${budgetBarColor}80;"></div>
+                        </div>
+                        <div class="stat-sub" style="display:flex;justify-content:space-between;">
+                            <span style="color:${budgetTextColor};">Invested $${fmtNum(totalValue)}</span>
+                            <span style="color:${budgetRemaining>=0?'#4ade80':'#f87171'};">${budgetRemaining>=0?'Rem':'Over'} $${fmtNum(Math.abs(budgetRemaining))}</span>
+                        </div>
+                    ` : `
+                        <div class="stat-value-lg" style="color:#64748b;">—</div>
+                        <div class="stat-sub" style="color:#64748b;">Set region budgets in Allocation tab</div>
+                    `}
                 </div>
             </div>
             <div class="stat-cards" style="margin-top:12px;">
@@ -2654,7 +3037,18 @@
             const costUSD = isSold ? 0 : costLocal * rate;
             const plUSD = isSold ? (h.realized_pl || 0) * rate : marketValueUSD - costUSD;
             const plPct = isSold ? (h.realized_cost > 0 ? (h.realized_pl / h.realized_cost * 100) : 0) : (costUSD > 0 ? (plUSD / costUSD * 100) : 0);
-            return { ...h, currentPrice, priceChange, marketValueLocal, costLocal, plLocal, marketValueUSD, costUSD, plUSD, plPct, isSold };
+            // Cycle avg cost (per share, in local currency):
+            //   = avg_cost − (已实现盈亏 + 分红) / 当前持仓
+            // realized_pl & dividend_total from server are in local currency
+            const realizedLocal = h.realized_pl || 0;
+            const dividendLocal = h.dividend_total || 0;
+            const cycleCostLocal = (!isSold && h.qty > 0)
+                ? h.avg_cost - (realizedLocal + dividendLocal) / h.qty
+                : h.avg_cost;
+            const cycleReturnPct = cycleCostLocal > 0 && !isSold
+                ? ((currentPrice - cycleCostLocal) / cycleCostLocal * 100)
+                : 0;
+            return { ...h, currentPrice, priceChange, marketValueLocal, costLocal, plLocal, marketValueUSD, costUSD, plUSD, plPct, isSold, cycleCostLocal, cycleReturnPct };
         });
         let data = allData.filter(d => !d.isSold);
         let soldData = allData.filter(d => d.isSold);
@@ -2714,12 +3108,14 @@
                     <th ${thClick('sector')}>Sector${sortIcon('sector')}</th>
                     <th ${thClick('qty')}>Shares${sortIcon('qty')}</th>
                     <th ${thClick('avg_cost')}>Avg Cost${sortIcon('avg_cost')}</th>
+                    <th ${thClick('cycleCostLocal')} style="cursor:pointer;color:#C1A673;" title="周期净成本 = (总投入 − 卖出 − 分红) / 持仓">Cycle Cost ★${sortIcon('cycleCostLocal')}</th>
                     <th ${thClick('currentPrice')}>Price${sortIcon('currentPrice')}</th>
                     <th ${thClick('priceChange')}>Change%${sortIcon('priceChange')}</th>
                     <th ${thClick(isLocalCur?'costLocal':'costUSD')}>Cost(${curLabel})${sortIcon(isLocalCur?'costLocal':'costUSD')}</th>
                     <th ${thClick(isLocalCur?'marketValueLocal':'marketValueUSD')}>Mkt Value(${curLabel})${sortIcon(isLocalCur?'marketValueLocal':'marketValueUSD')}</th>
                     <th ${thClick(isLocalCur?'plLocal':'plUSD')}>P&L(${curLabel})${sortIcon(isLocalCur?'plLocal':'plUSD')}</th>
                     <th ${thClick('plPct')}>P&L%${sortIcon('plPct')}</th>
+                    <th ${thClick('cycleReturnPct')} style="cursor:pointer;color:#C1A673;" title="基于周期净成本的总收益率">Cycle Return%${sortIcon('cycleReturnPct')}</th>
                 </tr></thead><tbody>`;
 
         data.forEach(d => {
@@ -2728,6 +3124,8 @@
             const dMV = isLocalCur ? d.marketValueLocal : d.marketValueUSD;
             const dPL = isLocalCur ? d.plLocal : d.plUSD;
             const ds = isLocalCur ? displaySym : '$';
+            // Highlight when cycle cost differs from book cost (means realized PL or dividends exist)
+            const cycleHighlight = Math.abs(d.cycleCostLocal - d.avg_cost) > 0.01;
             html += `<tr style="cursor:pointer;" onclick="showStockDetail('${d.symbol}')">
                 <td class="symbol-cell">${d.symbol}</td>
                 <td>${d.name}</td>
@@ -2737,43 +3135,49 @@
                 <td>${d.sector||'-'}</td>
                 <td style="text-align:right;">${fmtNum(d.qty, 0)}</td>
                 <td style="text-align:right;">${cs}${fmtNum(d.avg_cost)}</td>
+                <td style="text-align:right;${cycleHighlight?'color:#EADDBC;font-weight:600;':'color:#94a3b8;'}">${cs}${fmtNum(d.cycleCostLocal)}</td>
                 <td style="text-align:right;">${cs}${fmtNum(d.currentPrice)}</td>
                 <td class="${d.priceChange>=0?'price-positive':'price-negative'}" style="text-align:right;">${formatPercent(d.priceChange)}</td>
                 <td style="text-align:right;">${ds}${fmtNum(dCost)}</td>
                 <td style="text-align:right;">${ds}${fmtNum(dMV)}</td>
                 <td class="${dPL>=0?'price-positive':'price-negative'}" style="text-align:right;">${dPL>=0?'+':''}${ds}${fmtNum(dPL)}</td>
                 <td class="${d.plPct>=0?'price-positive':'price-negative'}" style="text-align:right;">${formatPercent(d.plPct)}</td>
+                <td class="${d.cycleReturnPct>=0?'price-positive':'price-negative'}" style="text-align:right;font-weight:${cycleHighlight?'600':'400'};">${formatPercent(d.cycleReturnPct)}</td>
             </tr>`;
         });
 
         // Footer: local currency totals + USD converted row when filtering by currency
+        // Columns now: 1-6=Symbol..Sector, 7=Shares, 8=AvgCost, 9=CycleCost, 10=Price, 11=Change%, 12=Cost, 13=MV, 14=PL, 15=PL%, 16=CycleRet%
         if (isLocalCur) {
             html += `</tbody><tfoot>
                 <tr style="border-top:2px solid #334155;font-weight:bold;">
                     <td colspan="6">Total (${data.length} stocks) — ${curLabel}</td>
-                    <td></td><td></td><td></td><td></td>
+                    <td></td><td></td><td></td><td></td><td></td>
                     <td style="text-align:right;">${displaySym}${fmtNum(totalLocalCost)}</td>
                     <td style="text-align:right;">${displaySym}${fmtNum(totalLocalMV)}</td>
                     <td class="${totalLocalPL>=0?'price-positive':'price-negative'}" style="text-align:right;">${totalLocalPL>=0?'+':''}${displaySym}${fmtNum(totalLocalPL)}</td>
                     <td class="${totalLocalPLPct>=0?'price-positive':'price-negative'}" style="text-align:right;">${formatPercent(totalLocalPLPct)}</td>
+                    <td></td>
                 </tr>
                 <tr style="font-weight:bold;color:#64748b;">
                     <td colspan="6">USD Equivalent</td>
-                    <td></td><td></td><td></td><td></td>
+                    <td></td><td></td><td></td><td></td><td></td>
                     <td style="text-align:right;">$${fmtNum(totalCost)}</td>
                     <td style="text-align:right;">$${fmtNum(totalMV)}</td>
                     <td class="${totalPL>=0?'price-positive':'price-negative'}" style="text-align:right;">${totalPL>=0?'+':''}$${fmtNum(totalPL)}</td>
                     <td class="${totalPLPct>=0?'price-positive':'price-negative'}" style="text-align:right;">${formatPercent(totalPLPct)}</td>
+                    <td></td>
                 </tr>
             </tfoot>`;
         } else {
             html += `</tbody><tfoot><tr style="border-top:2px solid #334155;font-weight:bold;">
                 <td colspan="6">Total (${data.length} stocks)</td>
-                <td></td><td></td><td></td><td></td>
+                <td></td><td></td><td></td><td></td><td></td>
                 <td style="text-align:right;">$${fmtNum(totalCost)}</td>
                 <td style="text-align:right;">$${fmtNum(totalMV)}</td>
                 <td class="${totalPL>=0?'price-positive':'price-negative'}" style="text-align:right;">${totalPL>=0?'+':''}$${fmtNum(totalPL)}</td>
                 <td class="${totalPLPct>=0?'price-positive':'price-negative'}" style="text-align:right;">${formatPercent(totalPLPct)}</td>
+                <td></td>
             </tr></tfoot>`;
         }
         html += `</table></div>
@@ -2926,6 +3330,19 @@
         const totalInvested = totalBuyCost;
         const totalReturn = totalInvested > 0 ? (totalPL / totalInvested * 100) : 0;
 
+        // ===== 周期平均成本（Cycle Avg Cost）=====
+        // 把已实现盈亏 + 分红收入当作"成本回收"，反算出当前每股的有效净成本
+        // 公式: cycleAvgCost = (总投入 - 卖出回收 - 分红) / 当前持仓
+        //                   = avgBuyCost - (已实现盈亏 + 分红) / 当前持仓
+        const cycleNetCash = totalBuyCost - totalSellRevenue - totalDividend;
+        const cycleAvgCost = (!isSold && holding.qty > 0)
+            ? cycleNetCash / holding.qty
+            : 0;
+        const costSavingPerShare = avgBuyCost - cycleAvgCost; // >0 表示成本被摊低
+        const costSavingPct = avgBuyCost > 0 ? (costSavingPerShare / avgBuyCost * 100) : 0;
+        // 周期收益率: 当前价相对周期成本的百分比
+        const cycleReturnPct = cycleAvgCost > 0 ? ((currentPrice - cycleAvgCost) / cycleAvgCost * 100) : 0;
+
         let html = `
         <div class="modal show" id="stockDetailModal" onclick="if(event.target===this)this.classList.remove('show')" style="z-index:1001;">
             <div class="modal-content" style="max-width:700px;position:relative;">
@@ -2968,6 +3385,38 @@
                         <div style="font-size:16px;font-weight:bold;" class="${totalReturn>=0?'price-positive':'price-negative'}">${formatPercent(totalReturn)}</div>
                     </div>
                 </div>
+
+                ${!isSold && holding.qty > 0 ? `
+                <!-- ===== 成本分析 Cost Analysis ===== -->
+                <div style="margin-bottom:18px;padding:14px 16px;background:linear-gradient(135deg,rgba(193,166,115,0.08),rgba(15,23,42,0.6));border:1px solid rgba(193,166,115,0.25);border-radius:10px;">
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+                        <span style="font-size:13px;font-weight:700;color:#C1A673;letter-spacing:0.8px;">成本分析 / COST ANALYSIS</span>
+                        <span style="font-size:10px;color:#64748b;">已实现盈亏 + 分红 计入成本回收</span>
+                    </div>
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;">
+                        <div>
+                            <div style="font-size:10px;color:#94a3b8;letter-spacing:0.8px;margin-bottom:4px;">持仓均价 BOOK COST</div>
+                            <div style="font-size:18px;font-weight:700;color:#cbd5e1;font-family:Montserrat,sans-serif;">${curSym}${fmtNum(avgBuyCost)}</div>
+                            <div style="font-size:10px;color:#64748b;margin-top:2px;">总投入 / 总买入数量</div>
+                        </div>
+                        <div style="position:relative;">
+                            <div style="font-size:10px;color:#C1A673;letter-spacing:0.8px;margin-bottom:4px;">周期净成本 CYCLE COST ★</div>
+                            <div style="font-size:20px;font-weight:700;color:#EADDBC;font-family:Montserrat,sans-serif;">${curSym}${fmtNum(cycleAvgCost)}</div>
+                            <div style="font-size:10px;color:#64748b;margin-top:2px;">(总投入 − 卖出 − 分红) / 持仓</div>
+                        </div>
+                        <div>
+                            <div style="font-size:10px;color:#94a3b8;letter-spacing:0.8px;margin-bottom:4px;">成本摊薄 COST REDUCED</div>
+                            <div style="font-size:18px;font-weight:700;font-family:Montserrat,sans-serif;" class="${costSavingPerShare>=0?'price-positive':'price-negative'}">${costSavingPerShare>=0?'−':'+'}${curSym}${fmtNum(Math.abs(costSavingPerShare))}</div>
+                            <div style="font-size:10px;color:${costSavingPerShare>=0?'#4ade80':'#f87171'};margin-top:2px;">${costSavingPerShare>=0?'↓':'↑'} ${fmtNum(Math.abs(costSavingPct),2)}% per share</div>
+                        </div>
+                        <div>
+                            <div style="font-size:10px;color:#94a3b8;letter-spacing:0.8px;margin-bottom:4px;">周期收益率 CYCLE RETURN</div>
+                            <div style="font-size:18px;font-weight:700;font-family:Montserrat,sans-serif;" class="${cycleReturnPct>=0?'price-positive':'price-negative'}">${formatPercent(cycleReturnPct)}</div>
+                            <div style="font-size:10px;color:#64748b;margin-top:2px;">基于周期净成本</div>
+                        </div>
+                    </div>
+                </div>
+                ` : ''}
 
                 <div style="font-size:14px;font-weight:600;color:#cbd5e1;margin-bottom:10px;">交易时间线</div>
                 <div style="max-height:300px;overflow-y:auto;">
@@ -3248,6 +3697,9 @@
     function openModal(modalId) {
         const modal = document.getElementById(modalId);
         if (modal) modal.classList.add('show');
+        if (modalId === 'tradeModal') {
+            resetTradeModal();
+        }
     }
 
     function closeModal(modalId) {
@@ -3272,6 +3724,7 @@
             const pd = APP.prices[match.symbol];
             const price = pd && pd.price ? pd.price : match.avg_cost;
             document.getElementById('tradePrice').value = price.toFixed(2);
+            refreshTradeFormForAction();
             return;
         }
 
@@ -3306,6 +3759,7 @@
                     document.getElementById('tradeRegion').value = '美国';
                 }
             }
+            refreshTradeFormForAction();
         } catch(e) {
             console.warn('Stock lookup failed:', e.message);
             document.getElementById('tradeName').value = '';
@@ -3331,23 +3785,274 @@
         }
     }
 
+    // ===== Two-step Trade Modal: action picker + dynamic form =====
+
+    // Effective currency for the current trade context (Buy reads visible select; Sell/Dividend reads hidden carrier)
+    function currentTradeCurrency() {
+        const action = document.getElementById('tradeType')?.value;
+        if (action === '买入') return document.getElementById('tradeCurrency')?.value || 'USD';
+        return document.getElementById('tradeCurrencyHidden')?.value || 'USD';
+    }
+
+    // Refresh labels (qty/price/fee) based on current action + currency
+    function refreshTradeFormForAction(action) {
+        action = action || document.getElementById('tradeType')?.value || '';
+        const cur = currentTradeCurrency();
+        const qtyLabel = document.getElementById('tradeQtyLabel');
+        const priceLabel = document.getElementById('tradePriceLabel');
+        const feeLabel = document.getElementById('tradeFeeLabel');
+        const hint = document.getElementById('tradeQtyHint');
+        if (!qtyLabel) return;
+
+        if (action === '分红') {
+            qtyLabel.textContent = 'Shares Eligible / 持股数';
+            priceLabel.textContent = `Dividend per Share (${cur})`;
+            feeLabel.textContent = `Tax (${cur})`;
+            if (hint) { hint.style.display = 'block'; hint.textContent = '通常等于持仓数量；总分红 = 此值 × 每股分红'; }
+        } else if (action === '卖出') {
+            qtyLabel.textContent = 'Sell Quantity / 卖出数量';
+            priceLabel.textContent = `Sell Price (${cur})`;
+            feeLabel.textContent = `Fee (${cur})`;
+            if (hint) hint.style.display = 'none';
+        } else {
+            qtyLabel.textContent = 'Buy Quantity / 买入数量';
+            priceLabel.textContent = `Buy Price (${cur})`;
+            feeLabel.textContent = `Fee (${cur})`;
+            if (hint) hint.style.display = 'none';
+        }
+        updateTradeTotalPreview();
+    }
+
+    // Live total preview ("Total: ¥123,456")
+    function updateTradeTotalPreview() {
+        const action = document.getElementById('tradeType')?.value;
+        const qty = parseFloat(document.getElementById('tradeQty')?.value) || 0;
+        const price = parseFloat(document.getElementById('tradePrice')?.value) || 0;
+        const fee = parseFloat(document.getElementById('tradeFee')?.value) || 0;
+        const cur = currentTradeCurrency();
+        const sym = cur === 'CNY' ? '¥' : cur === 'JPY' ? '¥' : cur === 'HKD' ? 'HK$' : '$';
+        const preview = document.getElementById('tradeTotalPreview');
+        if (!preview) return;
+        if (qty > 0 && price > 0) {
+            const gross = qty * price;
+            const net = action === '买入' ? gross + fee : action === '卖出' ? gross - fee : gross - fee;
+            const labelGross = action === '分红' ? 'Total Dividend' : 'Gross';
+            const labelNet = action === '买入' ? 'Total Cost' : action === '卖出' ? 'Net Proceeds' : 'Net Income';
+            preview.style.display = 'block';
+            preview.innerHTML = `<span style="color:#94a3b8;">${labelGross}:</span> <span style="color:#cbd5e1;font-weight:600;">${sym}${fmtNum(gross)}</span>`
+                + (fee > 0 ? ` &nbsp;·&nbsp; <span style="color:#94a3b8;">Fee:</span> <span style="color:#94a3b8;">${sym}${fmtNum(fee)}</span>` : '')
+                + ` &nbsp;<span style="color:#64748b;">→</span>&nbsp; <span style="color:#C1A673;font-weight:700;">${labelNet}: ${sym}${fmtNum(net)}</span>`;
+        } else {
+            preview.style.display = 'none';
+        }
+    }
+
+    // Step 1: user clicked an action card
+    function setTradeAction(action) {
+        document.getElementById('tradeType').value = action;
+
+        // Highlight the selected card
+        document.querySelectorAll('.trade-action-card').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.action === action);
+        });
+
+        // Show form body
+        document.getElementById('tradeFormBody').style.display = 'block';
+
+        // Toggle conditional sections
+        document.querySelectorAll('[data-show-for]').forEach(el => {
+            const allowed = el.dataset.showFor.split(',');
+            // Use original display style; for visible we restore '' (default), hidden -> 'none'
+            if (allowed.includes(action)) {
+                if (el.id === 'tradeStockInfo') {
+                    // Only show when a holding has been picked
+                    if (el.innerHTML.trim()) el.style.display = ''; else el.style.display = 'none';
+                } else {
+                    el.style.display = '';
+                }
+            } else {
+                el.style.display = 'none';
+            }
+        });
+
+        // Symbol field behavior:
+        //   Buy → free text input + autoFillTrade lookup
+        //   Sell / Dividend → quick-pick chips of existing holdings
+        const picker = document.getElementById('tradeHoldingPicker');
+        const symbolInput = document.getElementById('tradeSymbol');
+        const symbolLabel = document.getElementById('tradeSymbolLabel');
+        if (action === '买入') {
+            picker.style.display = 'none';
+            symbolInput.placeholder = 'e.g. AAPL / 0700.HK / 7203.T / 600036.SS';
+            symbolInput.readOnly = false;
+            symbolLabel.textContent = 'Stock Symbol';
+            // Reset stock info card
+            const info = document.getElementById('tradeStockInfo');
+            info.innerHTML = ''; info.style.display = 'none';
+        } else {
+            picker.style.display = 'block';
+            symbolInput.placeholder = 'Pick from holdings below';
+            symbolInput.readOnly = true; // force user to pick
+            symbolLabel.textContent = 'Stock (from holdings)';
+            renderHoldingPickerChips();
+        }
+
+        // Update labels & preview
+        refreshTradeFormForAction(action);
+
+        // Submit button label
+        const btn = document.getElementById('tradeSubmitBtn');
+        if (btn) btn.textContent = action === '买入' ? 'Save Buy' : action === '卖出' ? 'Save Sell' : 'Save Dividend';
+
+        // Default date today
+        const dateInput = document.getElementById('tradeDate');
+        if (dateInput && !dateInput.value) dateInput.value = new Date().toISOString().split('T')[0];
+    }
+
+    // Render quick-pick chips of existing (qty>0) holdings
+    function renderHoldingPickerChips() {
+        const wrap = document.getElementById('tradeHoldingPickerChips');
+        const active = APP.holdings.filter(h => h.qty > 0);
+        if (active.length === 0) {
+            wrap.innerHTML = '<div style="font-size:12px;color:#f87171;padding:6px;">No active holdings. Buy first.</div>';
+            return;
+        }
+        wrap.innerHTML = active.map(h =>
+            `<button type="button" class="holding-pick-chip" data-symbol="${h.symbol}" onclick="pickHoldingForTrade('${h.symbol}')">${h.symbol}</button>`
+        ).join('');
+    }
+
+    // User clicked a holding chip (or auto-pick)
+    function pickHoldingForTrade(symbol) {
+        const h = APP.holdings.find(x => x.symbol === symbol);
+        if (!h) return;
+        const action = document.getElementById('tradeType').value;
+
+        // Highlight selected chip
+        document.querySelectorAll('.holding-pick-chip').forEach(c => {
+            c.classList.toggle('selected', c.dataset.symbol === symbol);
+        });
+
+        document.getElementById('tradeSymbol').value = symbol;
+
+        // Stash holding metadata into hidden carriers (so submitTrade can read them)
+        document.getElementById('tradeNameHidden').value = h.name || '';
+        document.getElementById('tradeCurrencyHidden').value = h.currency || 'USD';
+        document.getElementById('tradeMarketHidden').value = h.market || 'STOCK';
+        document.getElementById('tradeRegionHidden').value = h.region || '';
+        document.getElementById('tradeAttributeHidden').value = h.attribute || '';
+        document.getElementById('tradeSectorHidden').value = h.sector || '';
+
+        // Show stock info card
+        const info = document.getElementById('tradeStockInfo');
+        const cs = h.currency==='CNY'?'¥':h.currency==='JPY'?'¥':h.currency==='HKD'?'HK$':'$';
+        const px = APP.prices[symbol]?.price || h.avg_cost;
+        info.innerHTML = `
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+                <div style="min-width:0;">
+                    <div style="font-size:14px;font-weight:600;color:#EADDBC;font-family:Montserrat,sans-serif;">${h.symbol} · ${h.name||''}</div>
+                    <div style="font-size:11px;color:#94a3b8;margin-top:2px;">${h.region||''} · ${h.currency} · ${h.attribute||'-'} · ${h.sector||'-'}</div>
+                </div>
+                <div style="text-align:right;flex-shrink:0;">
+                    <div style="font-size:10px;color:#94a3b8;letter-spacing:0.6px;">HELD · ${cs}${fmtNum(px)} now</div>
+                    <div style="font-size:18px;font-weight:700;color:#C1A673;font-family:Montserrat,sans-serif;line-height:1.1;">${fmtNum(h.qty,0)} shares</div>
+                    <div style="font-size:10px;color:#64748b;">avg cost ${cs}${fmtNum(h.avg_cost)}</div>
+                </div>
+            </div>`;
+        info.style.display = '';
+
+        // Auto-fill defaults
+        if (action === '分红') {
+            // Pre-fill qty = current shares held (typical case); price empty for user to type per-share dividend
+            document.getElementById('tradeQty').value = h.qty;
+            document.getElementById('tradePrice').value = '';
+            document.getElementById('tradePrice').focus();
+        } else if (action === '卖出') {
+            // Default qty empty with hint; price = current market price
+            document.getElementById('tradeQty').value = '';
+            document.getElementById('tradeQty').placeholder = `Max ${fmtNum(h.qty,0)}`;
+            document.getElementById('tradePrice').value = px ? px.toFixed(2) : '';
+            const hint = document.getElementById('tradeQtyHint');
+            if (hint) { hint.style.display = 'block'; hint.textContent = `当前持有 ${fmtNum(h.qty,0)} 股`; }
+            document.getElementById('tradeQty').focus();
+        }
+        refreshTradeFormForAction(action);
+    }
+
+    // Reset modal to step-1 state
+    function resetTradeModal() {
+        document.getElementById('tradeType').value = '';
+        document.getElementById('tradeFormBody').style.display = 'none';
+        document.querySelectorAll('.trade-action-card').forEach(btn => btn.classList.remove('active'));
+        const info = document.getElementById('tradeStockInfo');
+        if (info) { info.innerHTML = ''; info.style.display = 'none'; }
+        const picker = document.getElementById('tradeHoldingPicker');
+        if (picker) picker.style.display = 'none';
+        const preview = document.getElementById('tradeTotalPreview');
+        if (preview) { preview.style.display = 'none'; preview.innerHTML = ''; }
+
+        ['tradeSymbol','tradeName','tradeQty','tradePrice','tradeFee','tradeAttribute','tradeSector'].forEach(id => {
+            const el = document.getElementById(id); if (el) el.value = '';
+        });
+        ['tradeNameHidden','tradeAttributeHidden','tradeSectorHidden'].forEach(id => {
+            const el = document.getElementById(id); if (el) el.value = '';
+        });
+        document.getElementById('tradeQty').placeholder = '0';
+        document.getElementById('tradePrice').placeholder = '0.00';
+        const sym = document.getElementById('tradeSymbol');
+        if (sym) sym.readOnly = false;
+        const dateInput = document.getElementById('tradeDate');
+        if (dateInput) dateInput.value = new Date().toISOString().split('T')[0];
+
+        // Bind live preview listeners (idempotent)
+        ['tradeQty','tradePrice','tradeFee'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el && !el._previewBound) { el.addEventListener('input', updateTradeTotalPreview); el._previewBound = true; }
+        });
+        const cur = document.getElementById('tradeCurrency');
+        if (cur && !cur._refreshBound) { cur.addEventListener('change', () => refreshTradeFormForAction()); cur._refreshBound = true; }
+    }
+
     async function submitTrade() {
-        const symbol = document.getElementById('tradeSymbol').value;
-        const name = document.getElementById('tradeName').value;
         const type = document.getElementById('tradeType').value;
+        if (!type) { alert('Please choose Buy / Sell / Dividend first'); return; }
+
+        const symbol = document.getElementById('tradeSymbol').value.trim();
         const qty = parseFloat(document.getElementById('tradeQty').value);
         const price = parseFloat(document.getElementById('tradePrice').value);
         const fee = parseFloat(document.getElementById('tradeFee').value) || 0;
         const date = document.getElementById('tradeDate').value;
-        const currency = document.getElementById('tradeCurrency').value;
-        const market = document.getElementById('tradeMarket').value;
-        const region = document.getElementById('tradeRegion').value;
-        const attribute = document.getElementById('tradeAttribute').value;
-        const sector = document.getElementById('tradeSector').value;
 
-        if (!symbol || !name || !qty || !price || !date) {
-            alert('Please fill all required fields');
-            return;
+        // Field source differs by action: Buy uses visible selects; Sell/Dividend uses hidden carriers
+        let name, currency, market, region, attribute, sector;
+        if (type === '买入') {
+            name = document.getElementById('tradeName').value.trim();
+            currency = document.getElementById('tradeCurrency').value;
+            market = document.getElementById('tradeMarket').value;
+            region = document.getElementById('tradeRegion').value;
+            attribute = document.getElementById('tradeAttribute').value;
+            sector = document.getElementById('tradeSector').value;
+        } else {
+            name = document.getElementById('tradeNameHidden').value;
+            currency = document.getElementById('tradeCurrencyHidden').value;
+            market = document.getElementById('tradeMarketHidden').value;
+            region = document.getElementById('tradeRegionHidden').value;
+            attribute = document.getElementById('tradeAttributeHidden').value;
+            sector = document.getElementById('tradeSectorHidden').value;
+        }
+
+        // Action-specific validation
+        if (!symbol) { alert('Please pick or enter a stock symbol'); return; }
+        if (!date) { alert('Please choose a date'); return; }
+        if (!(qty > 0)) { alert('Quantity must be > 0'); return; }
+        if (!(price > 0)) { alert(type === '分红' ? 'Dividend per share must be > 0' : 'Price must be > 0'); return; }
+        if (type === '买入' && !name) { alert('Please enter the stock name'); return; }
+        if (type === '卖出') {
+            const h = APP.holdings.find(x => x.symbol === symbol);
+            if (!h || h.qty <= 0) { alert('No active position for ' + symbol); return; }
+            if (qty > h.qty + 1e-6) {
+                if (!confirm(`卖出数量 ${qty} 超过当前持仓 ${h.qty}. 仍要继续？`)) return;
+            }
         }
 
         try {
@@ -3355,13 +4060,12 @@
                 symbol, name, type, qty, price, fee, date, currency, market, region, attribute, sector
             });
 
-            // Reload all data in parallel then re-render
+            // Reload data and re-render
             await Promise.all([loadHoldings(), loadTrades(), updateFXRates()]);
             await updatePrices();
 
             closeModal('tradeModal');
 
-            // Re-render ALL tabs to sync data
             renderTab0();
             renderTab1();
             renderTab2();
@@ -3369,17 +4073,6 @@
             if (typeof renderTab5Portfolio === 'function') {
                 try { renderTab5Portfolio(); } catch(e) {}
             }
-
-            // Reset form
-            document.getElementById('tradeSymbol').value = '';
-            document.getElementById('tradeName').value = '';
-            document.getElementById('tradeQty').value = '';
-            document.getElementById('tradePrice').value = '';
-            document.getElementById('tradeFee').value = '';
-            document.getElementById('tradeAttribute').value = '';
-            document.getElementById('tradeSector').value = '';
-            const today = new Date().toISOString().split('T')[0];
-            document.getElementById('tradeDate').value = today;
         } catch (error) {
             alert('Failed to save trade: ' + error.message);
         }
