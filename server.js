@@ -66,6 +66,13 @@ async function initDB() {
       value TEXT,
       UNIQUE(user_id, key)
     );
+    CREATE TABLE IF NOT EXISTS sessions (
+      token TEXT PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      last_used TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
   `);
   console.log("✅ 数据库表已就绪");
 }
@@ -137,18 +144,67 @@ async function autoSeed() {
   console.log("✅ 自动初始化完成: LiuBin + " + holdings.length + " 只股票");
 }
 
-// ===== 简易Session管理 =====
-const sessions = {};
-function createSession(userId) {
+// ===== Session 管理（DB 持久化 + 内存缓存）=====
+// Token 30 天有效；DB 持久化保证 Render 重启后会话不丢失
+const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+const sessionCache = new Map(); // token -> { userId, lastUsed }
+
+async function createSession(userId) {
   const token = crypto.randomBytes(32).toString("hex");
-  sessions[token] = { userId, created: Date.now() };
+  await pool.query(
+    "INSERT INTO sessions (token, user_id) VALUES ($1, $2)",
+    [token, userId]
+  );
+  sessionCache.set(token, { userId, lastUsed: Date.now() });
   return token;
 }
-function auth(req, res, next) {
+
+async function destroySession(token) {
+  if (!token) return;
+  sessionCache.delete(token);
+  try { await pool.query("DELETE FROM sessions WHERE token=$1", [token]); } catch(e) {}
+}
+
+async function destroySessionsForUser(userId, exceptToken) {
+  for (const [tk, info] of sessionCache.entries()) {
+    if (info.userId === userId && tk !== exceptToken) sessionCache.delete(tk);
+  }
+  try {
+    if (exceptToken) {
+      await pool.query("DELETE FROM sessions WHERE user_id=$1 AND token<>$2", [userId, exceptToken]);
+    } else {
+      await pool.query("DELETE FROM sessions WHERE user_id=$1", [userId]);
+    }
+  } catch(e) { console.error("destroySessionsForUser error:", e.message); }
+}
+
+async function auth(req, res, next) {
   const token = req.headers["x-token"];
-  if (!token || !sessions[token]) return res.status(401).json({ error: "请先登录" });
-  req.userId = sessions[token].userId;
-  next();
+  if (!token) return res.status(401).json({ error: "请先登录" });
+
+  const cached = sessionCache.get(token);
+  if (cached) {
+    req.userId = cached.userId;
+    cached.lastUsed = Date.now();
+    return next();
+  }
+
+  try {
+    const r = await pool.query("SELECT user_id, created_at FROM sessions WHERE token=$1", [token]);
+    if (r.rows.length === 0) return res.status(401).json({ error: "请先登录" });
+    const ageMs = Date.now() - new Date(r.rows[0].created_at).getTime();
+    if (ageMs > SESSION_TTL_MS) {
+      await destroySession(token);
+      return res.status(401).json({ error: "登录已过期，请重新登录" });
+    }
+    sessionCache.set(token, { userId: r.rows[0].user_id, lastUsed: Date.now() });
+    req.userId = r.rows[0].user_id;
+    pool.query("UPDATE sessions SET last_used=NOW() WHERE token=$1", [token]).catch(() => {});
+    next();
+  } catch (e) {
+    console.error("Auth error:", e.message);
+    return res.status(500).json({ error: "认证服务异常" });
+  }
 }
 
 // ===== 用户认证 =====
@@ -161,7 +217,7 @@ app.post("/api/register", async (req, res) => {
     if (existing.rows.length > 0) return res.status(400).json({ error: "用户名已存在" });
     const hash = bcrypt.hashSync(password, 10);
     const result = await pool.query("INSERT INTO users (username, password) VALUES ($1, $2) RETURNING id", [username, hash]);
-    const token = createSession(result.rows[0].id);
+    const token = await createSession(result.rows[0].id);
     res.json({ token, username, userId: result.rows[0].id });
   } catch (e) {
     console.error("Register error:", e.message);
@@ -176,7 +232,7 @@ app.post("/api/login", async (req, res) => {
     if (result.rows.length === 0) return res.status(400).json({ error: "用户不存在" });
     const user = result.rows[0];
     if (!bcrypt.compareSync(password, user.password)) return res.status(400).json({ error: "密码错误" });
-    const token = createSession(user.id);
+    const token = await createSession(user.id);
     res.json({ token, username: user.username, userId: user.id });
   } catch (e) {
     console.error("Login error:", e.message);
@@ -186,13 +242,24 @@ app.post("/api/login", async (req, res) => {
 
 app.get("/api/verify", async (req, res) => {
   const token = req.headers["x-token"];
-  if (!token || !sessions[token]) return res.json({ valid: false });
-  res.json({ valid: true });
+  if (!token) return res.json({ valid: false });
+  if (sessionCache.has(token)) return res.json({ valid: true });
+  try {
+    const r = await pool.query("SELECT user_id, created_at FROM sessions WHERE token=$1", [token]);
+    if (r.rows.length === 0) return res.json({ valid: false });
+    const ageMs = Date.now() - new Date(r.rows[0].created_at).getTime();
+    if (ageMs > SESSION_TTL_MS) { await destroySession(token); return res.json({ valid: false }); }
+    sessionCache.set(token, { userId: r.rows[0].user_id, lastUsed: Date.now() });
+    res.json({ valid: true });
+  } catch (e) {
+    console.error("Verify error:", e.message);
+    res.json({ valid: false });
+  }
 });
 
-app.post("/api/logout", (req, res) => {
+app.post("/api/logout", async (req, res) => {
   const token = req.headers["x-token"];
-  if (token) delete sessions[token];
+  await destroySession(token);
   res.json({ ok: true });
 });
 
@@ -215,9 +282,7 @@ app.post("/api/change-password", auth, async (req, res) => {
     }
     // Invalidate all sessions for this user so they must re-login with new password
     const currentToken = req.headers["x-token"];
-    Object.keys(sessions).forEach(tk => {
-      if (sessions[tk].userId === req.userId && tk !== currentToken) delete sessions[tk];
-    });
+    await destroySessionsForUser(req.userId, currentToken);
     console.log("✅ 用户 " + user.username + " 密码已成功修改");
     res.json({ ok: true, message: "密码修改成功" });
   } catch (e) {
