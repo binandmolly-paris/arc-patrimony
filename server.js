@@ -778,12 +778,65 @@ app.post("/api/import-holdings", auth, async (req, res) => {
 });
 
 // ===== 数据导出 =====
+// v2: 含已清仓股票 + portfolio_config + target_weight + trade.id
 app.get("/api/export", auth, async (req, res) => {
   try {
-    const holdRes = await pool.query("SELECT symbol,name,qty,avg_cost,currency,market,region,attribute,sector FROM holdings WHERE user_id=$1 AND qty>0", [req.userId]);
-    const tradeRes = await pool.query("SELECT symbol,name,type,qty,price,fee,date FROM trades WHERE user_id=$1", [req.userId]);
-    const alertRes = await pool.query("SELECT symbol,name,condition,price,active FROM alerts WHERE user_id=$1", [req.userId]);
-    res.json({ holdings: holdRes.rows, trades: tradeRes.rows, alerts: alertRes.rows, exported_at: new Date().toISOString() });
+    // 1) 全部 holdings（包括 qty=0 已清仓的）+ target_weight
+    const holdRes = await pool.query(
+      `SELECT id, symbol, name, qty, avg_cost, currency, market, region, attribute, sector, target_weight
+       FROM holdings WHERE user_id=$1 ORDER BY id`,
+      [req.userId]
+    );
+    const holdings = holdRes.rows.map(h => ({ ...h, is_sold: !(h.qty > 0) }));
+
+    // 2) 全部 trades（含 id 便于追溯）
+    const tradeRes = await pool.query(
+      `SELECT id, symbol, name, type, qty, price, fee, date, created_at
+       FROM trades WHERE user_id=$1 ORDER BY date, id`,
+      [req.userId]
+    );
+
+    // 3) Alerts
+    const alertRes = await pool.query(
+      `SELECT id, symbol, name, condition, price, active
+       FROM alerts WHERE user_id=$1 ORDER BY id`,
+      [req.userId]
+    );
+
+    // 4) Portfolio config（含三地区本币预算等）
+    const configRes = await pool.query(
+      `SELECT key, value FROM portfolio_config WHERE user_id=$1`,
+      [req.userId]
+    );
+    const portfolio_config = {};
+    configRes.rows.forEach(r => { portfolio_config[r.key] = r.value; });
+
+    // 5) Daily snapshots（如果有 — Phase 1 cron 启动后才会有数据）
+    const snapRes = await pool.query(
+      `SELECT date, total_value_usd, total_cost_usd, unrealized_pl_usd, realized_pl_usd,
+              dividend_total_usd, cumulative_pl_usd, region_values, fx_rates
+       FROM daily_snapshot WHERE user_id=$1 ORDER BY date`,
+      [req.userId]
+    );
+
+    res.json({
+      version: 2,
+      exported_at: new Date().toISOString(),
+      user_id: req.userId,
+      holdings,                    // 含 qty=0 + target_weight + is_sold 标记
+      trades: tradeRes.rows,       // 含 id + created_at
+      alerts: alertRes.rows,
+      portfolio_config,            // budget_中国 / budget_日本 / budget_美国 / totalBudget 等
+      daily_snapshots: snapRes.rows,  // 30+ 天数据后才有内容
+      counts: {
+        holdings_active: holdings.filter(h => !h.is_sold).length,
+        holdings_sold: holdings.filter(h => h.is_sold).length,
+        trades: tradeRes.rows.length,
+        alerts: alertRes.rows.length,
+        snapshots: snapRes.rows.length,
+        config_keys: Object.keys(portfolio_config).length,
+      },
+    });
   } catch (e) {
     console.error("Export error:", e.message);
     res.status(500).json({ error: "导出失败" });
