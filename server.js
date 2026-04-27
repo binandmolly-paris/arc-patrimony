@@ -874,6 +874,187 @@ app.get("/api/fx-rates", (req, res) => {
   res.json(fxRates);
 });
 
+// ============ Daily Snapshot — Phase 1 自动快照 ============
+// 每天给每个用户的组合拍一张"照片"存到 daily_snapshot 表里。
+// 30+ 天后可绘出真·YTD 曲线 / IRR / 最大回撤。
+
+async function takeDailySnapshot(userId) {
+  // 1) Refresh FX rates
+  try { await fetchFXRates(); } catch(e) { console.warn("Snapshot: FX refresh failed:", e.message); }
+
+  // 2) Get holdings + trades for this user
+  const [hRes, tRes] = await Promise.all([
+    pool.query("SELECT * FROM holdings WHERE user_id=$1", [userId]),
+    pool.query("SELECT type, symbol, qty, price FROM trades WHERE user_id=$1", [userId]),
+  ]);
+
+  // 3) Compute per-symbol realized PL & dividends from trade history
+  const sellInfo = {};   // { symbol: { amount, qty } }
+  const dividendInfo = {};
+  tRes.rows.forEach(t => {
+    const isBuy = t.type === '买入' || t.type === 'BUY';
+    const isDiv = t.type === '分红' || t.type === 'DIVIDEND';
+    if (isDiv) {
+      dividendInfo[t.symbol] = (dividendInfo[t.symbol] || 0) + t.price * t.qty;
+    } else if (!isBuy) {
+      if (!sellInfo[t.symbol]) sellInfo[t.symbol] = { amount: 0, qty: 0 };
+      sellInfo[t.symbol].amount += t.price * t.qty;
+      sellInfo[t.symbol].qty += t.qty;
+    }
+  });
+
+  // 4) Fetch current prices for active symbols
+  const activeSymbols = hRes.rows.filter(h => h.qty > 0).map(h => h.symbol);
+  let prices = {};
+  if (activeSymbols.length > 0) {
+    try { prices = await fetchYahooQuotes(activeSymbols); }
+    catch(e) { console.warn("Snapshot: price fetch failed:", e.message); }
+  }
+
+  // 5) Aggregate totals (USD)
+  let totalValueUsd = 0, totalCostUsd = 0, unrealizedUsd = 0, realizedUsd = 0, dividendsUsd = 0;
+  const regionValues = {};
+
+  hRes.rows.forEach(h => {
+    const fx = fxRates[h.currency] || 1;
+
+    // Realized PL & dividends apply across all positions (including sold)
+    const si = sellInfo[h.symbol];
+    if (si && si.qty > 0) {
+      const realizedCost = h.avg_cost * si.qty;
+      realizedUsd += (si.amount - realizedCost) * fx;
+    }
+    const divLocal = dividendInfo[h.symbol] || 0;
+    dividendsUsd += divLocal * fx;
+
+    // Unrealized only for active positions
+    if (h.qty > 0) {
+      const px = prices[h.symbol]?.price || h.avg_cost;
+      const mvLocal = h.qty * px;
+      const cvLocal = h.qty * h.avg_cost;
+      const mvUsd = mvLocal * fx;
+      const cvUsd = cvLocal * fx;
+      totalValueUsd += mvUsd;
+      totalCostUsd += cvUsd;
+      unrealizedUsd += (mvUsd - cvUsd);
+      if (h.region) {
+        regionValues[h.region] = (regionValues[h.region] || 0) + mvUsd;
+      }
+    }
+  });
+
+  const cumulativePlUsd = unrealizedUsd + realizedUsd + dividendsUsd;
+  const today = new Date().toISOString().slice(0, 10);
+
+  // 6) UPSERT today's snapshot (one row per user per date)
+  await pool.query(`
+    INSERT INTO daily_snapshot (
+      user_id, date, total_value_usd, total_cost_usd,
+      unrealized_pl_usd, realized_pl_usd, dividend_total_usd, cumulative_pl_usd,
+      region_values, fx_rates
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+    ON CONFLICT (user_id, date) DO UPDATE SET
+      total_value_usd     = EXCLUDED.total_value_usd,
+      total_cost_usd      = EXCLUDED.total_cost_usd,
+      unrealized_pl_usd   = EXCLUDED.unrealized_pl_usd,
+      realized_pl_usd     = EXCLUDED.realized_pl_usd,
+      dividend_total_usd  = EXCLUDED.dividend_total_usd,
+      cumulative_pl_usd   = EXCLUDED.cumulative_pl_usd,
+      region_values       = EXCLUDED.region_values,
+      fx_rates            = EXCLUDED.fx_rates
+  `, [
+    userId, today,
+    totalValueUsd.toFixed(2), totalCostUsd.toFixed(2),
+    unrealizedUsd.toFixed(2), realizedUsd.toFixed(2),
+    dividendsUsd.toFixed(2), cumulativePlUsd.toFixed(2),
+    JSON.stringify(regionValues), JSON.stringify(fxRates),
+  ]);
+
+  return {
+    userId, date: today,
+    total_value_usd: +totalValueUsd.toFixed(2),
+    cumulative_pl_usd: +cumulativePlUsd.toFixed(2),
+    active_positions: activeSymbols.length,
+  };
+}
+
+// ===== Cron endpoint: external scheduler (cron-job.org) hits this daily =====
+// Auth: header "x-cron-token" must match CRON_SECRET env var
+app.post("/api/cron/snapshot", async (req, res) => {
+  const token = req.headers["x-cron-token"];
+  if (!process.env.CRON_SECRET) {
+    return res.status(500).json({ error: "CRON_SECRET not configured on server" });
+  }
+  if (!token || token !== process.env.CRON_SECRET) {
+    console.warn("Snapshot cron: invalid token");
+    return res.status(401).json({ error: "Invalid cron token" });
+  }
+  try {
+    const users = await pool.query("SELECT id FROM users");
+    const results = [];
+    for (const u of users.rows) {
+      try {
+        const r = await takeDailySnapshot(u.id);
+        results.push(r);
+      } catch (e) {
+        console.error(`Snapshot failed for user ${u.id}:`, e.message);
+        results.push({ userId: u.id, error: e.message });
+      }
+    }
+    console.log(`✅ Daily snapshot taken for ${results.length} user(s)`);
+    res.json({ ok: true, snapshots: results });
+  } catch (e) {
+    console.error("Snapshot cron error:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ===== Snapshot history endpoint (for future YTD chart UI) =====
+app.get("/api/snapshots", auth, async (req, res) => {
+  try {
+    const days = Math.min(parseInt(req.query.days) || 365, 1825); // cap at 5 years
+    const r = await pool.query(
+      `SELECT date, total_value_usd, total_cost_usd, unrealized_pl_usd, realized_pl_usd,
+              dividend_total_usd, cumulative_pl_usd, region_values
+       FROM daily_snapshot
+       WHERE user_id=$1 AND date >= CURRENT_DATE - $2::int
+       ORDER BY date`,
+      [req.userId, days]
+    );
+    res.json(r.rows);
+  } catch (e) {
+    console.error("Snapshots fetch error:", e.message);
+    res.status(500).json({ error: "获取快照失败" });
+  }
+});
+
+// Startup snapshot: after server starts, take today's snapshot if missing.
+// Fire-and-forget so it doesn't block startup. Wraps in setTimeout to let FX rates load first.
+async function maybeStartupSnapshot() {
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const exists = await pool.query(
+      "SELECT 1 FROM daily_snapshot WHERE date=$1 LIMIT 1",
+      [today]
+    );
+    if (exists.rows.length > 0) {
+      console.log("📸 Snapshot for today already exists, skipping startup snapshot");
+      return;
+    }
+    const users = await pool.query("SELECT id FROM users");
+    for (const u of users.rows) {
+      try {
+        const r = await takeDailySnapshot(u.id);
+        console.log(`📸 Startup snapshot taken for user ${u.id}: $${r.total_value_usd}`);
+      } catch (e) {
+        console.error(`Startup snapshot failed for user ${u.id}:`, e.message);
+      }
+    }
+  } catch (e) {
+    console.error("Startup snapshot error:", e.message);
+  }
+}
+
 // ===== 启动 =====
 const PORT = process.env.PORT || 3000;
 
@@ -882,6 +1063,8 @@ async function startServer() {
     await initDB();
     await autoSeed();
     app.listen(PORT, () => console.log(`Arc Patrimony 服务器已启动: http://localhost:${PORT}`));
+    // Take today's snapshot ~30s after startup (let FX rates load first; fire-and-forget)
+    setTimeout(() => { maybeStartupSnapshot(); }, 30000);
   } catch (e) {
     console.error("启动失败:", e.message);
     process.exit(1);
