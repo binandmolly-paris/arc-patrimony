@@ -73,8 +73,97 @@ async function initDB() {
       last_used TIMESTAMPTZ DEFAULT NOW()
     );
     CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
+
+    -- ============ Phase 1 新增表：解锁 YTD/IRR + 为 Phase 2-4 财报/分析师/AI 做准备 ============
+
+    -- 1. 每日组合快照（cron 每晚自动写入；30+ 天后可绘出真·YTD 曲线 / IRR / 最大回撤）
+    CREATE TABLE IF NOT EXISTS daily_snapshot (
+      user_id INTEGER NOT NULL,
+      date DATE NOT NULL,
+      total_value_usd NUMERIC(14,2),
+      total_cost_usd NUMERIC(14,2),
+      unrealized_pl_usd NUMERIC(14,2),
+      realized_pl_usd NUMERIC(14,2),
+      dividend_total_usd NUMERIC(14,2),
+      cumulative_pl_usd NUMERIC(14,2),
+      region_values JSONB,        -- {"美国": 583255, "中国": 608443, "日本": 149743}
+      fx_rates JSONB,             -- {"CNY": 0.138, "JPY": 0.0067, "HKD": 0.128, "USD": 1}
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      PRIMARY KEY (user_id, date)
+    );
+
+    -- 2. 财报缓存（Phase 2 接 FMP 后写入；按 symbol + period_end + period_type 唯一）
+    CREATE TABLE IF NOT EXISTS fundamentals (
+      symbol TEXT NOT NULL,
+      period_end DATE NOT NULL,
+      period_type TEXT NOT NULL,  -- 'Q1' | 'Q2' | 'Q3' | 'Q4' | 'FY'
+      currency TEXT,
+      revenue NUMERIC(18,2),
+      gross_profit NUMERIC(18,2),
+      operating_income NUMERIC(18,2),
+      net_income NUMERIC(18,2),
+      eps NUMERIC(10,4),
+      free_cash_flow NUMERIC(18,2),
+      total_assets NUMERIC(18,2),
+      total_equity NUMERIC(18,2),
+      total_debt NUMERIC(18,2),
+      pe_ratio NUMERIC(8,2),
+      pb_ratio NUMERIC(8,2),
+      roe NUMERIC(8,4),
+      roic NUMERIC(8,4),
+      dividend_yield NUMERIC(8,4),
+      payout_ratio NUMERIC(8,4),
+      source TEXT,                -- 'FMP' | 'Tushare' | 'JQuants'
+      fetched_at TIMESTAMPTZ DEFAULT NOW(),
+      PRIMARY KEY (symbol, period_end, period_type)
+    );
+
+    -- 3. 分析师一致预期（Phase 4 写入）
+    CREATE TABLE IF NOT EXISTS analyst_estimates (
+      symbol TEXT NOT NULL,
+      period_end DATE NOT NULL,
+      period_type TEXT NOT NULL,  -- 'FY+1' | 'FY+2' | 'Q+1' | 'Q+2'
+      eps_estimate NUMERIC(10,4),
+      revenue_estimate NUMERIC(18,2),
+      num_analysts INTEGER,
+      rating_buy INTEGER,
+      rating_hold INTEGER,
+      rating_sell INTEGER,
+      target_price NUMERIC(10,2),
+      source TEXT,
+      fetched_at TIMESTAMPTZ DEFAULT NOW(),
+      PRIMARY KEY (symbol, period_end, period_type)
+    );
+
+    -- 4. 公司行动 / 财报日历
+    CREATE TABLE IF NOT EXISTS corp_actions (
+      id SERIAL PRIMARY KEY,
+      symbol TEXT NOT NULL,
+      type TEXT NOT NULL,         -- 'earnings' | 'dividend' | 'split' | 'spinoff'
+      ex_date DATE,
+      pay_date DATE,
+      amount NUMERIC(12,4),
+      details JSONB,
+      source TEXT,
+      fetched_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_corp_actions_sym_date ON corp_actions(symbol, ex_date DESC);
+    CREATE INDEX IF NOT EXISTS idx_corp_actions_type_date ON corp_actions(type, ex_date DESC);
+
+    -- 5. AI 决策派日报缓存（Phase 4 写入；每天最多 1 条 per user）
+    CREATE TABLE IF NOT EXISTS ai_daily_summary (
+      user_id INTEGER NOT NULL,
+      date DATE NOT NULL,
+      summary_md TEXT,            -- Markdown 内容
+      signals JSONB,              -- 触发了哪些规则 (buy/trim/alert)
+      model TEXT,                 -- 'claude-sonnet-4-5' 等
+      prompt_tokens INTEGER,
+      completion_tokens INTEGER,
+      generated_at TIMESTAMPTZ DEFAULT NOW(),
+      PRIMARY KEY (user_id, date)
+    );
   `);
-  console.log("✅ 数据库表已就绪");
+  console.log("✅ 数据库表已就绪（含 Phase 1 新表：snapshot/fundamentals/estimates/corp_actions/ai_summary）");
 }
 
 // ===== 自动初始化 LiuBin 用户 =====
