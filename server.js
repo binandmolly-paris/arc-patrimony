@@ -162,6 +162,20 @@ async function initDB() {
       generated_at TIMESTAMPTZ DEFAULT NOW(),
       PRIMARY KEY (user_id, date)
     );
+
+    -- 6. 历史锚定价格（用于 YTD / 季度 / 月度等周期收益计算）
+    --    例：anchor_date='2025-12-31' 存上一年最后交易日收盘价（按市场本地时区）
+    CREATE TABLE IF NOT EXISTS anchor_prices (
+      symbol TEXT NOT NULL,
+      anchor_date DATE NOT NULL,
+      close_price REAL NOT NULL,
+      currency TEXT,
+      market_tz TEXT,             -- e.g. 'America/New_York'
+      source TEXT DEFAULT 'Yahoo',
+      fetched_at TIMESTAMPTZ DEFAULT NOW(),
+      PRIMARY KEY (symbol, anchor_date)
+    );
+    CREATE INDEX IF NOT EXISTS idx_anchor_prices_date ON anchor_prices(anchor_date);
   `);
   console.log("✅ 数据库表已就绪（含 Phase 1 新表：snapshot/fundamentals/estimates/corp_actions/ai_summary）");
 }
@@ -714,6 +728,10 @@ async function fetchYahooQuotes(symbols) {
           currency: meta.currency || "USD",
           name: sym,
           market: meta.exchangeName || "",
+          // ★ Capture market session time + timezone (used by client to match per-market "today")
+          regularMarketTime: meta.regularMarketTime || 0,  // unix seconds of last regular price
+          exchangeTimezoneName: meta.exchangeTimezoneName || "",  // e.g. "America/New_York", "Asia/Shanghai"
+          gmtoffset: meta.gmtoffset || 0,  // seconds
         };
       }
     } catch (e) {
@@ -872,6 +890,127 @@ setInterval(fetchFXRates, 10 * 60 * 1000);
 
 app.get("/api/fx-rates", (req, res) => {
   res.json(fxRates);
+});
+
+// ============================================================
+// Anchor Prices — 历史锚定价格（用于精确 YTD 收益计算）
+// 解决跨时区问题：每只股票的"年初"应该是它自己市场的"上一年最后交易日"
+// ============================================================
+
+// 给定 IANA 时区，把 unix 秒转成 YYYY-MM-DD（在该时区的日期）
+function dateInTZ(unixSec, tz) {
+  try {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
+    }).format(new Date(unixSec * 1000));
+  } catch (e) {
+    return new Date(unixSec * 1000).toISOString().slice(0, 10);
+  }
+}
+
+// 拉取一只股票最近至给定日期的所有日 K 线，用于定位"上一年最后交易日"
+async function fetchYahooHistorical(symbol, startUnix, endUnix) {
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}`
+    + `?period1=${startUnix}&period2=${endUnix}&interval=1d`;
+  const resp = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
+  if (!resp.ok) throw new Error(`Yahoo historical HTTP ${resp.status}`);
+  const json = await resp.json();
+  const result = json?.chart?.result?.[0];
+  if (!result) throw new Error("No chart data");
+  const meta = result.meta || {};
+  const timestamps = result.timestamp || [];
+  const closes = result.indicators?.quote?.[0]?.close || [];
+  return { meta, timestamps, closes };
+}
+
+// 给一只股票，取它"上一年最后交易日"的收盘价（按市场本地时区判断）
+async function fetchAnchorPriceForSymbol(symbol, anchorYear) {
+  // 查询窗口：anchorYear-12-15 到 (anchorYear+1)-01-15（覆盖年末跨年）
+  const startUnix = Math.floor(new Date(`${anchorYear}-12-15T00:00:00Z`).getTime() / 1000);
+  const endUnix = Math.floor(new Date(`${anchorYear + 1}-01-15T00:00:00Z`).getTime() / 1000);
+  const { meta, timestamps, closes } = await fetchYahooHistorical(symbol, startUnix, endUnix);
+  const tz = meta.exchangeTimezoneName || 'America/New_York';
+  const cur = meta.currency || 'USD';
+  const yearEndCutoff = `${anchorYear + 1}-01-01`; // 任何 < 这个日期(in tz) 的都是 anchorYear 内
+  // 找最大的 timestamp，其在 tz 下的日期 < yearEndCutoff
+  let bestIdx = -1;
+  let bestDate = '';
+  for (let i = 0; i < timestamps.length; i++) {
+    const d = dateInTZ(timestamps[i], tz);
+    if (d < yearEndCutoff && d > bestDate) {
+      bestDate = d;
+      bestIdx = i;
+    }
+  }
+  if (bestIdx < 0 || closes[bestIdx] == null) {
+    throw new Error(`No trading day found for ${symbol} before ${yearEndCutoff}`);
+  }
+  return {
+    symbol,
+    anchor_date: bestDate,
+    close_price: closes[bestIdx],
+    currency: cur,
+    market_tz: tz,
+  };
+}
+
+// POST /api/anchor/backfill?year=2025  — 回填指定年份的所有持仓的年末锚定价
+app.post("/api/anchor/backfill", auth, async (req, res) => {
+  try {
+    const year = parseInt(req.query.year || req.body?.year || new Date().getUTCFullYear() - 1);
+    if (year < 2000 || year > 2100) return res.status(400).json({ error: "Invalid year" });
+
+    // 取该用户所有股票（含已清仓的，方便回测）
+    const hRes = await pool.query("SELECT DISTINCT symbol FROM holdings WHERE user_id=$1", [req.userId]);
+    const tRes = await pool.query("SELECT DISTINCT symbol FROM trades WHERE user_id=$1", [req.userId]);
+    const symbols = new Set([...hRes.rows.map(r => r.symbol), ...tRes.rows.map(r => r.symbol)]);
+
+    const results = { ok: 0, skipped: 0, failed: [] };
+    for (const symbol of symbols) {
+      try {
+        const anchor = await fetchAnchorPriceForSymbol(symbol, year);
+        await pool.query(
+          `INSERT INTO anchor_prices (symbol, anchor_date, close_price, currency, market_tz, source, fetched_at)
+           VALUES ($1, $2, $3, $4, $5, 'Yahoo', NOW())
+           ON CONFLICT (symbol, anchor_date) DO UPDATE SET
+             close_price = EXCLUDED.close_price,
+             currency = EXCLUDED.currency,
+             market_tz = EXCLUDED.market_tz,
+             fetched_at = NOW()`,
+          [anchor.symbol, anchor.anchor_date, anchor.close_price, anchor.currency, anchor.market_tz]
+        );
+        results.ok++;
+        console.log(`📌 Anchor saved: ${symbol} @ ${anchor.anchor_date} = ${anchor.close_price} ${anchor.currency}`);
+      } catch (e) {
+        console.warn(`Anchor failed for ${symbol}:`, e.message);
+        results.failed.push({ symbol, error: e.message });
+      }
+      // 礼貌等待，避免 Yahoo 限流
+      await new Promise(r => setTimeout(r, 200));
+    }
+    res.json({ year, ...results });
+  } catch (e) {
+    console.error("Anchor backfill error:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/anchor-prices?year=2025 — 拉取指定年份所有锚定价
+app.get("/api/anchor-prices", auth, async (req, res) => {
+  try {
+    const year = parseInt(req.query.year || new Date().getUTCFullYear() - 1);
+    const r = await pool.query(
+      `SELECT symbol, anchor_date::text AS anchor_date, close_price, currency, market_tz
+       FROM anchor_prices
+       WHERE EXTRACT(YEAR FROM anchor_date) = $1
+       ORDER BY symbol`,
+      [year]
+    );
+    res.json(r.rows);
+  } catch (e) {
+    console.error("Anchor query error:", e.message);
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ============ Daily Snapshot — Phase 1 自动快照 ============
