@@ -2510,28 +2510,41 @@
         const ytdAnchorCoverage = Object.keys(anchorPrices).length;
         const ytdAnchorTotal = activeHoldings.length;
 
-        // === Today P&L (严格"市场本地今日"匹配——避免美股 Tue 收盘混入 Beijing Wed) ===
-        // 规则：只计入"会话日期 == 用户今日日期"的股票
-        // 例：Beijing Wed 11am — A股 Wed session ✓ 计入；美股 Tue 收盘 ✗ 不计入
+        // === Today P&L (严格过滤：只算"市场本地今日"已成交的股票) ===
+        // 规则：用户的今日 = 浏览器时区当前日期；股票会话日期 = 市场本地时区
+        // 匹配 → 计入 todayPL；不匹配（如周一早晨 Beijing，US 还在上周五）→ 进 pending 仅展示不计入
+        const userTodayDate = getUserTodayDate();
         let todayPL = 0;
-        const todayByRegion = {};   // { 美国: amount, 中国: amount, 日本: amount }
-        const todaySkipped = [];    // 被跳过的股票（用于 UI 提示哪些市场暂未在"用户今日"成交）
+        const todayByRegion = {};      // 已计入: { 中国: {amount, date}, ... }
+        const pendingByRegion = {};    // 未计入但展示: { 美国: {amount, lastDate}, ... }
+
         activeHoldings.forEach(h => {
             const pd = APP.prices[h.symbol];
             if (!pd || !pd.prevClose || !pd.price) return;
-            // 关键过滤：只有该股自己市场的最新会话日期 == 用户今日 才计入
-            if (!isStockSessionToday(h, pd)) {
-                todaySkipped.push({ symbol: h.symbol, region: h.region, sessionDate: getStockSessionDate(h, pd) });
-                return;
-            }
             const delta = h.qty * (pd.price - pd.prevClose) * (APP.FX_RATES[h.currency] || 1);
-            todayPL += delta;
-            if (h.region) todayByRegion[h.region] = (todayByRegion[h.region] || 0) + delta;
+            const sessionDate = getStockSessionDate(h, pd);
+            const r = h.region || '其他';
+
+            if (sessionDate === userTodayDate) {
+                // ✅ 该股市场本地"今日"已成交 → 计入
+                todayPL += delta;
+                if (!todayByRegion[r]) todayByRegion[r] = { amount: 0, date: sessionDate };
+                todayByRegion[r].amount += delta;
+            } else {
+                // ⏰ 该股市场本地"今日"还未成交（最新会话是 sessionDate）→ 不计入，仅展示
+                if (!pendingByRegion[r]) pendingByRegion[r] = { amount: 0, lastDate: sessionDate };
+                pendingByRegion[r].amount += delta;
+                // 取最新的 lastDate（同一 region 多市场时）
+                if (sessionDate > pendingByRegion[r].lastDate) {
+                    pendingByRegion[r].lastDate = sessionDate;
+                }
+            }
         });
-        // 分母用"被计入今日"的股票市值，不要混老市值
+        // 分母用"已计入今日"的股票市值（避免与不在今日交易的混合）
         const todayValueBase = activeHoldings.reduce((s, h) => {
             const pd = APP.prices[h.symbol];
-            if (!pd || !isStockSessionToday(h, pd)) return s;
+            if (!pd) return s;
+            if (getStockSessionDate(h, pd) !== userTodayDate) return s;
             const px = pd.price || h.avg_cost;
             return s + h.qty * px * (APP.FX_RATES[h.currency] || 1);
         }, 0);
@@ -2613,7 +2626,7 @@
                     `}
                 </div>
 
-                <!-- ===== Card 2: Today P&L (严格本地"今日"匹配，跨时区不混淆) ===== -->
+                <!-- ===== Card 2: Today P&L (严格过滤本地今日 + 待开盘提示) ===== -->
                 <div class="stat-card stat-today ${todayPL>=0?'pulse-up':'pulse-down'}">
                     <div class="stat-label-row">
                         <span class="stat-label">Today P&L / 今日浮盈亏</span>
@@ -2621,22 +2634,32 @@
                     </div>
                     <div class="stat-value-lg ${todayCls}">${todayPL>=0?'+':''}$${fmtNum(todayPL)}</div>
                     <div class="stat-sub" style="display:block;font-size:11px;line-height:1.5;">
-                        <div><span class="${todayCls}" style="font-weight:700;">${formatPercent(todayPLPct)}</span> <span style="color:#64748b;">市场本地"今日"成交才计入</span></div>
+                        <div><span class="${todayCls}" style="font-weight:700;">${formatPercent(todayPLPct)}</span> <span style="color:#64748b;">仅含市场本地"今日"已成交</span></div>
                         ${Object.keys(todayByRegion).length > 0 ? `
-                        <div style="color:#64748b;">
-                            ${['美国','中国','日本'].filter(r => todayByRegion[r] !== undefined).map(r => {
-                                const v = todayByRegion[r] || 0;
+                        <div style="color:#64748b;display:flex;flex-wrap:wrap;gap:6px;">
+                            ${['美国','中国','日本'].filter(r => todayByRegion[r]).map(r => {
+                                const info = todayByRegion[r];
+                                const v = info.amount || 0;
                                 const flag = r==='美国'?'🇺🇸':r==='中国'?'🇨🇳':'🇯🇵';
                                 const cls = v >= 0 ? 'price-positive' : 'price-negative';
                                 return `<span style="white-space:nowrap;">${flag}<span class="${cls}">${v>=0?'+':''}$${fmtNum(v,0)}</span></span>`;
-                            }).join('<span style="color:#334155;margin:0 4px;">·</span>')}
-                        </div>
-                        ` : '<div style="color:#64748b;">所有市场今日尚未成交</div>'}
-                        ${todaySkipped.length > 0 ? `
-                        <div style="color:#64748b;font-size:10px;margin-top:2px;" title="${todaySkipped.map(s=>s.symbol+' '+s.sessionDate).join(', ')}">
-                            ⏰ ${todaySkipped.length} 只股最新会话非今日（暂不计入）
+                            }).join('<span style="color:#334155;">·</span>')}
                         </div>
                         ` : ''}
+                        ${Object.keys(pendingByRegion).length > 0 ? `
+                        <div style="color:#475569;font-size:10px;margin-top:3px;display:flex;flex-wrap:wrap;gap:4px;align-items:center;">
+                            <span style="color:#64748b;">⏰ 待开盘:</span>
+                            ${['美国','中国','日本'].filter(r => pendingByRegion[r]).map(r => {
+                                const info = pendingByRegion[r];
+                                const v = info.amount || 0;
+                                const flag = r==='美国'?'🇺🇸':r==='中国'?'🇨🇳':'🇯🇵';
+                                const cls = v >= 0 ? 'price-positive' : 'price-negative';
+                                const md = (info.lastDate || '').slice(5);
+                                return `<span style="white-space:nowrap;opacity:0.7;">${flag}<span class="${cls}" style="opacity:0.6;">${v>=0?'+':''}$${fmtNum(v,0)}</span> <span style="color:#475569;">(${md})</span></span>`;
+                            }).join('<span style="color:#334155;">·</span>')}
+                        </div>
+                        ` : ''}
+                        ${Object.keys(todayByRegion).length === 0 && Object.keys(pendingByRegion).length === 0 ? '<div style="color:#64748b;">无可用报价数据</div>' : ''}
                     </div>
                 </div>
 
