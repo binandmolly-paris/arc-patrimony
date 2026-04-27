@@ -2510,13 +2510,28 @@
         const ytdAnchorCoverage = Object.keys(anchorPrices).length;
         const ytdAnchorTotal = activeHoldings.length;
 
-        // === Today P&L (严格过滤：只算"市场本地今日"已成交的股票) ===
-        // 规则：用户的今日 = 浏览器时区当前日期；股票会话日期 = 市场本地时区
-        // 匹配 → 计入 todayPL；不匹配（如周一早晨 Beijing，US 还在上周五）→ 进 pending 仅展示不计入
-        const userTodayDate = getUserTodayDate();
+        // === Today P&L (用"全市场最新会话日期"作参考，不依赖浏览器时区) ===
+        // 规则：先扫描所有股票，找出最新的 sessionDate（across all markets），称为 latestSessionDate
+        //       其会话日期 == latestSessionDate 的股票 → 计入今日盈亏
+        //       其会话日期 < latestSessionDate（数据更老）→ 进 pending 待该市场开盘时再加入
+        // 例：周一 Beijing 早晨10点
+        //   A股/JP Mon 27 在交易 → sessionDate = "2026-04-27"
+        //   US Fri 24 收盘 → sessionDate = "2026-04-24"
+        //   latestSessionDate = "2026-04-27" → 计入 A/JP；US 进 pending
+        // 例：周一 Beijing 晚上10点
+        //   US Mon 27 在交易 → sessionDate = "2026-04-27"
+        //   A股/JP 也是 27 → latestSessionDate = "2026-04-27" → 三地全部计入
+        let latestSessionDate = '';
+        activeHoldings.forEach(h => {
+            const pd = APP.prices[h.symbol];
+            if (!pd || !pd.prevClose || !pd.price) return;
+            const d = getStockSessionDate(h, pd);
+            if (d > latestSessionDate) latestSessionDate = d;
+        });
+
         let todayPL = 0;
         const todayByRegion = {};      // 已计入: { 中国: {amount, date}, ... }
-        const pendingByRegion = {};    // 未计入但展示: { 美国: {amount, lastDate}, ... }
+        const pendingByRegion = {};    // 未计入: { 美国: {amount, lastDate}, ... }
 
         activeHoldings.forEach(h => {
             const pd = APP.prices[h.symbol];
@@ -2525,31 +2540,30 @@
             const sessionDate = getStockSessionDate(h, pd);
             const r = h.region || '其他';
 
-            if (sessionDate === userTodayDate) {
-                // ✅ 该股市场本地"今日"已成交 → 计入
+            if (sessionDate === latestSessionDate) {
+                // ✅ 与"最新会话日"同步 → 计入
                 todayPL += delta;
                 if (!todayByRegion[r]) todayByRegion[r] = { amount: 0, date: sessionDate };
                 todayByRegion[r].amount += delta;
             } else {
-                // ⏰ 该股市场本地"今日"还未成交（最新会话是 sessionDate）→ 不计入，仅展示
+                // ⏰ 数据更老（如 US 在周一 Beijing 早晨还在显示上周五数据）→ 不计入
                 if (!pendingByRegion[r]) pendingByRegion[r] = { amount: 0, lastDate: sessionDate };
                 pendingByRegion[r].amount += delta;
-                // 取最新的 lastDate（同一 region 多市场时）
-                if (sessionDate > pendingByRegion[r].lastDate) {
-                    pendingByRegion[r].lastDate = sessionDate;
-                }
+                if (sessionDate > pendingByRegion[r].lastDate) pendingByRegion[r].lastDate = sessionDate;
             }
         });
-        // 分母用"已计入今日"的股票市值（避免与不在今日交易的混合）
+        // 分母用"已计入"的股票市值
         const todayValueBase = activeHoldings.reduce((s, h) => {
             const pd = APP.prices[h.symbol];
             if (!pd) return s;
-            if (getStockSessionDate(h, pd) !== userTodayDate) return s;
+            if (getStockSessionDate(h, pd) !== latestSessionDate) return s;
             const px = pd.price || h.avg_cost;
             return s + h.qty * px * (APP.FX_RATES[h.currency] || 1);
         }, 0);
         const todayBase = todayValueBase - todayPL;
         const todayPLPct = todayBase > 0 ? (todayPL / todayBase * 100) : 0;
+        // 浏览器今日（仅用于 UI 提示）
+        const userTodayDate = getUserTodayDate();
 
         // === Total Budget USD = Σ(region budgets in local ccy → USD) ===
         const allRegionsForBudget = [...new Set(APP.holdings.filter(h => h.qty > 0).map(h => h.region).filter(Boolean))];
