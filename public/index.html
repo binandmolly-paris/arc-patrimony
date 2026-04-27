@@ -1269,6 +1269,11 @@
                 margin-bottom: 18px;
             }
             .stat-grid .stat-hero { grid-column: span 1; }
+            /* Mobile reorder: YTD first, then Today, Cumulative, Budget */
+            .stat-grid .stat-ytd        { order: 1; }
+            .stat-grid .stat-today      { order: 2; }
+            .stat-grid .stat-cumulative { order: 3; }
+            .stat-grid .stat-budget     { order: 4; }
             .stat-card { padding: 14px 16px; border-radius: 12px; }
             .stat-value-xl { font-size: 26px; }
             .stat-value-lg { font-size: 18px; }
@@ -1528,6 +1533,60 @@
 
     function fmtNum(value, decimals = 2) {
         return Number(value).toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+    }
+
+    // ============ Per-Market Session Date Helpers (cross-timezone "today" matching) ============
+    // 用于 Today P&L 仅计入"市场本地今日"的股票，避免把美股 Tue 收盘混进 Beijing Wed 的"今日"
+
+    // 推断股票所在交易所的 IANA 时区
+    function getStockTimezone(holding, priceData) {
+        // Yahoo 返回的 exchangeTimezoneName 最准
+        if (priceData?.exchangeTimezoneName) return priceData.exchangeTimezoneName;
+        // Fallback 按币种 / symbol 后缀
+        const sym = (holding.symbol || '').toUpperCase();
+        const cur = holding.currency;
+        if (sym.endsWith('.HK')) return 'Asia/Hong_Kong';
+        if (sym.endsWith('.SS') || sym.endsWith('.SZ')) return 'Asia/Shanghai';
+        if (sym.endsWith('.T')) return 'Asia/Tokyo';
+        if (cur === 'HKD') return 'Asia/Hong_Kong';
+        if (cur === 'CNY') return 'Asia/Shanghai';
+        if (cur === 'JPY') return 'Asia/Tokyo';
+        return 'America/New_York'; // USD 默认
+    }
+
+    // 把 Date 对象按 IANA 时区格式化为 YYYY-MM-DD
+    function dateInTZ(date, tz) {
+        try {
+            return new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' })
+                .format(date);
+        } catch(e) {
+            return date.toISOString().slice(0, 10);
+        }
+    }
+
+    // 用户当前的"今日"日期（按浏览器本地时区，约等于用户身在地区）
+    function getUserTodayDate() {
+        const userTZ = (Intl.DateTimeFormat().resolvedOptions().timeZone) || 'Asia/Shanghai';
+        return dateInTZ(new Date(), userTZ);
+    }
+
+    // 一只股票最近交易会话所属的本地日期（市场时区）
+    function getStockSessionDate(holding, priceData) {
+        const tz = getStockTimezone(holding, priceData);
+        const ts = priceData?.regularMarketTime;
+        if (ts && ts > 0) {
+            // Yahoo 给的是该股最后一次有效报价的时间
+            return dateInTZ(new Date(ts * 1000), tz);
+        }
+        // 没拿到时间戳 fallback 用当前市场日期
+        return dateInTZ(new Date(), tz);
+    }
+
+    // 这只股票的"最近交易日"是否就是用户的"今日"（同一天才计入今日盈亏）
+    function isStockSessionToday(holding, priceData) {
+        const userToday = getUserTodayDate();
+        const stockToday = getStockSessionDate(holding, priceData);
+        return userToday === stockToday;
     }
 
     function formatCurrency(value, currency = 'USD') {
@@ -1846,6 +1905,45 @@
         }
     }
 
+    // 加载上一年度的锚定价（用于精确 YTD 计算）
+    async function loadAnchorPrices() {
+        const lastYear = new Date().getFullYear() - 1;
+        try {
+            const rows = await apiCall(`/anchor-prices?year=${lastYear}`);
+            APP.anchorPrices = {}; // { symbol: { close_price, anchor_date, currency } }
+            (rows || []).forEach(r => {
+                APP.anchorPrices[r.symbol] = {
+                    close_price: parseFloat(r.close_price),
+                    anchor_date: r.anchor_date,
+                    currency: r.currency,
+                    market_tz: r.market_tz,
+                };
+            });
+            console.log(`📌 Loaded ${Object.keys(APP.anchorPrices).length} anchor prices for year ${lastYear}`);
+        } catch (e) {
+            console.warn('Failed to load anchor prices:', e.message);
+            APP.anchorPrices = {};
+        }
+    }
+
+    // 手动触发后端回填上一年度的锚定价（在 Settings 中调用）
+    async function backfillAnchorPrices() {
+        const lastYear = new Date().getFullYear() - 1;
+        if (!confirm(`即将从 Yahoo 历史 API 拉取你所有持仓 ${lastYear} 年最后交易日的收盘价（按各市场本地时区），用于精确 YTD 收益计算。\n\n大约 30 秒。继续？`)) return;
+        try {
+            const result = await apiCall(`/anchor/backfill?year=${lastYear}`, 'POST');
+            await loadAnchorPrices();
+            const failedMsg = result.failed?.length > 0
+                ? `\n\n失败 ${result.failed.length} 只：${result.failed.map(f=>f.symbol).join(', ')}`
+                : '';
+            alert(`✅ 已为 ${result.ok} 只股票拉取 ${lastYear} 年末锚定价${failedMsg}\n\nYTD 计算已切换到精确模式。`);
+            // Refresh dashboard to show new YTD
+            renderTab0();
+        } catch (e) {
+            alert(`❌ 回填失败：${e.message}`);
+        }
+    }
+
     async function updatePrices() {
         if (APP.holdings.length === 0) return;
 
@@ -1912,6 +2010,7 @@
         await loadHoldings();
         await loadTrades();
         await loadAlerts();
+        await loadAnchorPrices();  // 加载年初锚定价（用于精确 YTD）
         // Seed target alerts only for LiuBin on first use
         if (APP.alerts.length === 0 && APP.username === 'LiuBin') {
             await seedTargetAlerts();
@@ -1921,10 +2020,12 @@
         try {
             const config = await apiCall('/portfolio-config');
             APP.portfolioBudget = config.totalBudget || 0;
-            // Load per-region budgets
+            // Load per-region budgets (USD conversion uses real-time FX, intentionally fluctuates)
             APP.regionBudgets = {};
             Object.keys(config).forEach(k => {
-                if (k.startsWith('budget_')) APP.regionBudgets[k.replace('budget_','')] = parseFloat(config[k]) || 0;
+                if (k.startsWith('budget_') && !k.endsWith('_fx') && k !== 'totalBudget') {
+                    APP.regionBudgets[k.replace('budget_', '')] = parseFloat(config[k]) || 0;
+                }
             });
         } catch(e) {}
 
@@ -2310,23 +2411,35 @@
         const totalShares = activeHoldings.reduce((s, h) => s + h.qty, 0);
         const portfolioAvgCostUSD = totalShares > 0 ? (totalCost / totalShares) : 0;
 
-        // === YTD totals (best-effort from trades this year) ===
+        // === YTD totals — 使用锚定价精确计算（各市场本地年初）===
+        // 公式：YTD = (今市值 + 本年卖出 + 本年分红) − (锚定持仓价值 + 本年买入)
+        // 没锚定价的股票走 fallback：本年新开仓位算全额浮盈亏
         const yearStart = `${new Date().getFullYear()}-01-01`;
-        let ytdRealized = 0, ytdDividends = 0;
+        const anchorPrices = APP.anchorPrices || {};
+        let hasAnchorMode = false; // 至少有一只股有锚定价
+
+        // 统计本年所有交易（已实现 + 分红 + 买入金额）
+        const ytdBuyBySymbol = {};   // 本年买入累计 qty 和 金额（本币）
+        const ytdSellBySymbol = {};  // 本年卖出累计 qty 和 金额（本币）
+        const ytdDivBySymbol = {};   // 本年分红累计金额（本币）
         APP.trades.filter(t => t.date >= yearStart).forEach(t => {
-            const h = APP.holdings.find(x => x.symbol === t.symbol);
-            const fx = APP.FX_RATES[h?.currency || 'USD'] || 1;
+            const isBuy = t.type === '买入' || t.type === 'BUY';
             const isDiv = t.type === '分红' || t.type === 'DIVIDEND';
             const isSell = t.type === '卖出' || t.type === 'SELL';
-            if (isDiv) {
-                ytdDividends += t.qty * t.price * fx;
-            } else if (isSell && h) {
-                ytdRealized += (t.price - (h.avg_cost || 0)) * t.qty * fx;
+            if (isBuy) {
+                if (!ytdBuyBySymbol[t.symbol]) ytdBuyBySymbol[t.symbol] = { qty: 0, amount: 0 };
+                ytdBuyBySymbol[t.symbol].qty += t.qty;
+                ytdBuyBySymbol[t.symbol].amount += t.qty * t.price;
+            } else if (isSell) {
+                if (!ytdSellBySymbol[t.symbol]) ytdSellBySymbol[t.symbol] = { qty: 0, amount: 0 };
+                ytdSellBySymbol[t.symbol].qty += t.qty;
+                ytdSellBySymbol[t.symbol].amount += t.qty * t.price;
+            } else if (isDiv) {
+                ytdDivBySymbol[t.symbol] = (ytdDivBySymbol[t.symbol] || 0) + t.qty * t.price;
             }
         });
 
-        // YTD unrealized: for positions FIRST opened this year, their full unrealized counts.
-        // (Positions held since before this year would need start-of-year prices, which we don't have.)
+        // 第一次买入日期（用于 fallback）
         const firstBuyDateBySymbol = {};
         APP.trades.forEach(t => {
             const isBuy = t.type === '买入' || t.type === 'BUY';
@@ -2335,36 +2448,94 @@
                 firstBuyDateBySymbol[t.symbol] = t.date;
             }
         });
-        let ytdUnrealized = 0;
-        activeHoldings.forEach(h => {
-            const firstBuy = firstBuyDateBySymbol[h.symbol];
-            if (firstBuy && firstBuy >= yearStart) {
-                const px = APP.prices[h.symbol]?.price || h.avg_cost;
-                ytdUnrealized += (px - h.avg_cost) * h.qty * (APP.FX_RATES[h.currency] || 1);
-            }
-        });
-        const ytdTotalPL = ytdUnrealized + ytdRealized + ytdDividends;
-        // YTD invested = sum of buy amounts in current year (denominator for YTD %)
-        let ytdInvested = 0;
-        APP.trades.filter(t => t.date >= yearStart).forEach(t => {
-            const isBuy = t.type === '买入' || t.type === 'BUY';
-            if (isBuy) {
-                const h = APP.holdings.find(x => x.symbol === t.symbol);
-                const fx = APP.FX_RATES[h?.currency || 'USD'] || 1;
-                ytdInvested += t.qty * t.price * fx;
-            }
-        });
-        const ytdReturnPct = ytdInvested > 0 ? (ytdTotalPL / ytdInvested * 100) : 0;
 
-        // === Today P&L ===
+        // 收集所有涉及到的 symbol（活跃 + 本年有交易的）
+        const ytdSymbols = new Set([
+            ...activeHoldings.map(h => h.symbol),
+            ...Object.keys(ytdBuyBySymbol),
+            ...Object.keys(ytdSellBySymbol),
+            ...Object.keys(ytdDivBySymbol),
+        ]);
+
+        let ytdUnrealized = 0, ytdRealized = 0, ytdDividends = 0, ytdInvested = 0;
+
+        ytdSymbols.forEach(sym => {
+            const h = APP.holdings.find(x => x.symbol === sym);
+            if (!h) return;
+            const fx = APP.FX_RATES[h.currency] || 1;
+            const anchor = anchorPrices[sym];
+            const buy = ytdBuyBySymbol[sym] || { qty: 0, amount: 0 };
+            const sell = ytdSellBySymbol[sym] || { qty: 0, amount: 0 };
+            const div = ytdDivBySymbol[sym] || 0;
+            const currentPrice = APP.prices[sym]?.price || h.avg_cost;
+            const currentQty = h.qty;
+
+            // YTD invested 用本年实际买入额作为分母参考
+            ytdInvested += buy.amount * fx;
+
+            // 分红总是计入
+            ytdDividends += div * fx;
+
+            if (anchor && anchor.close_price > 0) {
+                // ✅ 精确模式：用锚定价
+                hasAnchorMode = true;
+                // 年初持仓数 = 当前持仓 - 本年买入 + 本年卖出
+                const anchorQty = currentQty - buy.qty + sell.qty;
+                const anchorValue = Math.max(0, anchorQty) * anchor.close_price;
+                const todayMV = currentQty * currentPrice;
+                // YTD per stock = (今市值 + 本年卖出 + 本年分红) − (锚定持仓价值 + 本年买入)
+                const ytdLocal = (todayMV + sell.amount) - (anchorValue + buy.amount);
+                // 拆分浮盈亏 vs 已实现：浮盈亏 = (current - anchor) * 当前持仓
+                const unrealLocal = currentQty > 0 ? (currentPrice - anchor.close_price) * currentQty : 0;
+                const realLocal = ytdLocal - unrealLocal;
+                ytdUnrealized += unrealLocal * fx;
+                ytdRealized += realLocal * fx;
+            } else {
+                // ⚠️ Fallback：没锚定价 → 本年新开仓位算全额浮盈亏；老仓位浮盈亏算 0
+                const firstBuy = firstBuyDateBySymbol[sym];
+                if (firstBuy && firstBuy >= yearStart) {
+                    if (currentQty > 0) {
+                        ytdUnrealized += (currentPrice - h.avg_cost) * currentQty * fx;
+                    }
+                }
+                // 本年卖出，已实现按 avg_cost 算
+                if (sell.qty > 0) {
+                    ytdRealized += (sell.amount - h.avg_cost * sell.qty) * fx;
+                }
+            }
+        });
+
+        const ytdTotalPL = ytdUnrealized + ytdRealized + ytdDividends;
+        const ytdReturnPct = ytdInvested > 0 ? (ytdTotalPL / ytdInvested * 100) : 0;
+        const ytdAnchorCoverage = Object.keys(anchorPrices).length;
+        const ytdAnchorTotal = activeHoldings.length;
+
+        // === Today P&L (严格"市场本地今日"匹配——避免美股 Tue 收盘混入 Beijing Wed) ===
+        // 规则：只计入"会话日期 == 用户今日日期"的股票
+        // 例：Beijing Wed 11am — A股 Wed session ✓ 计入；美股 Tue 收盘 ✗ 不计入
         let todayPL = 0;
+        const todayByRegion = {};   // { 美国: amount, 中国: amount, 日本: amount }
+        const todaySkipped = [];    // 被跳过的股票（用于 UI 提示哪些市场暂未在"用户今日"成交）
         activeHoldings.forEach(h => {
             const pd = APP.prices[h.symbol];
-            if (pd && pd.prevClose && pd.price) {
-                todayPL += h.qty * (pd.price - pd.prevClose) * (APP.FX_RATES[h.currency] || 1);
+            if (!pd || !pd.prevClose || !pd.price) return;
+            // 关键过滤：只有该股自己市场的最新会话日期 == 用户今日 才计入
+            if (!isStockSessionToday(h, pd)) {
+                todaySkipped.push({ symbol: h.symbol, region: h.region, sessionDate: getStockSessionDate(h, pd) });
+                return;
             }
+            const delta = h.qty * (pd.price - pd.prevClose) * (APP.FX_RATES[h.currency] || 1);
+            todayPL += delta;
+            if (h.region) todayByRegion[h.region] = (todayByRegion[h.region] || 0) + delta;
         });
-        const todayBase = totalValue - todayPL;
+        // 分母用"被计入今日"的股票市值，不要混老市值
+        const todayValueBase = activeHoldings.reduce((s, h) => {
+            const pd = APP.prices[h.symbol];
+            if (!pd || !isStockSessionToday(h, pd)) return s;
+            const px = pd.price || h.avg_cost;
+            return s + h.qty * px * (APP.FX_RATES[h.currency] || 1);
+        }, 0);
+        const todayBase = todayValueBase - todayPL;
         const todayPLPct = todayBase > 0 ? (todayPL / todayBase * 100) : 0;
 
         // === Total Budget USD = Σ(region budgets in local ccy → USD) ===
@@ -2442,34 +2613,49 @@
                     `}
                 </div>
 
-                <!-- ===== Card 2: Today P&L ===== -->
+                <!-- ===== Card 2: Today P&L (严格本地"今日"匹配，跨时区不混淆) ===== -->
                 <div class="stat-card stat-today ${todayPL>=0?'pulse-up':'pulse-down'}">
                     <div class="stat-label-row">
                         <span class="stat-label">Today P&L / 今日浮盈亏</span>
                         <span class="stat-dot ${todayPL>=0?'dot-up':'dot-down'}"></span>
                     </div>
                     <div class="stat-value-lg ${todayCls}">${todayPL>=0?'+':''}$${fmtNum(todayPL)}</div>
-                    <div class="stat-sub">
-                        <span class="${todayCls}" style="font-weight:700;">${formatPercent(todayPLPct)}</span>
-                        <span style="color:#64748b;">vs prev close</span>
+                    <div class="stat-sub" style="display:block;font-size:11px;line-height:1.5;">
+                        <div><span class="${todayCls}" style="font-weight:700;">${formatPercent(todayPLPct)}</span> <span style="color:#64748b;">市场本地"今日"成交才计入</span></div>
+                        ${Object.keys(todayByRegion).length > 0 ? `
+                        <div style="color:#64748b;">
+                            ${['美国','中国','日本'].filter(r => todayByRegion[r] !== undefined).map(r => {
+                                const v = todayByRegion[r] || 0;
+                                const flag = r==='美国'?'🇺🇸':r==='中国'?'🇨🇳':'🇯🇵';
+                                const cls = v >= 0 ? 'price-positive' : 'price-negative';
+                                return `<span style="white-space:nowrap;">${flag}<span class="${cls}">${v>=0?'+':''}$${fmtNum(v,0)}</span></span>`;
+                            }).join('<span style="color:#334155;margin:0 4px;">·</span>')}
+                        </div>
+                        ` : '<div style="color:#64748b;">所有市场今日尚未成交</div>'}
+                        ${todaySkipped.length > 0 ? `
+                        <div style="color:#64748b;font-size:10px;margin-top:2px;" title="${todaySkipped.map(s=>s.symbol+' '+s.sessionDate).join(', ')}">
+                            ⏰ ${todaySkipped.length} 只股最新会话非今日（暂不计入）
+                        </div>
+                        ` : ''}
                     </div>
                 </div>
 
                 <!-- ===== Card 3: YTD Total P&L (Unrealized + Realized + Dividends, this year scope) ===== -->
-                <div class="stat-card">
+                <div class="stat-card stat-ytd">
                     <div class="stat-label-row">
                         <span class="stat-label">YTD Total P&L / 本年总盈亏</span>
-                        <span class="stat-chip" title="浮盈亏(本年新仓)+本年已实现+本年分红">YTD</span>
+                        <span class="stat-chip" title="${hasAnchorMode ? '使用各市场本地年末锚定价（精确模式）' : '老仓位本年浮盈亏暂记 0（保守 fallback）'}">${hasAnchorMode ? '⚓ ANCHOR' : 'YTD ⚠'}</span>
                     </div>
                     <div class="stat-value-lg ${ytdCls}">${ytdTotalPL>=0?'+':''}$${fmtNum(ytdTotalPL)}</div>
                     <div class="stat-sub" style="display:block;font-size:11px;line-height:1.5;">
                         ${ytdInvested > 0 ? `<div><span class="${ytdCls}" style="font-weight:700;">${formatPercent(ytdReturnPct)}</span> <span style="color:#64748b;">on $${fmtNum(ytdInvested,0)} new</span></div>` : ''}
                         <div style="color:#64748b;">浮 ${ytdUnrealized>=0?'+':''}$${fmtNum(ytdUnrealized,0)} · 实 ${ytdRealized>=0?'+':''}$${fmtNum(ytdRealized,0)} · 红 +$${fmtNum(ytdDividends,0)}</div>
+                        ${!hasAnchorMode ? '<div style="color:#fbbf24;font-size:10px;">⚠️ 未启用锚定价，YTD 不准。Settings → 锚定价回填</div>' : `<div style="color:#64748b;font-size:10px;">⚓ ${ytdAnchorCoverage} 只股已锚定 ${new Date().getFullYear()-1} 年末</div>`}
                     </div>
                 </div>
 
                 <!-- ===== Card 4: Cumulative Total P&L (since inception, same formula) ===== -->
-                <div class="stat-card">
+                <div class="stat-card stat-cumulative">
                     <div class="stat-label-row">
                         <span class="stat-label">Cumulative P&L / 累计总盈亏</span>
                         <span class="stat-chip" title="浮盈亏+已实现+分红，自成立以来">★ INCEPTION</span>
@@ -2492,8 +2678,9 @@
                     const rCur = getRegionCurrency(r);
                     const rCurSym = getRegionCurrencySymbol(rCur);
                     const regionBudget = regionBudgetLocal * (APP.FX_RATES[rCur] || 1); // USD
-                    const budgetUsedPct = regionBudget > 0 ? (s.value / regionBudget * 100) : 0;
-                    const budgetRemaining = regionBudget - s.value;
+                    // Budget usage measured by COST (actual money invested), not market value
+                    const budgetUsedPct = regionBudget > 0 ? (s.cost / regionBudget * 100) : 0;
+                    const budgetRemaining = regionBudget - s.cost;
                     // Today's P&L for this region
                     let todayPL = 0;
                     activeHoldings.filter(h => h.region === r).forEach(h => {
@@ -2645,9 +2832,10 @@
                                 const curSym = getRegionCurrencySymbol(cur);
                                 const rbUSD = regionBudgetToUSD(APP.regionFilter);
                                 const regionActiveHoldings = enriched.filter(d => !d.isSold);
-                                const regionMV = regionActiveHoldings.reduce((s, d) => s + d.mv, 0);
-                                const usedPct = rbUSD > 0 ? (regionMV / rbUSD * 100) : 0;
-                                const remUSD = rbUSD - regionMV;
+                                // Budget usage by COST (actual purchase amount), not market value
+                                const regionCostUSD = regionActiveHoldings.reduce((s, d) => s + d.cv, 0);
+                                const usedPct = rbUSD > 0 ? (regionCostUSD / rbUSD * 100) : 0;
+                                const remUSD = rbUSD - regionCostUSD;
                                 const bColor = usedPct > 100 ? '#f87171' : usedPct > 80 ? '#fbbf24' : '#C1A673';
                                 return '<div style="padding:10px 14px;margin-bottom:12px;background:rgba(193,166,115,0.06);border:1px solid rgba(193,166,115,0.12);border-radius:8px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;">'
                                     + '<div style="font-size:12px;color:#94a3b8;">Budget:</div>'
@@ -2655,7 +2843,7 @@
                                     + '<div style="flex:1;min-width:120px;background:rgba(30,41,59,0.8);border-radius:3px;height:6px;overflow:hidden;">'
                                     + '<div style="width:' + Math.min(100,usedPct) + '%;height:100%;background:' + bColor + ';border-radius:3px;transition:width 0.3s;"></div></div>'
                                     + '<div style="font-size:12px;color:' + bColor + ';font-weight:600;">' + fmtNum(usedPct,1) + '% used</div>'
-                                    + '<div style="font-size:12px;color:#94a3b8;">Invested: <span style="color:#e2e8f0;font-weight:600;">$' + fmtNum(regionMV) + '</span></div>'
+                                    + '<div style="font-size:12px;color:#94a3b8;">Used (cost): <span style="color:#e2e8f0;font-weight:600;">$' + fmtNum(regionCostUSD) + '</span></div>'
                                     + '<div style="font-size:12px;color:#94a3b8;">' + (remUSD >= 0 ? 'Remaining' : 'Over') + ': <span style="color:' + (remUSD >= 0 ? '#4ade80' : '#f87171') + ';font-weight:600;">$' + fmtNum(Math.abs(remUSD)) + '</span></div>'
                                     + '</div>';
                             }
@@ -2666,8 +2854,9 @@
                         let totalBudget = 0;
                         allRegions.forEach(r => { totalBudget += regionBudgetToUSD(r); });
                         if (totalBudget > 0 && APP.regionFilter === '全部') {
-                            const totalMV = enriched.filter(d => !d.isSold).reduce((s, d) => s + d.mv, 0);
-                            const totalUsedPct = totalBudget > 0 ? (totalMV / totalBudget * 100) : 0;
+                            // Budget usage by COST (actual purchase amount), not market value
+                            const totalCostUsd = enriched.filter(d => !d.isSold).reduce((s, d) => s + d.cv, 0);
+                            const totalUsedPct = totalBudget > 0 ? (totalCostUsd / totalBudget * 100) : 0;
                             return '<div style="padding:8px 14px;margin-bottom:12px;background:rgba(193,166,115,0.04);border:1px solid rgba(193,166,115,0.08);border-radius:8px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:12px;">'
                                 + '<span style="color:#94a3b8;">Total Budget:</span>'
                                 + '<span style="color:#C1A673;font-weight:600;">$' + fmtNum(totalBudget) + '</span>'
@@ -2780,8 +2969,9 @@
                     const ftCur = getRegionCurrency(APP.regionFilter);
                     const ftCurSym = getRegionCurrencySymbol(ftCur);
                     const rbUSD = regionBudgetToUSD(APP.regionFilter);
-                    const usedPct = rbUSD > 0 ? (filteredValue / rbUSD * 100) : 0;
-                    const rem = rbUSD - filteredValue;
+                    // Budget usage by COST (actual purchase amount), not market value
+                    const usedPct = rbUSD > 0 ? (filteredCost / rbUSD * 100) : 0;
+                    const rem = rbUSD - filteredCost;
                     html += `<tr style="border-top:1px solid rgba(193,166,115,0.15);color:#C1A673;">
                         <td colspan="5" style="font-size:12px;">Budget: ${ftCurSym}${fmtNum(rb)}${ftCur !== 'USD' ? ' <span style="color:#94a3b8;">≈ $' + fmtNum(rbUSD) + '</span>' : ''}</td>
                         <td></td><td></td><td></td><td></td>
@@ -3706,7 +3896,7 @@
     function getRegionCurrencySymbol(cur) {
         return cur==='CNY'?'¥':cur==='JPY'?'¥':cur==='HKD'?'HK$':'$';
     }
-    // Convert local budget to USD
+    // Convert local budget to USD using current real-time FX rate.
     function regionBudgetToUSD(region) {
         const localVal = parseFloat(APP.regionBudgets[region]) || 0;
         const cur = getRegionCurrency(region);
@@ -3894,6 +4084,15 @@
                         </div>
                         <button class="btn-primary" onclick="changePassword()">Update</button>
                     </div>
+                </div>
+
+                <div class="data-section">
+                    <div class="data-section-title">YTD Anchor Prices / 年初锚定价</div>
+                    <div style="font-size:12px;color:#94a3b8;margin-bottom:10px;line-height:1.6;">
+                        从 Yahoo 拉取每只持仓股 <strong>${new Date().getFullYear() - 1}年最后交易日的收盘价</strong>（按各市场本地时区，A股为沪市、美股为NYSE、日股为东京），用作精确 YTD 计算的起点。<br>
+                        当前已加载 <span style="color:#C1A673;font-weight:600;">${Object.keys(APP.anchorPrices || {}).length}</span> 只锚定价。
+                    </div>
+                    <button class="btn-primary" onclick="backfillAnchorPrices()">⚓ 回填 ${new Date().getFullYear() - 1} 年末锚定价</button>
                 </div>
 
                 <div class="data-section">
