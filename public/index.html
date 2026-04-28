@@ -546,25 +546,25 @@
             flex-wrap: wrap;
         }
         .stat-pct-lg {
-            font-size: 28px;
+            font-size: 22px;
             font-weight: 600;
             font-family: 'Montserrat', sans-serif;
-            letter-spacing: -0.4px;
+            letter-spacing: -0.3px;
             line-height: 1;
         }
         .stat-amount-sm {
-            font-size: 14px;
+            font-size: 13px;
             font-weight: 400;
             color: #94a3b8;
             font-family: 'Montserrat', sans-serif;
             letter-spacing: -0.2px;
         }
         @media (max-width: 768px) {
-            .stat-pct-lg { font-size: 22px; }
+            .stat-pct-lg { font-size: 19px; }
             .stat-amount-sm { font-size: 12px; }
         }
         @media (max-width: 480px) {
-            .stat-pct-lg { font-size: 19px; }
+            .stat-pct-lg { font-size: 17px; }
             .stat-amount-sm { font-size: 11px; }
         }
 
@@ -1346,7 +1346,100 @@
             letter-spacing: 0.3px;
         }
 
-        /* Phase 3 redesign: data row inside section (label + action) */
+        /* Phase 3 极简风：Apple iOS Settings 式列表 */
+        .apple-id-bar {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 16px 18px;
+            background: rgba(30, 41, 59, 0.45);
+            backdrop-filter: blur(16px);
+            border: 1px solid var(--gold-border);
+            border-radius: 14px;
+            margin-bottom: 18px;
+        }
+        .apple-id-avatar {
+            width: 44px; height: 44px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #C1A673 0%, #8B6F3F 100%);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 18px; font-weight: 600; color: #0f172a;
+            font-family: 'Montserrat', sans-serif;
+            flex-shrink: 0;
+        }
+        .apple-id-info { flex: 1; min-width: 0; }
+        .apple-id-name {
+            font-size: 16px; color: #e2e8f0; font-weight: 500;
+            margin-bottom: 2px;
+        }
+        .apple-id-stats {
+            font-size: 11px; color: #64748b;
+            display: flex; gap: 10px; flex-wrap: wrap;
+        }
+        .apple-id-stats span strong {
+            color: #94a3b8; font-weight: 500;
+        }
+
+        .apple-section-label {
+            font-size: 11px;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            padding: 0 18px 8px;
+            font-weight: 500;
+        }
+
+        .apple-list {
+            background: rgba(30, 41, 59, 0.45);
+            backdrop-filter: blur(16px);
+            border: 1px solid var(--gold-border);
+            border-radius: 14px;
+            overflow: hidden;
+            margin-bottom: 18px;
+        }
+
+        .apple-row {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 14px 18px;
+            cursor: pointer;
+            transition: background 0.15s ease;
+            border-bottom: 1px solid rgba(148,163,184,0.08);
+        }
+        .apple-row:last-child { border-bottom: none; }
+        .apple-row:hover { background: rgba(193,166,115,0.06); }
+        .apple-row:active { background: rgba(193,166,115,0.12); }
+
+        .apple-row-icon {
+            width: 32px; height: 32px;
+            border-radius: 8px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 15px;
+            flex-shrink: 0;
+        }
+        .apple-row-body { flex: 1; min-width: 0; }
+        .apple-row-title {
+            font-size: 14px; color: #e2e8f0; font-weight: 400;
+            line-height: 1.3;
+        }
+        .apple-row-subtitle {
+            font-size: 11px; color: #64748b;
+            margin-top: 2px; line-height: 1.3;
+        }
+        .apple-row-meta {
+            font-size: 13px; color: #94a3b8;
+            font-family: 'Montserrat', sans-serif;
+            white-space: nowrap;
+        }
+        .apple-row-chevron {
+            color: #475569;
+            font-size: 18px;
+            margin-left: 4px;
+            line-height: 1;
+        }
+
+        /* Phase 3 redesign: data row inside section (label + action) — DEPRECATED, kept for compat */
         .settings-row {
             display: flex;
             justify-content: space-between;
@@ -2448,6 +2541,29 @@
                             <button class="btn-secondary" onclick="closeModal('tradeModal')">Cancel</button>
                             <button class="btn-primary" id="tradeSubmitBtn" onclick="submitTrade()">Save Trade</button>
                         </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal" id="passwordModal">
+                <div class="modal-content" style="position: relative; max-width: 420px;">
+                    <button class="modal-close" onclick="closeModal('passwordModal')">×</button>
+                    <div class="modal-header">🔒 修改密码</div>
+                    <div class="form-group">
+                        <label class="form-label">当前密码 / Current Password</label>
+                        <input type="password" id="oldPwd" class="form-input" placeholder="Current password">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">新密码 / New Password</label>
+                        <input type="password" id="newPwd" class="form-input" placeholder="New password (min 4 chars)">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">确认新密码 / Confirm</label>
+                        <input type="password" id="confirmPwd" class="form-input" placeholder="Confirm new password">
+                    </div>
+                    <div class="modal-buttons">
+                        <button class="btn-secondary" onclick="closeModal('passwordModal')">Cancel</button>
+                        <button class="btn-primary" onclick="changePassword()">Update</button>
                     </div>
                 </div>
             </div>
@@ -4475,89 +4591,91 @@
         const lastYear = new Date().getFullYear() - 1;
         const anchorCount = Object.keys(APP.anchorPrices || {}).length;
         const activeHoldings = APP.holdings.filter(h => h.qty > 0).length;
+        const initial = (APP.username || '?').charAt(0).toUpperCase();
 
         const html = `
             <div class="data-management">
 
-                <!-- ===== 顶部并排：账户概览 + 修改密码 ===== -->
-                <div class="settings-top-grid">
-                    <div class="data-section">
-                        <div class="data-section-title">👤 账户概览 / Account</div>
-                        <div style="font-size:13px;color:#cbd5e1;margin-bottom:12px;font-weight:500;">${APP.username}</div>
-                        <div class="settings-stats">
-                            <div class="settings-stat-box">
-                                <div class="label">持仓</div>
-                                <div class="value">${APP.holdings.length}</div>
-                            </div>
-                            <div class="settings-stat-box">
-                                <div class="label">交易</div>
-                                <div class="value">${APP.trades.length}</div>
-                            </div>
-                            <div class="settings-stat-box">
-                                <div class="label">提醒</div>
-                                <div class="value">${APP.alerts.length}</div>
-                            </div>
-                            <div class="settings-stat-box">
-                                <div class="label">锚定价</div>
-                                <div class="value">${anchorCount}</div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="data-section">
-                        <div class="data-section-title">🔒 修改密码 / Password</div>
-                        <div style="display:flex;flex-direction:column;gap:8px;">
-                            <input type="password" id="oldPwd" class="form-input" placeholder="Current password" style="width:100%;">
-                            <input type="password" id="newPwd" class="form-input" placeholder="New password (min 4 chars)" style="width:100%;">
-                            <input type="password" id="confirmPwd" class="form-input" placeholder="Confirm new password" style="width:100%;">
-                            <button class="btn-action primary" style="align-self:flex-start;margin-top:4px;" onclick="changePassword()">Update</button>
+                <!-- ===== 顶部 Apple ID 风账户条 ===== -->
+                <div class="apple-id-bar">
+                    <div class="apple-id-avatar">${initial}</div>
+                    <div class="apple-id-info">
+                        <div class="apple-id-name">${APP.username}</div>
+                        <div class="apple-id-stats">
+                            <span><strong>${APP.holdings.length}</strong> 持仓</span>
+                            <span><strong>${APP.trades.length}</strong> 交易</span>
+                            <span><strong>${APP.alerts.length}</strong> 提醒</span>
+                            <span><strong>${anchorCount}</strong> 锚定价</span>
                         </div>
                     </div>
                 </div>
 
-                <!-- ===== 数据源 (Phase 3 多源) ===== -->
-                <div class="data-section">
-                    <div class="data-section-title">📊 数据源 / Data Sources <span style="color:#64748b;font-weight:400;font-size:10px;text-transform:none;letter-spacing:0;">· Phase 3 多源</span></div>
-
-                    <div class="settings-row">
-                        <div class="settings-row-info">
-                            <div class="title">⚓ 年初锚定价 / YTD Anchor</div>
-                            <div class="desc">${lastYear} 年末各市场本地收盘价 · 当前已加载 <span style="color:#C1A673;">${anchorCount}</span> 只 · 用于 YTD 起点</div>
+                <!-- ===== 安全 ===== -->
+                <div class="apple-section-label">安全</div>
+                <div class="apple-list">
+                    <div class="apple-row" onclick="openModal('passwordModal')">
+                        <div class="apple-row-icon" style="background:rgba(193,166,115,0.15);color:#C1A673;">🔒</div>
+                        <div class="apple-row-body">
+                            <div class="apple-row-title">修改密码</div>
                         </div>
-                        <button class="btn-action" onclick="backfillAnchorPrices()">回填 ${lastYear}</button>
+                        <span class="apple-row-chevron">›</span>
                     </div>
+                </div>
 
-                    <div class="settings-row">
-                        <div class="settings-row-info">
-                            <div class="title">🔄 基本面数据 / Fundamentals</div>
-                            <div class="desc">PE · PB · ROE · EPS · 股息率 · 市值 等 · 当前持仓 <span style="color:#C1A673;">${activeHoldings}</span> 只 · 缓存 7 天</div>
+                <!-- ===== 数据源 ===== -->
+                <div class="apple-section-label">数据源 · Phase 3 多源</div>
+                <div class="apple-list">
+                    <div class="apple-row" onclick="backfillAnchorPrices()">
+                        <div class="apple-row-icon" style="background:rgba(96,165,250,0.15);color:#60a5fa;">⚓</div>
+                        <div class="apple-row-body">
+                            <div class="apple-row-title">回填 ${lastYear} 年末锚定价</div>
+                            <div class="apple-row-subtitle">用于 YTD 起点 · 各市场本地收盘价</div>
                         </div>
-                        <button class="btn-action primary" onclick="refreshAllFundamentals()">刷新基本面</button>
+                        <span class="apple-row-meta">${anchorCount} 只</span>
+                        <span class="apple-row-chevron">›</span>
                     </div>
+                    <div class="apple-row" onclick="refreshAllFundamentals()">
+                        <div class="apple-row-icon" style="background:rgba(74,222,128,0.15);color:#4ade80;">🔄</div>
+                        <div class="apple-row-body">
+                            <div class="apple-row-title">刷新基本面</div>
+                            <div class="apple-row-subtitle">PE · PB · ROE · 股息率 · 市值 等 · 缓存 7 天</div>
+                        </div>
+                        <span class="apple-row-meta">${activeHoldings} 只</span>
+                        <span class="apple-row-chevron">›</span>
+                    </div>
+                </div>
 
-                    <div class="src-legend">
-                        <span style="margin-right:4px;">数据源映射：</span>
-                        <span class="src-legend-chip"><span class="badge" style="background:rgba(148,163,184,0.10);color:#94a3b8;">Y</span>Yahoo · 美股</span>
-                        <span class="src-legend-chip"><span class="badge" style="background:rgba(148,163,184,0.10);color:#94a3b8;">F</span>FMP · 美股</span>
-                        <span class="src-legend-chip"><span class="badge" style="background:rgba(248,113,113,0.12);color:#f87171;">T</span>Tushare · A股+港股</span>
-                        <span class="src-legend-chip"><span class="badge" style="background:rgba(96,165,250,0.12);color:#60a5fa;">J</span>J-Quants · 日股</span>
+                <!-- ===== 数据源图例 ===== -->
+                <div class="apple-section-label">数据源映射</div>
+                <div class="apple-list" style="padding:14px 18px;">
+                    <div style="display:flex;flex-wrap:wrap;gap:10px;font-size:12px;color:#94a3b8;">
+                        <span style="display:inline-flex;align-items:center;gap:6px;"><span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;background:rgba(148,163,184,0.10);color:#94a3b8;">Y</span>Yahoo · 美股</span>
+                        <span style="display:inline-flex;align-items:center;gap:6px;"><span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;background:rgba(148,163,184,0.10);color:#94a3b8;">F</span>FMP · 美股</span>
+                        <span style="display:inline-flex;align-items:center;gap:6px;"><span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;background:rgba(248,113,113,0.12);color:#f87171;">T</span>Tushare · A股+港股</span>
+                        <span style="display:inline-flex;align-items:center;gap:6px;"><span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;background:rgba(96,165,250,0.12);color:#60a5fa;">J</span>J-Quants · 日股</span>
                     </div>
                 </div>
 
                 <!-- ===== 数据管理 ===== -->
-                <div class="data-section">
-                    <div class="data-section-title">💾 数据管理 / Data Management</div>
-                    <div class="settings-row">
-                        <div class="settings-row-info">
-                            <div class="title">导入 / 导出</div>
-                            <div class="desc">JSON 格式，包含持仓 · 交易 · 提醒 · 预算 · 锚定价 等全量数据</div>
+                <div class="apple-section-label">数据管理</div>
+                <div class="apple-list">
+                    <div class="apple-row" onclick="exportData()">
+                        <div class="apple-row-icon" style="background:rgba(193,166,115,0.15);color:#C1A673;">⬇</div>
+                        <div class="apple-row-body">
+                            <div class="apple-row-title">导出数据</div>
+                            <div class="apple-row-subtitle">JSON · 持仓·交易·提醒·预算·锚定价 全量备份</div>
                         </div>
-                        <div style="display:flex;gap:8px;">
-                            <button class="btn-action" onclick="exportData()">⬇ Export</button>
-                            <button class="btn-action" onclick="document.getElementById('importFile').click()">⬆ Import</button>
-                            <input type="file" id="importFile" accept=".json" onchange="importData(event)">
-                        </div>
+                        <span class="apple-row-chevron">›</span>
                     </div>
+                    <div class="apple-row" onclick="document.getElementById('importFile').click()">
+                        <div class="apple-row-icon" style="background:rgba(193,166,115,0.15);color:#C1A673;">⬆</div>
+                        <div class="apple-row-body">
+                            <div class="apple-row-title">导入数据</div>
+                            <div class="apple-row-subtitle">从 JSON 文件恢复</div>
+                        </div>
+                        <span class="apple-row-chevron">›</span>
+                    </div>
+                    <input type="file" id="importFile" accept=".json" onchange="importData(event)" style="display:none;">
                 </div>
 
             </div>
