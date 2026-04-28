@@ -669,12 +669,14 @@
             top: 0;
             background: rgba(6, 11, 24, 0.95);
             z-index: 10;
+            white-space: nowrap;
         }
 
         .holdings-table td {
             padding: 12px 16px;
             font-size: 13px;
             border-bottom: 1px solid rgba(51, 65, 85, 0.3);
+            white-space: nowrap;
         }
 
         .holdings-table tbody tr:last-child td {
@@ -1124,12 +1126,14 @@
             color: #64748b;
             text-transform: uppercase;
             letter-spacing: 0.8px;
+            white-space: nowrap;
         }
 
         .trades-table td {
             padding: 12px 16px;
             font-size: 13px;
             border-bottom: 1px solid rgba(51,65,85,0.3);
+            white-space: nowrap;
         }
 
         .trades-table tbody tr:last-child td {
@@ -2920,11 +2924,11 @@
                             <col style="width:52px;">
                             <col style="width:52px;">
                             <col style="width:62px;">
-                            <col style="width:82px;">
-                            <col style="width:82px;">
-                            <col style="width:72px;">
                             <col style="width:95px;">
-                            <col style="width:90px;">
+                            <col style="width:95px;">
+                            <col style="width:72px;">
+                            <col style="width:120px;">
+                            <col style="width:120px;">
                             <col style="width:62px;">
                             <col style="width:55px;">
                             <col style="width:55px;">
@@ -3277,7 +3281,7 @@
         } else {
             const sortArrow = st.sortDir === 'desc' ? '▼' : '▲';
             const thSticky = 'position:sticky;top:0;background:#0f172a;z-index:10;';
-            html += `<div style="overflow:auto;max-height:70vh;"><table style="width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed;">`;
+            html += `<div style="overflow:auto;max-height:70vh;"><table style="width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed;white-space:nowrap;">`;
             html += `<thead><tr style="border-bottom:1px solid #334155;color:#94a3b8;font-size:12px;">`;
             html += `<th style="${thSticky}text-align:left;padding:8px 6px;width:12%;">Symbol</th>`;
             html += `<th style="${thSticky}text-align:left;padding:8px 6px;width:12%;">Name</th>`;
