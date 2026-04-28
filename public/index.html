@@ -3880,6 +3880,13 @@
                 </div>
                 ` : ''}
 
+                <!-- ===== 基本面 Fundamentals (Phase 2) ===== -->
+                <div id="fundamentalsSection" style="margin-bottom:18px;">
+                    <div style="padding:14px 16px;background:#0f172a;border:1px solid #1e293b;border-radius:10px;color:#64748b;font-size:12px;text-align:center;">
+                        基本面 / FUNDAMENTALS · 加载中…
+                    </div>
+                </div>
+
                 <div style="font-size:14px;font-weight:600;color:#cbd5e1;margin-bottom:10px;">交易时间线</div>
                 <div style="max-height:300px;overflow-y:auto;">
                 <table class="trades-table" style="font-size:12px;">
@@ -3911,6 +3918,100 @@
         const old = document.getElementById('stockDetailModal');
         if (old) old.remove();
         document.body.insertAdjacentHTML('beforeend', html);
+
+        // Phase 2: 异步加载基本面数据
+        loadFundamentalsForModal(holding.symbol);
+    }
+
+    // ===== Phase 2: 基本面 Fundamentals =====
+    // FMP 返回的 ROE / dividend_yield 有时是小数(0.15)，有时是百分数(15)，统一显示
+    function pctSmart(v) {
+        if (v == null) return null;
+        const n = parseFloat(v);
+        if (isNaN(n)) return null;
+        const v100 = Math.abs(n) < 1 ? n * 100 : n;
+        return v100.toFixed(2) + '%';
+    }
+
+    function fmtMarketCap(n) {
+        if (n == null) return null;
+        const v = parseFloat(n);
+        if (isNaN(v) || v === 0) return null;
+        const abs = Math.abs(v);
+        if (abs >= 1e12) return '$' + (v / 1e12).toFixed(2) + 'T';
+        if (abs >= 1e9) return '$' + (v / 1e9).toFixed(2) + 'B';
+        if (abs >= 1e6) return '$' + (v / 1e6).toFixed(1) + 'M';
+        return '$' + v.toLocaleString();
+    }
+
+    async function loadFundamentalsForModal(symbol) {
+        const container = document.getElementById('fundamentalsSection');
+        if (!container) return;
+        try {
+            const f = await apiCall(`/fundamentals/${encodeURIComponent(symbol)}`);
+            const num = (v, d=2) => {
+                if (v == null) return null;
+                const n = parseFloat(v);
+                return isNaN(n) ? null : fmtNum(n, d);
+            };
+
+            const fields = [];
+            const peVal = num(f.pe_ratio);            if (peVal !== null) fields.push({label: 'P/E TTM', value: peVal});
+            const pbVal = num(f.pb_ratio);            if (pbVal !== null) fields.push({label: 'P/B', value: pbVal});
+            const roeVal = pctSmart(f.roe);           if (roeVal !== null) fields.push({label: 'ROE', value: roeVal, color: '#4ade80'});
+            const dyVal  = pctSmart(f.dividend_yield);if (dyVal  !== null) fields.push({label: '股息率 Dividend Yield', value: dyVal, color: '#fbbf24'});
+            const epsVal = num(f.eps);                if (epsVal !== null) fields.push({label: 'EPS', value: epsVal});
+            const mcVal  = fmtMarketCap(f.market_cap);if (mcVal  !== null) fields.push({label: '市值 Market Cap', value: mcVal});
+            const betaVal = num(f.beta);              if (betaVal !== null) fields.push({label: 'Beta', value: betaVal});
+
+            if (fields.length === 0) {
+                container.innerHTML = `<div style="padding:14px 16px;background:#0f172a;border:1px solid #1e293b;border-radius:10px;color:#64748b;font-size:12px;text-align:center;">基本面 / FUNDAMENTALS · 数据不可用<br><span style="font-size:11px;">FMP Free 计划可能不覆盖此市场（A股/港股/日股）</span></div>`;
+                return;
+            }
+
+            const sectorLine = (f.sector || f.industry)
+                ? `<div style="font-size:11px;color:#94a3b8;margin-top:10px;">${[f.sector, f.industry].filter(Boolean).join(' · ')}</div>`
+                : '';
+            const sourceLabel = f._from === 'cache' ? '缓存' : (f._from === 'cache_stale' ? '缓存(旧)' : 'FMP 实时');
+            const updatedLine = f.fetched_at
+                ? `<div style="font-size:10px;color:#64748b;margin-top:4px;">${sourceLabel} · 更新于 ${new Date(f.fetched_at).toLocaleString('zh-CN')}</div>`
+                : '';
+
+            container.innerHTML = `
+            <div style="padding:14px 16px;background:linear-gradient(135deg,rgba(193,166,115,0.06),rgba(15,23,42,0.6));border:1px solid rgba(193,166,115,0.20);border-radius:10px;">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+                    <span style="font-size:13px;font-weight:700;color:#C1A673;letter-spacing:0.8px;">基本面 / FUNDAMENTALS</span>
+                    <span style="font-size:10px;color:#64748b;">数据来源 FMP · TTM</span>
+                </div>
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px;">
+                    ${fields.map(x => `
+                        <div>
+                            <div style="font-size:10px;color:#94a3b8;letter-spacing:0.8px;margin-bottom:4px;">${x.label}</div>
+                            <div style="font-size:16px;font-weight:700;color:${x.color || '#cbd5e1'};font-family:Montserrat,sans-serif;">${x.value}</div>
+                        </div>
+                    `).join('')}
+                </div>
+                ${sectorLine}
+                ${updatedLine}
+            </div>`;
+        } catch (e) {
+            container.innerHTML = `<div style="padding:14px 16px;background:#0f172a;border:1px solid #1e293b;border-radius:10px;color:#f87171;font-size:12px;text-align:center;">基本面 / FUNDAMENTALS · 加载失败<br><span style="font-size:11px;">${(e && e.message) || '未知错误'}</span></div>`;
+        }
+    }
+
+    // 批量刷新所有持仓的基本面数据（Settings 调用）
+    async function refreshAllFundamentals() {
+        const count = APP.holdings.filter(h => h.qty > 0).length;
+        if (!confirm(`即将从 FMP API 批量拉取 ${count} 只持仓股的基本面数据（PE/PB/ROE/EPS 等）。\n\n约需 ${Math.ceil(count * 0.5)} 秒。FMP Free 250次/天，主要覆盖美股；A股/港股/日股可能失败。\n\n继续？`)) return;
+        try {
+            const result = await apiCall('/fundamentals/refresh-all', 'POST');
+            const failedMsg = result.failed && result.failed.length > 0
+                ? `\n\n失败 ${result.failed.length} 只：\n${result.failed.slice(0, 8).map(f => `· ${f.symbol}`).join('\n')}${result.failed.length > 8 ? `\n…还有 ${result.failed.length - 8} 只` : ''}`
+                : '';
+            alert(`✅ 已成功刷新 ${result.ok}/${result.total} 只股票的基本面数据${failedMsg}\n\n点击任意股票名称查看基本面详情。`);
+        } catch (e) {
+            alert(`❌ 刷新失败：${e.message}`);
+        }
     }
 
     // ===== 投资组合 Tab =====
@@ -4130,6 +4231,16 @@
                         当前已加载 <span style="color:#C1A673;font-weight:600;">${Object.keys(APP.anchorPrices || {}).length}</span> 只锚定价。
                     </div>
                     <button class="btn-primary" onclick="backfillAnchorPrices()">⚓ 回填 ${new Date().getFullYear() - 1} 年末锚定价</button>
+                </div>
+
+                <div class="data-section">
+                    <div class="data-section-title">Fundamentals / 基本面数据 (Phase 2)</div>
+                    <div style="font-size:12px;color:#94a3b8;margin-bottom:10px;line-height:1.6;">
+                        从 <strong>FMP API</strong> 拉取所有持仓股的最新基本面数据（PE / PB / ROE / EPS / 股息率 / 市值 / Beta 等），自动缓存 7 天。点击任意股票详情可查看。<br>
+                        当前持仓 <span style="color:#C1A673;font-weight:600;">${APP.holdings.filter(h => h.qty > 0).length}</span> 只股票。<br>
+                        <span style="color:#fbbf24;">⚠️ 注意：</span>FMP Free 计划 250次/天，主要覆盖美股；A股/港股/日股可能显示"数据不可用"。
+                    </div>
+                    <button class="btn-primary" onclick="refreshAllFundamentals()">🔄 刷新所有持仓基本面</button>
                 </div>
 
                 <div class="data-section">
