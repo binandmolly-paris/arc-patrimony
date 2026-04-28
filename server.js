@@ -1126,8 +1126,16 @@ async function fetchFMPFundamentals(symbol) {
   return result;
 }
 
-// UPSERT 到 fundamentals_latest（Phase 2.1: 含 12 个扩充字段）
+// UPSERT 到 fundamentals_latest（Phase 2.2 防线：跳过空数据 + COALESCE 保护现有值）
 async function saveFundamentalsToDB(d) {
+  // 防线 1: 如果 FMP 返回完全空，抛错让调用者知道，避免用 NULL 覆盖 DB 里的好数据
+  const hasUsefulData = d.market_cap || d.pe_ratio || d.eps || d.beta || d.company_name
+                        || d.dividend_yield || d.roe || d.day_change_pct || d.price;
+  if (!hasUsefulData) {
+    throw new Error('FMP 返回空数据（可能是 Free 档不覆盖此市场，或限速触发）— 已跳过保存以保留现有数据');
+  }
+
+  // 防线 2: ON CONFLICT 用 COALESCE — 新值是 NULL 时保留旧值（防止部分 endpoint 失败覆盖好字段）
   await pool.query(`
     INSERT INTO fundamentals_latest (
       symbol, company_name, sector, industry, country, currency, market_cap, beta,
@@ -1146,48 +1154,48 @@ async function saveFundamentalsToDB(d) {
       $41,NOW(),$42
     )
     ON CONFLICT (symbol) DO UPDATE SET
-      company_name = EXCLUDED.company_name,
-      sector = EXCLUDED.sector,
-      industry = EXCLUDED.industry,
-      country = EXCLUDED.country,
-      currency = EXCLUDED.currency,
-      market_cap = EXCLUDED.market_cap,
-      beta = EXCLUDED.beta,
-      ceo = EXCLUDED.ceo,
-      website = EXCLUDED.website,
-      exchange = EXCLUDED.exchange,
-      description = EXCLUDED.description,
-      last_dividend = EXCLUDED.last_dividend,
-      range_52w = EXCLUDED.range_52w,
-      day_change = EXCLUDED.day_change,
-      day_change_pct = EXCLUDED.day_change_pct,
-      volume = EXCLUDED.volume,
-      avg_volume = EXCLUDED.avg_volume,
-      employees = EXCLUDED.employees,
-      pe_ratio = EXCLUDED.pe_ratio,
-      pb_ratio = EXCLUDED.pb_ratio,
-      ps_ratio = EXCLUDED.ps_ratio,
-      roe = EXCLUDED.roe,
-      roic = EXCLUDED.roic,
-      debt_to_equity = EXCLUDED.debt_to_equity,
-      eps = EXCLUDED.eps,
-      dividend_yield = EXCLUDED.dividend_yield,
-      payout_ratio = EXCLUDED.payout_ratio,
-      price = EXCLUDED.price,
-      forward_pe = EXCLUDED.forward_pe,
-      peg_ratio = EXCLUDED.peg_ratio,
-      current_ratio = EXCLUDED.current_ratio,
-      gross_margin = EXCLUDED.gross_margin,
-      operating_margin = EXCLUDED.operating_margin,
-      net_margin = EXCLUDED.net_margin,
-      year_high = EXCLUDED.year_high,
-      year_low = EXCLUDED.year_low,
-      shares_out = EXCLUDED.shares_out,
-      price_avg_50 = EXCLUDED.price_avg_50,
-      price_avg_200 = EXCLUDED.price_avg_200,
-      source = EXCLUDED.source,
-      fetched_at = NOW(),
-      raw_json = EXCLUDED.raw_json
+      company_name   = COALESCE(EXCLUDED.company_name,   fundamentals_latest.company_name),
+      sector         = COALESCE(EXCLUDED.sector,         fundamentals_latest.sector),
+      industry       = COALESCE(EXCLUDED.industry,       fundamentals_latest.industry),
+      country        = COALESCE(EXCLUDED.country,        fundamentals_latest.country),
+      currency       = COALESCE(EXCLUDED.currency,       fundamentals_latest.currency),
+      market_cap     = COALESCE(EXCLUDED.market_cap,     fundamentals_latest.market_cap),
+      beta           = COALESCE(EXCLUDED.beta,           fundamentals_latest.beta),
+      ceo            = COALESCE(EXCLUDED.ceo,            fundamentals_latest.ceo),
+      website        = COALESCE(EXCLUDED.website,        fundamentals_latest.website),
+      exchange       = COALESCE(EXCLUDED.exchange,       fundamentals_latest.exchange),
+      description    = COALESCE(EXCLUDED.description,    fundamentals_latest.description),
+      last_dividend  = COALESCE(EXCLUDED.last_dividend,  fundamentals_latest.last_dividend),
+      range_52w      = COALESCE(EXCLUDED.range_52w,      fundamentals_latest.range_52w),
+      day_change     = COALESCE(EXCLUDED.day_change,     fundamentals_latest.day_change),
+      day_change_pct = COALESCE(EXCLUDED.day_change_pct, fundamentals_latest.day_change_pct),
+      volume         = COALESCE(EXCLUDED.volume,         fundamentals_latest.volume),
+      avg_volume     = COALESCE(EXCLUDED.avg_volume,     fundamentals_latest.avg_volume),
+      employees      = COALESCE(EXCLUDED.employees,      fundamentals_latest.employees),
+      pe_ratio       = COALESCE(EXCLUDED.pe_ratio,       fundamentals_latest.pe_ratio),
+      pb_ratio       = COALESCE(EXCLUDED.pb_ratio,       fundamentals_latest.pb_ratio),
+      ps_ratio       = COALESCE(EXCLUDED.ps_ratio,       fundamentals_latest.ps_ratio),
+      roe            = COALESCE(EXCLUDED.roe,            fundamentals_latest.roe),
+      roic           = COALESCE(EXCLUDED.roic,           fundamentals_latest.roic),
+      debt_to_equity = COALESCE(EXCLUDED.debt_to_equity, fundamentals_latest.debt_to_equity),
+      eps            = COALESCE(EXCLUDED.eps,            fundamentals_latest.eps),
+      dividend_yield = COALESCE(EXCLUDED.dividend_yield, fundamentals_latest.dividend_yield),
+      payout_ratio   = COALESCE(EXCLUDED.payout_ratio,   fundamentals_latest.payout_ratio),
+      price          = COALESCE(EXCLUDED.price,          fundamentals_latest.price),
+      forward_pe     = COALESCE(EXCLUDED.forward_pe,     fundamentals_latest.forward_pe),
+      peg_ratio      = COALESCE(EXCLUDED.peg_ratio,      fundamentals_latest.peg_ratio),
+      current_ratio  = COALESCE(EXCLUDED.current_ratio,  fundamentals_latest.current_ratio),
+      gross_margin   = COALESCE(EXCLUDED.gross_margin,   fundamentals_latest.gross_margin),
+      operating_margin = COALESCE(EXCLUDED.operating_margin, fundamentals_latest.operating_margin),
+      net_margin     = COALESCE(EXCLUDED.net_margin,     fundamentals_latest.net_margin),
+      year_high      = COALESCE(EXCLUDED.year_high,      fundamentals_latest.year_high),
+      year_low       = COALESCE(EXCLUDED.year_low,       fundamentals_latest.year_low),
+      shares_out     = COALESCE(EXCLUDED.shares_out,     fundamentals_latest.shares_out),
+      price_avg_50   = COALESCE(EXCLUDED.price_avg_50,   fundamentals_latest.price_avg_50),
+      price_avg_200  = COALESCE(EXCLUDED.price_avg_200,  fundamentals_latest.price_avg_200),
+      source         = EXCLUDED.source,
+      fetched_at     = NOW(),
+      raw_json       = COALESCE(EXCLUDED.raw_json,       fundamentals_latest.raw_json)
   `, [
     d.symbol, d.company_name, d.sector, d.industry, d.country, d.currency,
     d.market_cap, d.beta, d.ceo, d.website, d.exchange, d.description,
@@ -1201,7 +1209,14 @@ async function saveFundamentalsToDB(d) {
   ]);
 }
 
-// GET /api/fundamentals/:symbol — 读缓存，过期则刷新
+// 检测一行数据是否"实质为空"（关键字段全 null）— Phase 2.2 防线 3 用
+function isRowEmpty(row) {
+  if (!row) return true;
+  return !row.market_cap && !row.pe_ratio && !row.eps && !row.beta
+         && !row.company_name && !row.dividend_yield && !row.roe;
+}
+
+// GET /api/fundamentals/:symbol — 读缓存，过期或空行则自动刷新
 app.get("/api/fundamentals/:symbol", auth, async (req, res) => {
   const symbol = req.params.symbol.trim().toUpperCase();
   if (!symbol) return res.status(400).json({ error: 'symbol required' });
@@ -1212,16 +1227,24 @@ app.get("/api/fundamentals/:symbol", auth, async (req, res) => {
        FROM fundamentals_latest WHERE symbol=$1`,
       [symbol]
     );
-    if (cached.rows.length > 0 && cached.rows[0].age_days < maxAgeDays) {
-      return res.json({ ...cached.rows[0], _from: 'cache' });
+    const cachedRow = cached.rows[0];
+    const emptyCache = isRowEmpty(cachedRow);
+
+    // 缓存有效 + 内容非空 → 直接返回
+    if (cachedRow && cachedRow.age_days < maxAgeDays && !emptyCache) {
+      return res.json({ ...cachedRow, _from: 'cache' });
     }
-    // 刷新
+
+    // 缓存过期 OR 缓存为空（被之前 NULL 覆盖污染过） → 触发刷新
+    if (emptyCache && cachedRow) {
+      console.log(`🔄 Auto-retry for ${symbol}: cache row is empty, attempting fresh FMP fetch`);
+    }
     const fresh = await fetchFMPFundamentals(symbol);
-    await saveFundamentalsToDB(fresh);
+    await saveFundamentalsToDB(fresh); // 如果 fresh 也是空，会抛错被下面 catch 接住
     res.json({ ...fresh, _from: 'fmp' });
   } catch (e) {
     console.error(`Fundamentals error for ${symbol}:`, e.message);
-    // Fallback：旧缓存（即使过期）也返回
+    // Fallback：旧缓存（即使过期或空）也返回，至少前端能显示"数据不可用"提示而非 500
     try {
       const stale = await pool.query("SELECT * FROM fundamentals_latest WHERE symbol=$1", [symbol]);
       if (stale.rows.length > 0) {
