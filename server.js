@@ -1402,7 +1402,14 @@ function mergeWithCrossCheck(yahoo, fmp) {
   return merged;
 }
 
-// 双源同时拉取 + 融合（Phase 2.3 主入口）
+// 检测某源返回的数据是否"实质有内容"（除了 symbol/source/raw_json 三个固定字段外是否有值）
+function hasSourceData(obj) {
+  if (!obj) return false;
+  return !!(obj.market_cap || obj.pe_ratio || obj.eps || obj.beta || obj.company_name
+         || obj.dividend_yield || obj.roe || obj.day_change_pct || obj.price);
+}
+
+// 双源同时拉取 + 融合（Phase 2.3 主入口；空数据时抛带明细的错）
 async function fetchFundamentalsHybrid(symbol) {
   const [yResult, fResult] = await Promise.allSettled([
     fetchYahooFundamentals(symbol),
@@ -1411,19 +1418,41 @@ async function fetchFundamentalsHybrid(symbol) {
   const yahoo = yResult.status === 'fulfilled' ? yResult.value : {};
   const fmp   = fResult.status === 'fulfilled' ? fResult.value : {};
 
-  if (yResult.status === 'rejected') console.warn(`Yahoo failed for ${symbol}:`, yResult.reason?.message);
-  if (fResult.status === 'rejected') console.warn(`FMP failed for ${symbol}:`, fResult.reason?.message);
+  // 记录每个源的状态（成功/失败原因）
+  let yahooStatus, fmpStatus;
+  if (yResult.status === 'rejected') {
+    yahooStatus = `❌ ${yResult.reason?.message || 'unknown error'}`;
+    console.warn(`[hybrid] ${symbol} Yahoo: ${yahooStatus}`);
+  } else if (!hasSourceData(yahoo)) {
+    yahooStatus = '⚠️ 返回空（无 market_cap/pe/eps 等关键字段）';
+    console.warn(`[hybrid] ${symbol} Yahoo: 返回空数据`);
+  } else {
+    yahooStatus = '✅';
+  }
+  if (fResult.status === 'rejected') {
+    fmpStatus = `❌ ${fResult.reason?.message || 'unknown error'}`;
+    console.warn(`[hybrid] ${symbol} FMP: ${fmpStatus}`);
+  } else if (!hasSourceData(fmp)) {
+    fmpStatus = '⚠️ 返回空（5 个 endpoint 全无关键字段，可能是 Free 档不覆盖此市场）';
+    console.warn(`[hybrid] ${symbol} FMP: 返回空数据`);
+  } else {
+    fmpStatus = '✅';
+  }
 
   const merged = mergeWithCrossCheck(yahoo, fmp);
   merged.symbol = symbol;
-  // source 字符串记录哪个源真正出了数据
-  const ySrcOK = yResult.status === 'fulfilled' && Object.keys(yahoo).length > 3;
-  const fSrcOK = fResult.status === 'fulfilled' && Object.keys(fmp).length > 3;
+  const ySrcOK = hasSourceData(yahoo);
+  const fSrcOK = hasSourceData(fmp);
   merged.source = ySrcOK && fSrcOK ? 'yahoo+fmp' : (ySrcOK ? 'yahoo' : (fSrcOK ? 'fmp' : 'none'));
   merged.raw_json = {
     yahoo: yahoo.raw_json || null,
     fmp:   fmp.raw_json   || null,
   };
+
+  // 双源都没拿到有意义数据 → 抛错带明细，让前端 first_error 能看到真因
+  if (!ySrcOK && !fSrcOK) {
+    throw new Error(`双源均无数据 [Yahoo ${yahooStatus}] [FMP ${fmpStatus}]`);
+  }
   return merged;
 }
 
@@ -1515,6 +1544,39 @@ async function saveFundamentalsToDB(d) {
     d.source, JSON.stringify(d.raw_json || {})
   ]);
 }
+
+// Phase 2.3 调试 endpoint：单独测试 Yahoo / FMP 单源，看具体返回内容/错误
+app.get("/api/debug/source/:source/:symbol", auth, async (req, res) => {
+  const source = req.params.source;
+  const symbol = req.params.symbol.trim().toUpperCase();
+  const fn = source === 'yahoo' ? fetchYahooFundamentals
+           : source === 'fmp'   ? fetchFMPFundamentals
+           : null;
+  if (!fn) return res.status(400).json({ error: 'source must be yahoo or fmp' });
+  try {
+    const result = await fn(symbol);
+    const populatedKeys = Object.keys(result).filter(k =>
+      k !== 'symbol' && k !== 'source' && k !== 'raw_json' && result[k] != null
+    );
+    res.json({
+      ok: true,
+      source, symbol,
+      populated_field_count: populatedKeys.length,
+      populated_keys: populatedKeys,
+      sample_values: {
+        market_cap: result.market_cap,
+        pe_ratio: result.pe_ratio,
+        eps: result.eps,
+        beta: result.beta,
+        company_name: result.company_name,
+        sector: result.sector,
+        country: result.country,
+      },
+    });
+  } catch (e) {
+    res.json({ ok: false, source, symbol, error: e.message, stack: e.stack?.split('\n').slice(0, 4).join(' | ') });
+  }
+});
 
 // 检测一行数据是否"实质为空"（关键字段全 null）— Phase 2.2 防线 3 用
 function isRowEmpty(row) {
