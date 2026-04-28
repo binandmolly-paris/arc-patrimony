@@ -1427,9 +1427,30 @@ function mergeWithCrossCheck(yahoo, fmp) {
 // ============================================================
 const TUSHARE_API = 'https://api.tushare.pro';
 
+// Tushare 部分接口（特别是 hk_daily）有频率限制（2次/分钟 起）
+// 这里用全局"上次调用时间"映射，对每个限速接口强制最小间隔
+const TUSHARE_MIN_INTERVAL_MS = {
+  hk_daily: 31000,   // 2次/min → 至少 31s 间隔
+  hk_basic: 2000,
+};
+const tushareLastCallAt = {};
+
 async function fetchTushare(api_name, params = {}, fields = '') {
   const token = process.env.TUSHARE_TOKEN;
   if (!token) throw new Error('TUSHARE_TOKEN not configured');
+
+  // 强制最小间隔（仅限 TUSHARE_MIN_INTERVAL_MS 中列出的接口）
+  const minInterval = TUSHARE_MIN_INTERVAL_MS[api_name];
+  if (minInterval) {
+    const last = tushareLastCallAt[api_name] || 0;
+    const wait = minInterval - (Date.now() - last);
+    if (wait > 0) {
+      console.log(`[Tushare] ${api_name} 限速等待 ${Math.ceil(wait/1000)}s`);
+      await new Promise(r => setTimeout(r, wait));
+    }
+    tushareLastCallAt[api_name] = Date.now();
+  }
+
   const resp = await fetch(TUSHARE_API, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
