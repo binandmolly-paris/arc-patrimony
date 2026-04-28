@@ -523,7 +523,7 @@
             color: var(--gold-dark);
             text-transform: uppercase;
             letter-spacing: 1.5px;
-            font-weight: 600;
+            font-weight: 500;
         }
 
         .stat-chip {
@@ -534,7 +534,38 @@
             padding: 2px 8px;
             border-radius: 10px;
             letter-spacing: 0.8px;
+            font-weight: 500;
+        }
+
+        /* Phase 3 redesign: P&L 卡片"% 大、金额小"的双层值显示 */
+        .stat-pnl-row {
+            display: flex;
+            align-items: baseline;
+            gap: 10px;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+        }
+        .stat-pct-lg {
+            font-size: 28px;
             font-weight: 600;
+            font-family: 'Montserrat', sans-serif;
+            letter-spacing: -0.4px;
+            line-height: 1;
+        }
+        .stat-amount-sm {
+            font-size: 14px;
+            font-weight: 400;
+            color: #94a3b8;
+            font-family: 'Montserrat', sans-serif;
+            letter-spacing: -0.2px;
+        }
+        @media (max-width: 768px) {
+            .stat-pct-lg { font-size: 22px; }
+            .stat-amount-sm { font-size: 12px; }
+        }
+        @media (max-width: 480px) {
+            .stat-pct-lg { font-size: 19px; }
+            .stat-amount-sm { font-size: 11px; }
         }
 
         .stat-dot {
@@ -1189,7 +1220,7 @@
         .data-management {
             display: flex;
             flex-direction: column;
-            gap: 20px;
+            gap: 14px;
         }
 
         .data-section {
@@ -1197,14 +1228,19 @@
             backdrop-filter: blur(16px);
             border: 1px solid var(--gold-border);
             border-radius: 12px;
-            padding: 20px;
+            padding: 16px 18px;
         }
 
         .data-section-title {
-            font-size: 14px;
-            font-weight: 600;
-            color: #cbd5e1;
-            margin-bottom: 15px;
+            font-size: 11px;
+            font-weight: 500;
+            color: var(--gold-dark);
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
 
         .user-info {
@@ -1215,6 +1251,122 @@
 
         .user-info strong {
             color: #cbd5e1;
+        }
+
+        /* Phase 3 redesign: compact stats row inside User Info */
+        .settings-stats {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+        }
+        .settings-stat-box {
+            background: rgba(15, 23, 42, 0.4);
+            border: 1px solid rgba(148,163,184,0.10);
+            border-radius: 8px;
+            padding: 10px 12px;
+            text-align: center;
+        }
+        .settings-stat-box .label {
+            font-size: 10px;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            margin-bottom: 2px;
+        }
+        .settings-stat-box .value {
+            font-size: 18px;
+            color: #cbd5e1;
+            font-family: 'Montserrat', sans-serif;
+            font-weight: 500;
+        }
+
+        /* Phase 3 redesign: 2-col grid for top settings row */
+        .settings-top-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 14px;
+        }
+        @media (max-width: 768px) {
+            .settings-top-grid { grid-template-columns: 1fr; }
+            .settings-stats { grid-template-columns: repeat(2, 1fr); }
+        }
+
+        /* Phase 3 redesign: smaller, consistent action buttons */
+        .btn-action {
+            background: rgba(193,166,115,0.12);
+            color: var(--gold-light);
+            border: 1px solid rgba(193,166,115,0.4);
+            padding: 7px 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 500;
+            font-family: inherit;
+            transition: all 0.18s ease;
+            white-space: nowrap;
+        }
+        .btn-action:hover {
+            background: rgba(193,166,115,0.22);
+            border-color: var(--gold-light);
+            transform: translateY(-1px);
+        }
+        .btn-action.primary {
+            background: var(--gold-light);
+            color: #0f172a;
+            font-weight: 600;
+        }
+        .btn-action.primary:hover {
+            background: #d4b87a;
+        }
+
+        /* Phase 3 redesign: source legend chips */
+        .src-legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            font-size: 11px;
+            color: #64748b;
+            margin-top: 10px;
+        }
+        .src-legend-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 3px 8px;
+            border-radius: 6px;
+            background: rgba(15,23,42,0.5);
+            border: 1px solid rgba(148,163,184,0.12);
+        }
+        .src-legend-chip .badge {
+            display: inline-block;
+            font-size: 9px;
+            font-weight: 700;
+            padding: 1px 5px;
+            border-radius: 3px;
+            letter-spacing: 0.3px;
+        }
+
+        /* Phase 3 redesign: data row inside section (label + action) */
+        .settings-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px dashed rgba(148,163,184,0.12);
+            gap: 12px;
+        }
+        .settings-row:last-child { border-bottom: none; }
+        .settings-row-info { flex: 1; min-width: 0; }
+        .settings-row-info .title {
+            font-size: 13px;
+            color: #cbd5e1;
+            font-weight: 500;
+            margin-bottom: 2px;
+        }
+        .settings-row-info .desc {
+            font-size: 11px;
+            color: #64748b;
+            line-height: 1.5;
         }
 
         .data-buttons {
@@ -2644,15 +2796,17 @@
                     `}
                 </div>
 
-                <!-- ===== Card 2: Today P&L (严格过滤本地今日 + 待开盘提示) ===== -->
+                <!-- ===== Card 2: Today P&L (% 主，金额次) ===== -->
                 <div class="stat-card stat-today ${todayPL>=0?'pulse-up':'pulse-down'}">
                     <div class="stat-label-row">
                         <span class="stat-label">Today P&L / 今日浮盈亏</span>
                         <span class="stat-dot ${todayPL>=0?'dot-up':'dot-down'}"></span>
                     </div>
-                    <div class="stat-value-lg ${todayCls}">${todayPL>=0?'+':''}$${fmtNum(todayPL)}</div>
+                    <div class="stat-pnl-row">
+                        <span class="stat-pct-lg ${todayCls}">${formatPercent(todayPLPct)}</span>
+                        <span class="stat-amount-sm ${todayCls}">${todayPL>=0?'+':''}$${fmtNum(todayPL)}</span>
+                    </div>
                     <div class="stat-sub" style="display:block;font-size:11px;line-height:1.5;">
-                        <div><span class="${todayCls}" style="font-weight:700;">${formatPercent(todayPLPct)}</span> <span style="color:#64748b;">仅含市场本地"今日"已成交</span></div>
                         ${Object.keys(todayByRegion).length > 0 ? `
                         <div style="color:#64748b;display:flex;flex-wrap:wrap;gap:6px;">
                             ${['美国','中国','日本'].filter(r => todayByRegion[r]).map(r => {
@@ -2677,34 +2831,39 @@
                             }).join('<span style="color:#334155;">·</span>')}
                         </div>
                         ` : ''}
-                        ${Object.keys(todayByRegion).length === 0 && Object.keys(pendingByRegion).length === 0 ? '<div style="color:#64748b;">无可用报价数据</div>' : ''}
+                        ${Object.keys(todayByRegion).length === 0 && Object.keys(pendingByRegion).length === 0 ? '<div style="color:#64748b;">无可用报价数据</div>' : '<div style="color:#475569;font-size:10px;margin-top:2px;">仅含市场本地"今日"已成交</div>'}
                     </div>
                 </div>
 
-                <!-- ===== Card 3: YTD Total P&L (Unrealized + Realized + Dividends, this year scope) ===== -->
+                <!-- ===== Card 3: YTD Total P&L ===== -->
                 <div class="stat-card stat-ytd">
                     <div class="stat-label-row">
                         <span class="stat-label">YTD Total P&L / 本年总盈亏</span>
                         <span class="stat-chip" title="${hasAnchorMode ? '使用各市场本地年末锚定价（精确模式）' : '老仓位本年浮盈亏暂记 0（保守 fallback）'}">${hasAnchorMode ? '⚓ ANCHOR' : 'YTD ⚠'}</span>
                     </div>
-                    <div class="stat-value-lg ${ytdCls}">${ytdTotalPL>=0?'+':''}$${fmtNum(ytdTotalPL)}</div>
-                    <div class="stat-sub" style="display:block;font-size:11px;line-height:1.5;">
-                        ${ytdInvested > 0 ? `<div><span class="${ytdCls}" style="font-weight:700;">${formatPercent(ytdReturnPct)}</span> <span style="color:#64748b;">on $${fmtNum(ytdInvested,0)} new</span></div>` : ''}
-                        <div style="color:#64748b;">浮 ${ytdUnrealized>=0?'+':''}$${fmtNum(ytdUnrealized,0)} · 实 ${ytdRealized>=0?'+':''}$${fmtNum(ytdRealized,0)} · 红 +$${fmtNum(ytdDividends,0)}</div>
-                        ${!hasAnchorMode ? '<div style="color:#fbbf24;font-size:10px;">⚠️ 未启用锚定价，YTD 不准。Settings → 锚定价回填</div>' : `<div style="color:#64748b;font-size:10px;">⚓ ${ytdAnchorCoverage} 只股已锚定 ${new Date().getFullYear()-1} 年末</div>`}
+                    <div class="stat-pnl-row">
+                        <span class="stat-pct-lg ${ytdCls}">${ytdInvested > 0 ? formatPercent(ytdReturnPct) : '—'}</span>
+                        <span class="stat-amount-sm ${ytdCls}">${ytdTotalPL>=0?'+':''}$${fmtNum(ytdTotalPL)}</span>
+                    </div>
+                    <div class="stat-sub" style="display:block;font-size:11px;line-height:1.5;color:#64748b;">
+                        <div>浮 ${ytdUnrealized>=0?'+':''}$${fmtNum(ytdUnrealized,0)} · 实 ${ytdRealized>=0?'+':''}$${fmtNum(ytdRealized,0)} · 红 +$${fmtNum(ytdDividends,0)}</div>
+                        ${!hasAnchorMode ? '<div style="color:#fbbf24;font-size:10px;">⚠️ 未启用锚定价，YTD 不准。Settings → 锚定价回填</div>' : `<div style="color:#475569;font-size:10px;">⚓ ${ytdAnchorCoverage} 只股已锚定 ${new Date().getFullYear()-1} 年末</div>`}
                     </div>
                 </div>
 
-                <!-- ===== Card 4: Cumulative Total P&L (since inception, same formula) ===== -->
+                <!-- ===== Card 4: Cumulative Total P&L ===== -->
                 <div class="stat-card stat-cumulative">
                     <div class="stat-label-row">
                         <span class="stat-label">Cumulative P&L / 累计总盈亏</span>
                         <span class="stat-chip" title="浮盈亏+已实现+分红，自成立以来">★ INCEPTION</span>
                     </div>
-                    <div class="stat-value-lg ${cumCls}">${cumulativePL>=0?'+':''}$${fmtNum(cumulativePL)}</div>
-                    <div class="stat-sub" style="display:block;font-size:11px;line-height:1.5;">
-                        <div><span class="${cumCls}" style="font-weight:700;">${formatPercent(cumulativeReturnPct)}</span> <span style="color:#64748b;">on $${fmtNum(totalInvestedEver,0)} invested</span></div>
-                        <div style="color:#64748b;">浮 ${unrealizedPL>=0?'+':''}$${fmtNum(unrealizedPL,0)} · 实 ${realizedPL_USD>=0?'+':''}$${fmtNum(realizedPL_USD,0)} · 红 +$${fmtNum(dividends_USD,0)}</div>
+                    <div class="stat-pnl-row">
+                        <span class="stat-pct-lg ${cumCls}">${formatPercent(cumulativeReturnPct)}</span>
+                        <span class="stat-amount-sm ${cumCls}">${cumulativePL>=0?'+':''}$${fmtNum(cumulativePL)}</span>
+                    </div>
+                    <div class="stat-sub" style="display:block;font-size:11px;line-height:1.5;color:#64748b;">
+                        <div>浮 ${unrealizedPL>=0?'+':''}$${fmtNum(unrealizedPL,0)} · 实 ${realizedPL_USD>=0?'+':''}$${fmtNum(realizedPL_USD,0)} · 红 +$${fmtNum(dividends_USD,0)}</div>
+                        <div style="color:#475569;font-size:10px;">on $${fmtNum(totalInvestedEver,0)} invested</div>
                     </div>
                 </div>
             </div>
@@ -3938,30 +4097,41 @@
         return (n * 100).toFixed(2) + '%';
     }
 
-    function fmtMarketCap(n) {
+    function fmtMarketCap(n, currency) {
         if (n == null) return null;
         const v = parseFloat(n);
         if (isNaN(v) || v === 0) return null;
+        const sym = currency === 'CNY' || currency === 'JPY' ? '¥'
+                  : currency === 'HKD' ? 'HK$'
+                  : '$';
         const abs = Math.abs(v);
-        if (abs >= 1e12) return '$' + (v / 1e12).toFixed(2) + 'T';
-        if (abs >= 1e9) return '$' + (v / 1e9).toFixed(2) + 'B';
-        if (abs >= 1e6) return '$' + (v / 1e6).toFixed(1) + 'M';
-        return '$' + v.toLocaleString();
+        if (abs >= 1e12) return sym + (v / 1e12).toFixed(2) + 'T';
+        if (abs >= 1e9) return sym + (v / 1e9).toFixed(2) + 'B';
+        if (abs >= 1e6) return sym + (v / 1e6).toFixed(1) + 'M';
+        return sym + v.toLocaleString();
     }
 
-    // Phase 2.3: 来源徽章渲染（Y = Yahoo / F = FMP / ⚠ = 双源分歧）
+    // Phase 2.3 + Phase 3: 来源徽章渲染
+    // Y = Yahoo / F = FMP / T = Tushare（A股/港股）/ J = J-Quants（日股）/ ⚠ = 双源分歧
     function renderSourceBadge(field, fieldSources, discrepancies) {
         const src = fieldSources && fieldSources[field];
         if (!src) return '';
         const disc = discrepancies && discrepancies[field];
-        const letter = src === 'yahoo' ? 'Y' : (src === 'fmp' ? 'F' : '');
-        if (!letter) return '';
+        const SRC_META = {
+            yahoo:   { letter: 'Y', name: 'Yahoo Finance',     color: '#94a3b8' },
+            fmp:     { letter: 'F', name: 'FMP',                color: '#94a3b8' },
+            tushare: { letter: 'T', name: 'Tushare Pro (A股/港股)', color: '#f87171' },
+            jquants: { letter: 'J', name: 'J-Quants V2 (日股)',  color: '#60a5fa' },
+        };
+        const meta = SRC_META[src];
+        if (!meta) return '';
         const baseStyle = 'display:inline-block;font-size:8px;font-weight:700;padding:1px 4px;border-radius:3px;margin-left:5px;vertical-align:top;letter-spacing:0.3px;cursor:help;';
         if (disc) {
-            const tooltip = `两源分歧 ${disc.diff_pct}%\nYahoo: ${disc.yahoo}\nFMP: ${disc.fmp}\n\n当前显示主源（${src === 'yahoo' ? 'Yahoo' : 'FMP'}）`;
-            return `<span style="${baseStyle}background:rgba(251,191,36,0.18);color:#fbbf24;border:1px solid rgba(251,191,36,0.4);" title="${tooltip}">${letter}⚠</span>`;
+            const tooltip = `两源分歧 ${disc.diff_pct}%\nYahoo: ${disc.yahoo}\nFMP: ${disc.fmp}\n\n当前显示主源（${meta.name}）`;
+            return `<span style="${baseStyle}background:rgba(251,191,36,0.18);color:#fbbf24;border:1px solid rgba(251,191,36,0.4);" title="${tooltip}">${meta.letter}⚠</span>`;
         }
-        return `<span style="${baseStyle}background:rgba(148,163,184,0.10);color:#94a3b8;" title="数据源：${src === 'yahoo' ? 'Yahoo Finance' : 'FMP'}">${letter}</span>`;
+        const bg = src === 'tushare' ? 'rgba(248,113,113,0.12)' : src === 'jquants' ? 'rgba(96,165,250,0.12)' : 'rgba(148,163,184,0.10)';
+        return `<span style="${baseStyle}background:${bg};color:${meta.color};" title="数据源：${meta.name}">${meta.letter}</span>`;
     }
 
     async function loadFundamentalsForModal(symbol) {
@@ -3971,6 +4141,9 @@
             const f = await apiCall(`/fundamentals/${encodeURIComponent(symbol)}`);
             const fs = f.field_sources || {};
             const dc = f.discrepancies || {};
+            // 取本股票的本地货币（先看 fundamentals 自带的，再 fallback 到 holdings）
+            const holdingForFmt = APP.holdings.find(h => h.symbol === symbol);
+            const ccy = f.currency || (holdingForFmt && holdingForFmt.currency) || 'USD';
             // 通用工具
             const num = (v, d=2) => {
                 if (v == null) return null;
@@ -4016,7 +4189,7 @@
                     fields: [
                         { label: '股息率 Dividend Yield', srcKey: 'dividend_yield', value: pctSmart(f.dividend_yield), color: '#fbbf24' },
                         { label: 'EPS TTM',             srcKey: 'eps',            value: num(f.eps),                 color: '#cbd5e1' },
-                        { label: '市值 Market Cap',       srcKey: 'market_cap',     value: fmtMarketCap(f.market_cap), color: '#C1A673' },
+                        { label: '市值 Market Cap',       srcKey: 'market_cap',     value: fmtMarketCap(f.market_cap, ccy), color: '#C1A673' },
                         { label: 'Beta',                srcKey: 'beta',           value: num(f.beta),                color: '#cbd5e1' },
                         { label: '52W 高 / 低',           srcKey: 'year_high',      value: (f.year_high && f.year_low)
                                                                 ? `${num(f.year_low)} ~ ${num(f.year_high)}`
@@ -4038,7 +4211,7 @@
                 .filter(g => g.fields.length > 0);
 
             if (visibleGroups.length === 0) {
-                container.innerHTML = `<div style="padding:14px 16px;background:#0f172a;border:1px solid #1e293b;border-radius:10px;color:#64748b;font-size:12px;text-align:center;">基本面 / FUNDAMENTALS · 数据不可用<br><span style="font-size:11px;">Yahoo + FMP 双源都未返回数据</span></div>`;
+                container.innerHTML = `<div style="padding:14px 16px;background:#0f172a;border:1px solid #1e293b;border-radius:10px;color:#64748b;font-size:12px;text-align:center;">基本面 / FUNDAMENTALS · 数据不可用<br><span style="font-size:11px;">所有数据源均未返回（Yahoo / FMP / Tushare / J-Quants）</span></div>`;
                 return;
             }
 
@@ -4087,21 +4260,31 @@
         }
     }
 
-    // 批量刷新所有持仓的基本面数据（Settings 调用 — Phase 2.3 双源）
+    // Phase 3 多源刷新（按市场路由：US→Yahoo+FMP，A股/港股→Tushare，日股→J-Quants V2）
     async function refreshAllFundamentals() {
         const count = APP.holdings.filter(h => h.qty > 0).length;
-        if (!confirm(`即将从 Yahoo Finance + FMP 双源 批量拉取 ${count} 只持仓股的扩充基本面（17+ 字段，含交叉验证）。\n\n约需 ${Math.ceil(count * 2)} 秒（双源并行 + 限速）。\n\n继续？`)) return;
+        // 估算耗时：港股 hk_daily 限速 31s/只 是大头
+        const hkCount = APP.holdings.filter(h => h.qty > 0 && h.symbol.endsWith('.HK')).length;
+        const estSec = Math.max(Math.ceil(count * 2), hkCount * 31);
+        if (!confirm(`即将按市场分源批量拉取 ${count} 只持仓的基本面：\n· 美股 → Yahoo + FMP 双源\n· A股/港股 → Tushare Pro\n· 日股 → J-Quants V2\n\n预计约 ${estSec} 秒（港股有限速等待）。\n\n继续？`)) return;
         try {
             const result = await apiCall('/fundamentals/refresh-all', 'POST');
             const failedMsg = result.failed && result.failed.length > 0
                 ? `\n\n失败 ${result.failed.length} 只：\n${result.failed.slice(0, 8).map(f => `· ${f.symbol}`).join('\n')}${result.failed.length > 8 ? `\n…还有 ${result.failed.length - 8} 只` : ''}`
                 : '';
             const srcs = result.sources || {};
-            const srcMsg = `\n\n📊 来源分布：双源 ${srcs['yahoo+fmp']||0} · 仅 Yahoo ${srcs.yahoo||0} · 仅 FMP ${srcs.fmp||0}`;
+            // 按非零项展示来源分布；Phase 3 加 Tushare/J-Quants
+            const srcLabels = {
+                'yahoo+fmp': '双源 Y+F', yahoo: '仅 Yahoo', fmp: '仅 FMP',
+                tushare: 'Tushare 🇨🇳', jquants: 'J-Quants 🇯🇵', 'tushare+fmp': 'Tushare+FMP',
+            };
+            const srcParts = Object.entries(srcLabels)
+                .map(([k, label]) => srcs[k] > 0 ? `${label} ${srcs[k]}` : null)
+                .filter(Boolean);
+            const srcMsg = srcParts.length > 0 ? `\n\n📊 来源分布：${srcParts.join(' · ')}` : '';
             const discMsg = result.total_discrepancies > 0
                 ? `\n⚠ 发现 ${result.total_discrepancies} 处双源分歧（点击股票详情看 ⚠ 标记）`
-                : (result.ok > 0 ? '\n✓ 所有双源字段均吻合' : '');
-            // Phase 2.3 调试：失败时暴露首个错误的具体信息
+                : (result.ok > 0 && (srcs['yahoo+fmp']||0) > 0 ? '\n✓ 美股双源字段均吻合' : '');
             const errMsg = result.first_error
                 ? `\n\n🔍 首个失败具体原因：\n${result.first_error}`
                 : '';
@@ -4289,65 +4472,94 @@
     // ===== 数据管理 Tab =====
     function renderTab5() {
         const container = document.getElementById('tab-6');
+        const lastYear = new Date().getFullYear() - 1;
+        const anchorCount = Object.keys(APP.anchorPrices || {}).length;
+        const activeHoldings = APP.holdings.filter(h => h.qty > 0).length;
 
         const html = `
             <div class="data-management">
-                <div class="data-section">
-                    <div class="data-section-title">User Info</div>
-                    <div class="user-info">
-                        <div><strong>Username:</strong> ${APP.username}</div>
-                        <div><strong>Holdings:</strong> ${APP.holdings.length}</div>
-                        <div><strong>Trades:</strong> ${APP.trades.length}</div>
-                        <div><strong>Alerts:</strong> ${APP.alerts.length}</div>
-                    </div>
-                </div>
 
-                <div class="data-section">
-                    <div class="data-section-title">Change Password</div>
-                    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
-                        <div class="form-group" style="margin-bottom:0;">
-                            <label class="form-label">Current Password</label>
-                            <input type="password" id="oldPwd" class="form-input" style="width:160px;" placeholder="Current password">
+                <!-- ===== 顶部并排：账户概览 + 修改密码 ===== -->
+                <div class="settings-top-grid">
+                    <div class="data-section">
+                        <div class="data-section-title">👤 账户概览 / Account</div>
+                        <div style="font-size:13px;color:#cbd5e1;margin-bottom:12px;font-weight:500;">${APP.username}</div>
+                        <div class="settings-stats">
+                            <div class="settings-stat-box">
+                                <div class="label">持仓</div>
+                                <div class="value">${APP.holdings.length}</div>
+                            </div>
+                            <div class="settings-stat-box">
+                                <div class="label">交易</div>
+                                <div class="value">${APP.trades.length}</div>
+                            </div>
+                            <div class="settings-stat-box">
+                                <div class="label">提醒</div>
+                                <div class="value">${APP.alerts.length}</div>
+                            </div>
+                            <div class="settings-stat-box">
+                                <div class="label">锚定价</div>
+                                <div class="value">${anchorCount}</div>
+                            </div>
                         </div>
-                        <div class="form-group" style="margin-bottom:0;">
-                            <label class="form-label">New Password</label>
-                            <input type="password" id="newPwd" class="form-input" style="width:160px;" placeholder="New password (min 4 chars)">
+                    </div>
+
+                    <div class="data-section">
+                        <div class="data-section-title">🔒 修改密码 / Password</div>
+                        <div style="display:flex;flex-direction:column;gap:8px;">
+                            <input type="password" id="oldPwd" class="form-input" placeholder="Current password" style="width:100%;">
+                            <input type="password" id="newPwd" class="form-input" placeholder="New password (min 4 chars)" style="width:100%;">
+                            <input type="password" id="confirmPwd" class="form-input" placeholder="Confirm new password" style="width:100%;">
+                            <button class="btn-action primary" style="align-self:flex-start;margin-top:4px;" onclick="changePassword()">Update</button>
                         </div>
-                        <div class="form-group" style="margin-bottom:0;">
-                            <label class="form-label">Confirm Password</label>
-                            <input type="password" id="confirmPwd" class="form-input" style="width:160px;" placeholder="Confirm new password">
+                    </div>
+                </div>
+
+                <!-- ===== 数据源 (Phase 3 多源) ===== -->
+                <div class="data-section">
+                    <div class="data-section-title">📊 数据源 / Data Sources <span style="color:#64748b;font-weight:400;font-size:10px;text-transform:none;letter-spacing:0;">· Phase 3 多源</span></div>
+
+                    <div class="settings-row">
+                        <div class="settings-row-info">
+                            <div class="title">⚓ 年初锚定价 / YTD Anchor</div>
+                            <div class="desc">${lastYear} 年末各市场本地收盘价 · 当前已加载 <span style="color:#C1A673;">${anchorCount}</span> 只 · 用于 YTD 起点</div>
                         </div>
-                        <button class="btn-primary" onclick="changePassword()">Update</button>
+                        <button class="btn-action" onclick="backfillAnchorPrices()">回填 ${lastYear}</button>
+                    </div>
+
+                    <div class="settings-row">
+                        <div class="settings-row-info">
+                            <div class="title">🔄 基本面数据 / Fundamentals</div>
+                            <div class="desc">PE · PB · ROE · EPS · 股息率 · 市值 等 · 当前持仓 <span style="color:#C1A673;">${activeHoldings}</span> 只 · 缓存 7 天</div>
+                        </div>
+                        <button class="btn-action primary" onclick="refreshAllFundamentals()">刷新基本面</button>
+                    </div>
+
+                    <div class="src-legend">
+                        <span style="margin-right:4px;">数据源映射：</span>
+                        <span class="src-legend-chip"><span class="badge" style="background:rgba(148,163,184,0.10);color:#94a3b8;">Y</span>Yahoo · 美股</span>
+                        <span class="src-legend-chip"><span class="badge" style="background:rgba(148,163,184,0.10);color:#94a3b8;">F</span>FMP · 美股</span>
+                        <span class="src-legend-chip"><span class="badge" style="background:rgba(248,113,113,0.12);color:#f87171;">T</span>Tushare · A股+港股</span>
+                        <span class="src-legend-chip"><span class="badge" style="background:rgba(96,165,250,0.12);color:#60a5fa;">J</span>J-Quants · 日股</span>
                     </div>
                 </div>
 
+                <!-- ===== 数据管理 ===== -->
                 <div class="data-section">
-                    <div class="data-section-title">YTD Anchor Prices / 年初锚定价</div>
-                    <div style="font-size:12px;color:#94a3b8;margin-bottom:10px;line-height:1.6;">
-                        从 Yahoo 拉取每只持仓股 <strong>${new Date().getFullYear() - 1}年最后交易日的收盘价</strong>（按各市场本地时区，A股为沪市、美股为NYSE、日股为东京），用作精确 YTD 计算的起点。<br>
-                        当前已加载 <span style="color:#C1A673;font-weight:600;">${Object.keys(APP.anchorPrices || {}).length}</span> 只锚定价。
+                    <div class="data-section-title">💾 数据管理 / Data Management</div>
+                    <div class="settings-row">
+                        <div class="settings-row-info">
+                            <div class="title">导入 / 导出</div>
+                            <div class="desc">JSON 格式，包含持仓 · 交易 · 提醒 · 预算 · 锚定价 等全量数据</div>
+                        </div>
+                        <div style="display:flex;gap:8px;">
+                            <button class="btn-action" onclick="exportData()">⬇ Export</button>
+                            <button class="btn-action" onclick="document.getElementById('importFile').click()">⬆ Import</button>
+                            <input type="file" id="importFile" accept=".json" onchange="importData(event)">
+                        </div>
                     </div>
-                    <button class="btn-primary" onclick="backfillAnchorPrices()">⚓ 回填 ${new Date().getFullYear() - 1} 年末锚定价</button>
                 </div>
 
-                <div class="data-section">
-                    <div class="data-section-title">Fundamentals / 基本面数据 (Phase 2)</div>
-                    <div style="font-size:12px;color:#94a3b8;margin-bottom:10px;line-height:1.6;">
-                        从 <strong>FMP API</strong> 拉取所有持仓股的最新基本面数据（PE / PB / ROE / EPS / 股息率 / 市值 / Beta 等），自动缓存 7 天。点击任意股票详情可查看。<br>
-                        当前持仓 <span style="color:#C1A673;font-weight:600;">${APP.holdings.filter(h => h.qty > 0).length}</span> 只股票。<br>
-                        <span style="color:#fbbf24;">⚠️ 注意：</span>FMP Free 计划 250次/天，主要覆盖美股；A股/港股/日股可能显示"数据不可用"。
-                    </div>
-                    <button class="btn-primary" onclick="refreshAllFundamentals()">🔄 刷新所有持仓基本面</button>
-                </div>
-
-                <div class="data-section">
-                    <div class="data-section-title">Data Management</div>
-                    <div class="data-buttons">
-                        <button class="btn-primary" onclick="exportData()">Export Data</button>
-                        <button class="btn-primary" onclick="document.getElementById('importFile').click()">Import Data</button>
-                        <input type="file" id="importFile" accept=".json" onchange="importData(event)">
-                    </div>
-                </div>
             </div>
         `;
 
