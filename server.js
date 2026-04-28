@@ -176,6 +176,45 @@ async function initDB() {
       PRIMARY KEY (symbol, anchor_date)
     );
     CREATE INDEX IF NOT EXISTS idx_anchor_prices_date ON anchor_prices(anchor_date);
+
+    -- 7. Phase 2: 当前基本面数据快照（每只股票 1 行，定期从 FMP 刷新）
+    --    与历史 fundamentals 表分开 — 那个按 period 存历史财报，这个存最新指标
+    CREATE TABLE IF NOT EXISTS fundamentals_latest (
+      symbol TEXT PRIMARY KEY,
+      -- 来自 FMP profile
+      company_name TEXT,
+      sector TEXT,
+      industry TEXT,
+      country TEXT,
+      currency TEXT,
+      market_cap NUMERIC(20,2),
+      beta NUMERIC(10,4),
+      ceo TEXT,
+      website TEXT,
+      exchange TEXT,
+      description TEXT,
+      last_dividend NUMERIC(12,4),
+      range_52w TEXT,
+      day_change NUMERIC(12,4),
+      day_change_pct NUMERIC(10,4),
+      volume BIGINT,
+      avg_volume BIGINT,
+      employees INTEGER,
+      -- 来自 FMP key-metrics-ttm / ratios-ttm
+      pe_ratio NUMERIC(12,4),
+      pb_ratio NUMERIC(12,4),
+      ps_ratio NUMERIC(12,4),
+      roe NUMERIC(10,4),
+      roic NUMERIC(10,4),
+      debt_to_equity NUMERIC(10,4),
+      eps NUMERIC(12,4),
+      dividend_yield NUMERIC(10,4),
+      payout_ratio NUMERIC(10,4),
+      -- 元数据
+      source TEXT DEFAULT 'FMP',
+      fetched_at TIMESTAMPTZ DEFAULT NOW(),
+      raw_json JSONB              -- 保留原始 FMP 返回，未来需要新字段可直接读
+    );
   `);
   console.log("✅ 数据库表已就绪（含 Phase 1 新表：snapshot/fundamentals/estimates/corp_actions/ai_summary）");
 }
@@ -890,6 +929,224 @@ setInterval(fetchFXRates, 10 * 60 * 1000);
 
 app.get("/api/fx-rates", (req, res) => {
   res.json(fxRates);
+});
+
+// ============================================================
+// Phase 2: FMP (Financial Modeling Prep) 基本面集成
+// ============================================================
+
+const FMP_BASE = 'https://financialmodelingprep.com/stable';
+
+// 通用 FMP 请求函数
+async function fetchFMP(endpoint, params = {}) {
+  const apiKey = process.env.FMP_API_KEY;
+  if (!apiKey) throw new Error('FMP_API_KEY not configured');
+  const qs = new URLSearchParams({ ...params, apikey: apiKey });
+  const url = `${FMP_BASE}/${endpoint}?${qs}`;
+  const resp = await fetch(url, { headers: { 'User-Agent': 'ArcPatrimony/1.0' } });
+  if (!resp.ok) {
+    const txt = await resp.text();
+    throw new Error(`FMP ${endpoint} HTTP ${resp.status}: ${txt.slice(0, 150)}`);
+  }
+  return resp.json();
+}
+
+// 拉取一只股票的全部基本面数据（合并多个 endpoint）
+async function fetchFMPFundamentals(symbol) {
+  const result = {
+    symbol,
+    source: 'FMP',
+    raw_json: {}
+  };
+
+  // 1) profile — 公司基础信息 + 估值锚（marketCap, beta）
+  try {
+    const profile = await fetchFMP('profile', { symbol });
+    if (Array.isArray(profile) && profile.length > 0) {
+      const p = profile[0];
+      result.raw_json.profile = p;
+      Object.assign(result, {
+        company_name: p.companyName || null,
+        sector: p.sector || null,
+        industry: p.industry || null,
+        country: p.country || null,
+        currency: p.currency || null,
+        market_cap: p.marketCap || null,
+        beta: p.beta || null,
+        ceo: p.ceo || null,
+        website: p.website || null,
+        exchange: p.exchange || null,
+        description: p.description ? p.description.slice(0, 2000) : null,
+        last_dividend: p.lastDividend || null,
+        range_52w: p.range || null,
+        day_change: p.change || null,
+        day_change_pct: p.changePercentage || null,
+        volume: p.volume || null,
+        avg_volume: p.averageVolume || null,
+        employees: parseInt(p.fullTimeEmployees) || null,
+      });
+    }
+  } catch (e) {
+    console.warn(`FMP profile failed for ${symbol}:`, e.message);
+  }
+
+  // 2) key-metrics-ttm — PE / PB / ROE / ROIC（Free 档可能受限）
+  try {
+    const km = await fetchFMP('key-metrics-ttm', { symbol });
+    if (Array.isArray(km) && km.length > 0) {
+      const m = km[0];
+      result.raw_json.key_metrics = m;
+      // FMP 字段可能带 TTM 后缀也可能不带，做双兼容
+      result.pe_ratio = m.peRatioTTM ?? m.peRatio ?? null;
+      result.pb_ratio = m.pbRatioTTM ?? m.pbRatio ?? m.priceToBookRatioTTM ?? null;
+      result.ps_ratio = m.priceToSalesRatioTTM ?? m.priceToSalesRatio ?? null;
+      result.roe = m.roeTTM ?? m.roe ?? m.returnOnEquityTTM ?? null;
+      result.roic = m.roicTTM ?? m.roic ?? m.returnOnInvestedCapitalTTM ?? null;
+      result.debt_to_equity = m.debtToEquityTTM ?? m.debtToEquity ?? null;
+    }
+  } catch (e) {
+    console.warn(`FMP key-metrics-ttm failed for ${symbol}:`, e.message);
+  }
+
+  // 3) ratios-ttm — EPS / 股息率 / 派息率
+  try {
+    const r = await fetchFMP('ratios-ttm', { symbol });
+    if (Array.isArray(r) && r.length > 0) {
+      const x = r[0];
+      result.raw_json.ratios = x;
+      result.eps = x.netIncomePerShareTTM ?? x.epsTTM ?? x.eps ?? null;
+      result.dividend_yield = x.dividendYieldTTM ?? x.dividendYielPercentageTTM ?? x.dividendYield ?? null;
+      result.payout_ratio = x.payoutRatioTTM ?? x.payoutRatio ?? null;
+    }
+  } catch (e) {
+    console.warn(`FMP ratios-ttm failed for ${symbol}:`, e.message);
+  }
+
+  return result;
+}
+
+// UPSERT 到 fundamentals_latest
+async function saveFundamentalsToDB(d) {
+  await pool.query(`
+    INSERT INTO fundamentals_latest (
+      symbol, company_name, sector, industry, country, currency, market_cap, beta,
+      ceo, website, exchange, description, last_dividend, range_52w,
+      day_change, day_change_pct, volume, avg_volume, employees,
+      pe_ratio, pb_ratio, ps_ratio, roe, roic, debt_to_equity,
+      eps, dividend_yield, payout_ratio, source, fetched_at, raw_json
+    ) VALUES (
+      $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,
+      $20,$21,$22,$23,$24,$25,$26,$27,$28,$29,NOW(),$30
+    )
+    ON CONFLICT (symbol) DO UPDATE SET
+      company_name = EXCLUDED.company_name,
+      sector = EXCLUDED.sector,
+      industry = EXCLUDED.industry,
+      country = EXCLUDED.country,
+      currency = EXCLUDED.currency,
+      market_cap = EXCLUDED.market_cap,
+      beta = EXCLUDED.beta,
+      ceo = EXCLUDED.ceo,
+      website = EXCLUDED.website,
+      exchange = EXCLUDED.exchange,
+      description = EXCLUDED.description,
+      last_dividend = EXCLUDED.last_dividend,
+      range_52w = EXCLUDED.range_52w,
+      day_change = EXCLUDED.day_change,
+      day_change_pct = EXCLUDED.day_change_pct,
+      volume = EXCLUDED.volume,
+      avg_volume = EXCLUDED.avg_volume,
+      employees = EXCLUDED.employees,
+      pe_ratio = EXCLUDED.pe_ratio,
+      pb_ratio = EXCLUDED.pb_ratio,
+      ps_ratio = EXCLUDED.ps_ratio,
+      roe = EXCLUDED.roe,
+      roic = EXCLUDED.roic,
+      debt_to_equity = EXCLUDED.debt_to_equity,
+      eps = EXCLUDED.eps,
+      dividend_yield = EXCLUDED.dividend_yield,
+      payout_ratio = EXCLUDED.payout_ratio,
+      source = EXCLUDED.source,
+      fetched_at = NOW(),
+      raw_json = EXCLUDED.raw_json
+  `, [
+    d.symbol, d.company_name, d.sector, d.industry, d.country, d.currency,
+    d.market_cap, d.beta, d.ceo, d.website, d.exchange, d.description,
+    d.last_dividend, d.range_52w, d.day_change, d.day_change_pct, d.volume,
+    d.avg_volume, d.employees, d.pe_ratio, d.pb_ratio, d.ps_ratio, d.roe,
+    d.roic, d.debt_to_equity, d.eps, d.dividend_yield, d.payout_ratio,
+    d.source, JSON.stringify(d.raw_json || {})
+  ]);
+}
+
+// GET /api/fundamentals/:symbol — 读缓存，过期则刷新
+app.get("/api/fundamentals/:symbol", auth, async (req, res) => {
+  const symbol = req.params.symbol.trim().toUpperCase();
+  if (!symbol) return res.status(400).json({ error: 'symbol required' });
+  const maxAgeDays = parseFloat(req.query.maxAgeDays || '7');
+  try {
+    const cached = await pool.query(
+      `SELECT *, EXTRACT(EPOCH FROM (NOW() - fetched_at))/86400 AS age_days
+       FROM fundamentals_latest WHERE symbol=$1`,
+      [symbol]
+    );
+    if (cached.rows.length > 0 && cached.rows[0].age_days < maxAgeDays) {
+      return res.json({ ...cached.rows[0], _from: 'cache' });
+    }
+    // 刷新
+    const fresh = await fetchFMPFundamentals(symbol);
+    await saveFundamentalsToDB(fresh);
+    res.json({ ...fresh, _from: 'fmp' });
+  } catch (e) {
+    console.error(`Fundamentals error for ${symbol}:`, e.message);
+    // Fallback：旧缓存（即使过期）也返回
+    try {
+      const stale = await pool.query("SELECT * FROM fundamentals_latest WHERE symbol=$1", [symbol]);
+      if (stale.rows.length > 0) {
+        return res.json({ ...stale.rows[0], _from: 'cache_stale', error: e.message });
+      }
+    } catch (_) {}
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/fundamentals/refresh/:symbol — 强制刷新一只
+app.post("/api/fundamentals/refresh/:symbol", auth, async (req, res) => {
+  const symbol = req.params.symbol.trim().toUpperCase();
+  try {
+    const data = await fetchFMPFundamentals(symbol);
+    await saveFundamentalsToDB(data);
+    res.json({ ok: true, symbol, _from: 'fmp', fetched_at: new Date().toISOString() });
+  } catch (e) {
+    console.error(`Refresh failed for ${symbol}:`, e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/fundamentals/refresh-all — 批量刷新所有持仓
+app.post("/api/fundamentals/refresh-all", auth, async (req, res) => {
+  try {
+    const r = await pool.query(
+      "SELECT DISTINCT symbol FROM holdings WHERE user_id=$1 AND qty > 0 ORDER BY symbol",
+      [req.userId]
+    );
+    const result = { ok: 0, failed: [], total: r.rows.length };
+    for (const row of r.rows) {
+      try {
+        const data = await fetchFMPFundamentals(row.symbol);
+        await saveFundamentalsToDB(data);
+        result.ok++;
+      } catch (e) {
+        result.failed.push({ symbol: row.symbol, error: e.message });
+      }
+      // FMP Free 250/day, 加 300ms 间隔避免突发限流
+      await new Promise(rs => setTimeout(rs, 300));
+    }
+    res.json(result);
+  } catch (e) {
+    console.error("Refresh-all error:", e.message);
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ============================================================
