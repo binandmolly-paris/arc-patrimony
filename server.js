@@ -216,7 +216,25 @@ async function initDB() {
       raw_json JSONB              -- 保留原始 FMP 返回，未来需要新字段可直接读
     );
   `);
-  console.log("✅ 数据库表已就绪（含 Phase 1 新表：snapshot/fundamentals/estimates/corp_actions/ai_summary）");
+
+  // Phase 2.1: 扩充 fundamentals_latest 字段（向后兼容，老库自动 ADD COLUMN IF NOT EXISTS）
+  await pool.query(`
+    ALTER TABLE fundamentals_latest
+      ADD COLUMN IF NOT EXISTS price NUMERIC(12,4),
+      ADD COLUMN IF NOT EXISTS forward_pe NUMERIC(12,4),
+      ADD COLUMN IF NOT EXISTS peg_ratio NUMERIC(12,4),
+      ADD COLUMN IF NOT EXISTS current_ratio NUMERIC(10,4),
+      ADD COLUMN IF NOT EXISTS gross_margin NUMERIC(10,4),
+      ADD COLUMN IF NOT EXISTS operating_margin NUMERIC(10,4),
+      ADD COLUMN IF NOT EXISTS net_margin NUMERIC(10,4),
+      ADD COLUMN IF NOT EXISTS year_high NUMERIC(12,4),
+      ADD COLUMN IF NOT EXISTS year_low NUMERIC(12,4),
+      ADD COLUMN IF NOT EXISTS shares_out NUMERIC(20,2),
+      ADD COLUMN IF NOT EXISTS price_avg_50 NUMERIC(12,4),
+      ADD COLUMN IF NOT EXISTS price_avg_200 NUMERIC(12,4)
+  `);
+
+  console.log("✅ 数据库表已就绪（含 Phase 2.1 扩充字段：12 列估值/利润率/52周）");
 }
 
 // ===== 自动初始化 LiuBin 用户 =====
@@ -951,7 +969,16 @@ async function fetchFMP(endpoint, params = {}) {
   return resp.json();
 }
 
+// 小工具：把多个候选字段的第一个非空值取出来
+const pick = (obj, ...keys) => {
+  for (const k of keys) {
+    if (obj && obj[k] !== undefined && obj[k] !== null && obj[k] !== '') return obj[k];
+  }
+  return null;
+};
+
 // 拉取一只股票的全部基本面数据（合并多个 endpoint）
+// Phase 2.1: 新增 quote / analyst-estimates，扩充 12 个字段名 fallback，缺失时计算式补救
 async function fetchFMPFundamentals(symbol) {
   const result = {
     symbol,
@@ -966,66 +993,140 @@ async function fetchFMPFundamentals(symbol) {
       const p = profile[0];
       result.raw_json.profile = p;
       Object.assign(result, {
-        company_name: p.companyName || null,
+        company_name: pick(p, 'companyName', 'name'),
         sector: p.sector || null,
         industry: p.industry || null,
         country: p.country || null,
         currency: p.currency || null,
-        market_cap: p.marketCap || null,
+        market_cap: pick(p, 'marketCap', 'mktCap'),
         beta: p.beta || null,
         ceo: p.ceo || null,
         website: p.website || null,
-        exchange: p.exchange || null,
+        exchange: pick(p, 'exchange', 'exchangeShortName'),
         description: p.description ? p.description.slice(0, 2000) : null,
-        last_dividend: p.lastDividend || null,
+        last_dividend: pick(p, 'lastDividend', 'lastDiv'),
         range_52w: p.range || null,
         day_change: p.change || null,
-        day_change_pct: p.changePercentage || null,
+        day_change_pct: pick(p, 'changePercentage', 'changesPercentage'),
         volume: p.volume || null,
-        avg_volume: p.averageVolume || null,
+        avg_volume: pick(p, 'averageVolume', 'volAvg'),
         employees: parseInt(p.fullTimeEmployees) || null,
+        price: pick(p, 'price'),  // 备用价格
       });
     }
   } catch (e) {
     console.warn(`FMP profile failed for ${symbol}:`, e.message);
   }
 
-  // 2) key-metrics-ttm — PE / PB / ROE / ROIC（Free 档可能受限）
+  // 2) quote — 最可靠的 PE / EPS / Market Cap / 52W / 均价（Free 档普遍覆盖）
+  try {
+    const q = await fetchFMP('quote', { symbol });
+    if (Array.isArray(q) && q.length > 0) {
+      const x = q[0];
+      result.raw_json.quote = x;
+      // quote 给出的字段优先级最高（直接来自 FMP 报价，最准确）
+      result.pe_ratio       = pick(x, 'pe', 'peRatio') ?? result.pe_ratio;
+      result.eps            = pick(x, 'eps', 'epsTTM')  ?? result.eps;
+      result.market_cap     = pick(x, 'marketCap')      ?? result.market_cap;
+      result.year_high      = pick(x, 'yearHigh');
+      result.year_low       = pick(x, 'yearLow');
+      result.shares_out     = pick(x, 'sharesOutstanding');
+      result.price_avg_50   = pick(x, 'priceAvg50');
+      result.price_avg_200  = pick(x, 'priceAvg200');
+      result.price          = pick(x, 'price') ?? result.price;
+      result.day_change     = pick(x, 'change')              ?? result.day_change;
+      result.day_change_pct = pick(x, 'changesPercentage', 'changePercentage') ?? result.day_change_pct;
+      result.volume         = pick(x, 'volume')              ?? result.volume;
+      result.avg_volume     = pick(x, 'avgVolume', 'averageVolume') ?? result.avg_volume;
+    }
+  } catch (e) {
+    console.warn(`FMP quote failed for ${symbol}:`, e.message);
+  }
+
+  // 3) key-metrics-ttm — PE / PB / PS / ROE / ROIC / Debt / Current Ratio / Margins / PEG
   try {
     const km = await fetchFMP('key-metrics-ttm', { symbol });
     if (Array.isArray(km) && km.length > 0) {
       const m = km[0];
       result.raw_json.key_metrics = m;
-      // FMP 字段可能带 TTM 后缀也可能不带，做双兼容
-      result.pe_ratio = m.peRatioTTM ?? m.peRatio ?? null;
-      result.pb_ratio = m.pbRatioTTM ?? m.pbRatio ?? m.priceToBookRatioTTM ?? null;
-      result.ps_ratio = m.priceToSalesRatioTTM ?? m.priceToSalesRatio ?? null;
-      result.roe = m.roeTTM ?? m.roe ?? m.returnOnEquityTTM ?? null;
-      result.roic = m.roicTTM ?? m.roic ?? m.returnOnInvestedCapitalTTM ?? null;
-      result.debt_to_equity = m.debtToEquityTTM ?? m.debtToEquity ?? null;
+      // 字段名 fallback 大全（FMP 不同版本/计划字段名差异较大）
+      result.pe_ratio        = result.pe_ratio        ?? pick(m, 'peRatioTTM', 'peRatio', 'priceEarningsRatioTTM', 'priceEarningsRatio', 'priceToEarningsRatioTTM');
+      result.pb_ratio        = result.pb_ratio        ?? pick(m, 'pbRatioTTM', 'pbRatio', 'priceToBookRatioTTM', 'priceToBookRatio', 'pbtTTM');
+      result.ps_ratio        = result.ps_ratio        ?? pick(m, 'priceToSalesRatioTTM', 'priceToSalesRatio', 'psRatioTTM', 'psRatio');
+      result.roe             = result.roe             ?? pick(m, 'roeTTM', 'roe', 'returnOnEquityTTM', 'returnOnEquity');
+      result.roic            = result.roic            ?? pick(m, 'roicTTM', 'roic', 'returnOnInvestedCapitalTTM', 'returnOnInvestedCapital');
+      result.debt_to_equity  = result.debt_to_equity  ?? pick(m, 'debtToEquityTTM', 'debtToEquity', 'debtEquityRatioTTM', 'debtEquityRatio');
+      result.current_ratio   = pick(m, 'currentRatioTTM', 'currentRatio');
+      result.peg_ratio       = pick(m, 'pegRatioTTM', 'pegRatio', 'priceEarningsToGrowthRatioTTM');
+      result.forward_pe      = pick(m, 'forwardPERatioTTM', 'forwardPERatio', 'forwardPE');
     }
   } catch (e) {
     console.warn(`FMP key-metrics-ttm failed for ${symbol}:`, e.message);
   }
 
-  // 3) ratios-ttm — EPS / 股息率 / 派息率
+  // 4) ratios-ttm — EPS / 股息率 / 派息率 / 利润率（Gross/Operating/Net Margin）
   try {
     const r = await fetchFMP('ratios-ttm', { symbol });
     if (Array.isArray(r) && r.length > 0) {
       const x = r[0];
       result.raw_json.ratios = x;
-      result.eps = x.netIncomePerShareTTM ?? x.epsTTM ?? x.eps ?? null;
-      result.dividend_yield = x.dividendYieldTTM ?? x.dividendYielPercentageTTM ?? x.dividendYield ?? null;
-      result.payout_ratio = x.payoutRatioTTM ?? x.payoutRatio ?? null;
+      result.eps              = result.eps              ?? pick(x, 'netIncomePerShareTTM', 'epsTTM', 'eps');
+      result.dividend_yield   = pick(x, 'dividendYieldTTM', 'dividendYielPercentageTTM', 'dividendYieldPercentageTTM', 'dividendYield');
+      result.payout_ratio     = pick(x, 'payoutRatioTTM', 'payoutRatio');
+      result.gross_margin     = pick(x, 'grossProfitMarginTTM', 'grossProfitMargin');
+      result.operating_margin = pick(x, 'operatingProfitMarginTTM', 'operatingProfitMargin', 'operatingMarginTTM');
+      result.net_margin       = pick(x, 'netProfitMarginTTM', 'netProfitMargin', 'netIncomeMarginTTM');
+      // 还可能在 ratios 里找到 PE / PB（双保险）
+      result.pe_ratio         = result.pe_ratio       ?? pick(x, 'priceEarningsRatioTTM', 'priceEarningsRatio', 'peRatioTTM', 'peRatio');
+      result.pb_ratio         = result.pb_ratio       ?? pick(x, 'priceToBookRatioTTM', 'priceToBookRatio', 'pbRatioTTM');
+      result.ps_ratio         = result.ps_ratio       ?? pick(x, 'priceToSalesRatioTTM', 'priceToSalesRatio');
+      result.roe              = result.roe            ?? pick(x, 'returnOnEquityTTM', 'returnOnEquity');
+      result.debt_to_equity   = result.debt_to_equity ?? pick(x, 'debtEquityRatioTTM', 'debtEquityRatio');
+      result.current_ratio    = result.current_ratio  ?? pick(x, 'currentRatioTTM', 'currentRatio');
     }
   } catch (e) {
     console.warn(`FMP ratios-ttm failed for ${symbol}:`, e.message);
   }
 
+  // 5) analyst-estimates — Forward EPS（用于算 Forward PE，可选/Free档可能限速）
+  if (result.forward_pe == null && result.price != null) {
+    try {
+      const est = await fetchFMP('analyst-estimates', { symbol, period: 'annual', limit: 2 });
+      if (Array.isArray(est) && est.length > 0) {
+        result.raw_json.estimates = est[0];
+        // 取下一年的 EPS 中值
+        const nextEps = pick(est[0], 'estimatedEpsAvg', 'epsAvg', 'estimatedEps');
+        if (nextEps && nextEps > 0) {
+          result.forward_pe = result.price / nextEps;
+        }
+      }
+    } catch (e) {
+      // analyst-estimates 是可选的，失败不影响其他数据
+      console.warn(`FMP analyst-estimates skipped for ${symbol}:`, e.message);
+    }
+  }
+
+  // === 计算式补救：FMP 没给的，能算就自己算 ===
+  // PE = 当前价 / EPS
+  if (result.pe_ratio == null && result.price != null && result.eps && result.eps > 0) {
+    result.pe_ratio = result.price / result.eps;
+  }
+  // 把数值字段统一转 Number（避免 "12.34" 字符串混入数据库出错）
+  ['market_cap','beta','last_dividend','day_change','day_change_pct','volume','avg_volume',
+   'pe_ratio','pb_ratio','ps_ratio','roe','roic','debt_to_equity','eps','dividend_yield','payout_ratio',
+   'price','forward_pe','peg_ratio','current_ratio','gross_margin','operating_margin','net_margin',
+   'year_high','year_low','shares_out','price_avg_50','price_avg_200'
+  ].forEach(k => {
+    if (result[k] != null) {
+      const n = parseFloat(result[k]);
+      result[k] = isNaN(n) ? null : n;
+    }
+  });
+
   return result;
 }
 
-// UPSERT 到 fundamentals_latest
+// UPSERT 到 fundamentals_latest（Phase 2.1: 含 12 个扩充字段）
 async function saveFundamentalsToDB(d) {
   await pool.query(`
     INSERT INTO fundamentals_latest (
@@ -1033,10 +1134,16 @@ async function saveFundamentalsToDB(d) {
       ceo, website, exchange, description, last_dividend, range_52w,
       day_change, day_change_pct, volume, avg_volume, employees,
       pe_ratio, pb_ratio, ps_ratio, roe, roic, debt_to_equity,
-      eps, dividend_yield, payout_ratio, source, fetched_at, raw_json
+      eps, dividend_yield, payout_ratio,
+      price, forward_pe, peg_ratio, current_ratio,
+      gross_margin, operating_margin, net_margin,
+      year_high, year_low, shares_out, price_avg_50, price_avg_200,
+      source, fetched_at, raw_json
     ) VALUES (
       $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,
-      $20,$21,$22,$23,$24,$25,$26,$27,$28,$29,NOW(),$30
+      $20,$21,$22,$23,$24,$25,$26,$27,$28,
+      $29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,
+      $41,NOW(),$42
     )
     ON CONFLICT (symbol) DO UPDATE SET
       company_name = EXCLUDED.company_name,
@@ -1066,6 +1173,18 @@ async function saveFundamentalsToDB(d) {
       eps = EXCLUDED.eps,
       dividend_yield = EXCLUDED.dividend_yield,
       payout_ratio = EXCLUDED.payout_ratio,
+      price = EXCLUDED.price,
+      forward_pe = EXCLUDED.forward_pe,
+      peg_ratio = EXCLUDED.peg_ratio,
+      current_ratio = EXCLUDED.current_ratio,
+      gross_margin = EXCLUDED.gross_margin,
+      operating_margin = EXCLUDED.operating_margin,
+      net_margin = EXCLUDED.net_margin,
+      year_high = EXCLUDED.year_high,
+      year_low = EXCLUDED.year_low,
+      shares_out = EXCLUDED.shares_out,
+      price_avg_50 = EXCLUDED.price_avg_50,
+      price_avg_200 = EXCLUDED.price_avg_200,
       source = EXCLUDED.source,
       fetched_at = NOW(),
       raw_json = EXCLUDED.raw_json
@@ -1075,6 +1194,9 @@ async function saveFundamentalsToDB(d) {
     d.last_dividend, d.range_52w, d.day_change, d.day_change_pct, d.volume,
     d.avg_volume, d.employees, d.pe_ratio, d.pb_ratio, d.ps_ratio, d.roe,
     d.roic, d.debt_to_equity, d.eps, d.dividend_yield, d.payout_ratio,
+    d.price, d.forward_pe, d.peg_ratio, d.current_ratio,
+    d.gross_margin, d.operating_margin, d.net_margin,
+    d.year_high, d.year_low, d.shares_out, d.price_avg_50, d.price_avg_200,
     d.source, JSON.stringify(d.raw_json || {})
   ]);
 }
