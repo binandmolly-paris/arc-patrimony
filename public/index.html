@@ -3949,73 +3949,85 @@
         return '$' + v.toLocaleString();
     }
 
+    // Phase 2.3: 来源徽章渲染（Y = Yahoo / F = FMP / ⚠ = 双源分歧）
+    function renderSourceBadge(field, fieldSources, discrepancies) {
+        const src = fieldSources && fieldSources[field];
+        if (!src) return '';
+        const disc = discrepancies && discrepancies[field];
+        const letter = src === 'yahoo' ? 'Y' : (src === 'fmp' ? 'F' : '');
+        if (!letter) return '';
+        const baseStyle = 'display:inline-block;font-size:8px;font-weight:700;padding:1px 4px;border-radius:3px;margin-left:5px;vertical-align:top;letter-spacing:0.3px;cursor:help;';
+        if (disc) {
+            const tooltip = `两源分歧 ${disc.diff_pct}%\nYahoo: ${disc.yahoo}\nFMP: ${disc.fmp}\n\n当前显示主源（${src === 'yahoo' ? 'Yahoo' : 'FMP'}）`;
+            return `<span style="${baseStyle}background:rgba(251,191,36,0.18);color:#fbbf24;border:1px solid rgba(251,191,36,0.4);" title="${tooltip}">${letter}⚠</span>`;
+        }
+        return `<span style="${baseStyle}background:rgba(148,163,184,0.10);color:#94a3b8;" title="数据源：${src === 'yahoo' ? 'Yahoo Finance' : 'FMP'}">${letter}</span>`;
+    }
+
     async function loadFundamentalsForModal(symbol) {
         const container = document.getElementById('fundamentalsSection');
         if (!container) return;
         try {
             const f = await apiCall(`/fundamentals/${encodeURIComponent(symbol)}`);
+            const fs = f.field_sources || {};
+            const dc = f.discrepancies || {};
             // 通用工具
             const num = (v, d=2) => {
                 if (v == null) return null;
                 const n = parseFloat(v);
                 return isNaN(n) ? null : fmtNum(n, d);
             };
-            const fmtCurrency = (v, sym='$', d=2) => {
-                if (v == null) return null;
-                const n = parseFloat(v);
-                return isNaN(n) ? null : sym + fmtNum(n, d);
-            };
 
-            // 收集每组里的字段（null 字段会被自动跳过）
+            // 收集每组里的字段（null 字段会被自动跳过；带 srcKey 用于查询 field_sources）
             const groups = [
                 {
                     title: '估值 / VALUATION',
                     fields: [
-                        { label: 'P/E TTM',     value: num(f.pe_ratio),    color: '#cbd5e1' },
-                        { label: 'Forward P/E', value: num(f.forward_pe),  color: '#cbd5e1' },
-                        { label: 'P/B',         value: num(f.pb_ratio),    color: '#cbd5e1' },
-                        { label: 'P/S',         value: num(f.ps_ratio),    color: '#cbd5e1' },
-                        { label: 'PEG',         value: num(f.peg_ratio),   color: '#cbd5e1' },
+                        { label: 'P/E TTM',     srcKey: 'pe_ratio',   value: num(f.pe_ratio),    color: '#cbd5e1' },
+                        { label: 'Forward P/E', srcKey: 'forward_pe', value: num(f.forward_pe),  color: '#cbd5e1' },
+                        { label: 'P/B',         srcKey: 'pb_ratio',   value: num(f.pb_ratio),    color: '#cbd5e1' },
+                        { label: 'P/S',         srcKey: 'ps_ratio',   value: num(f.ps_ratio),    color: '#cbd5e1' },
+                        { label: 'PEG',         srcKey: 'peg_ratio',  value: num(f.peg_ratio),   color: '#cbd5e1' },
                     ]
                 },
                 {
                     title: '盈利能力 / PROFITABILITY',
                     fields: [
-                        { label: 'ROE',              value: pctSmart(f.roe),              color: '#4ade80' },
-                        { label: 'ROIC',             value: pctSmart(f.roic),             color: '#4ade80' },
-                        { label: '净利率 Net Margin',  value: pctSmart(f.net_margin),       color: '#4ade80' },
-                        { label: '营业利率 Op. Margin',value: pctSmart(f.operating_margin), color: '#4ade80' },
-                        { label: '毛利率 Gross Margin',value: pctSmart(f.gross_margin),     color: '#4ade80' },
+                        { label: 'ROE',                srcKey: 'roe',              value: pctSmart(f.roe),              color: '#4ade80' },
+                        { label: 'ROIC',               srcKey: 'roic',             value: pctSmart(f.roic),             color: '#4ade80' },
+                        { label: '净利率 Net Margin',    srcKey: 'net_margin',       value: pctSmart(f.net_margin),       color: '#4ade80' },
+                        { label: '营业利率 Op. Margin',  srcKey: 'operating_margin', value: pctSmart(f.operating_margin), color: '#4ade80' },
+                        { label: '毛利率 Gross Margin',  srcKey: 'gross_margin',     value: pctSmart(f.gross_margin),     color: '#4ade80' },
                     ]
                 },
                 {
                     title: '财务健康 / FINANCIAL HEALTH',
                     fields: [
-                        { label: '负债/权益 D/E',      value: num(f.debt_to_equity),
+                        { label: '负债/权益 D/E',         srcKey: 'debt_to_equity', value: num(f.debt_to_equity),
                           color: f.debt_to_equity > 2 ? '#f87171' : (f.debt_to_equity < 0.5 ? '#4ade80' : '#cbd5e1') },
-                        { label: '流动比率 Current Ratio', value: num(f.current_ratio),
+                        { label: '流动比率 Current Ratio', srcKey: 'current_ratio',  value: num(f.current_ratio),
                           color: f.current_ratio > 1.5 ? '#4ade80' : (f.current_ratio < 1 ? '#f87171' : '#cbd5e1') },
-                        { label: '派息率 Payout',         value: pctSmart(f.payout_ratio),
+                        { label: '派息率 Payout',         srcKey: 'payout_ratio',   value: pctSmart(f.payout_ratio),
                           color: f.payout_ratio > 0.8 ? '#fbbf24' : '#cbd5e1' },
                     ]
                 },
                 {
                     title: '股息 & 股价 / DIVIDEND & PRICE',
                     fields: [
-                        { label: '股息率 Dividend Yield', value: pctSmart(f.dividend_yield), color: '#fbbf24' },
-                        { label: 'EPS TTM',             value: num(f.eps),                 color: '#cbd5e1' },
-                        { label: '市值 Market Cap',       value: fmtMarketCap(f.market_cap), color: '#C1A673' },
-                        { label: 'Beta',                value: num(f.beta),                color: '#cbd5e1' },
-                        { label: '52W 高 / 低',           value: (f.year_high && f.year_low)
+                        { label: '股息率 Dividend Yield', srcKey: 'dividend_yield', value: pctSmart(f.dividend_yield), color: '#fbbf24' },
+                        { label: 'EPS TTM',             srcKey: 'eps',            value: num(f.eps),                 color: '#cbd5e1' },
+                        { label: '市值 Market Cap',       srcKey: 'market_cap',     value: fmtMarketCap(f.market_cap), color: '#C1A673' },
+                        { label: 'Beta',                srcKey: 'beta',           value: num(f.beta),                color: '#cbd5e1' },
+                        { label: '52W 高 / 低',           srcKey: 'year_high',      value: (f.year_high && f.year_low)
                                                                 ? `${num(f.year_low)} ~ ${num(f.year_high)}`
                                                                 : null,
                                                           color: '#cbd5e1' },
-                        { label: '日变动 Day Chg',        value: f.day_change_pct != null
+                        { label: '日变动 Day Chg',        srcKey: 'day_change_pct', value: f.day_change_pct != null
                                                                 ? (parseFloat(f.day_change_pct) >= 0 ? '+' : '') + parseFloat(f.day_change_pct).toFixed(2) + '%'
                                                                 : null,
                                                           color: parseFloat(f.day_change_pct) >= 0 ? '#4ade80' : '#f87171' },
-                        { label: '50日均价 SMA50',        value: num(f.price_avg_50),        color: '#94a3b8' },
-                        { label: '200日均价 SMA200',      value: num(f.price_avg_200),       color: '#94a3b8' },
+                        { label: '50日均价 SMA50',        srcKey: 'price_avg_50',   value: num(f.price_avg_50),        color: '#94a3b8' },
+                        { label: '200日均价 SMA200',      srcKey: 'price_avg_200',  value: num(f.price_avg_200),       color: '#94a3b8' },
                     ]
                 },
             ];
@@ -4026,16 +4038,24 @@
                 .filter(g => g.fields.length > 0);
 
             if (visibleGroups.length === 0) {
-                container.innerHTML = `<div style="padding:14px 16px;background:#0f172a;border:1px solid #1e293b;border-radius:10px;color:#64748b;font-size:12px;text-align:center;">基本面 / FUNDAMENTALS · 数据不可用<br><span style="font-size:11px;">该标的在 FMP 数据库中暂无基本面数据</span></div>`;
+                container.innerHTML = `<div style="padding:14px 16px;background:#0f172a;border:1px solid #1e293b;border-radius:10px;color:#64748b;font-size:12px;text-align:center;">基本面 / FUNDAMENTALS · 数据不可用<br><span style="font-size:11px;">Yahoo + FMP 双源都未返回数据</span></div>`;
                 return;
             }
+
+            // 顶部头部：来源 + 分歧统计
+            const discCount = Object.keys(dc).length;
+            const sourceMap = { 'yahoo+fmp': '双源 Y+F', yahoo: '仅 Yahoo', fmp: '仅 FMP', hybrid: '双源', cache: '缓存', cache_stale: '缓存(旧)' };
+            const sourceTag = sourceMap[f.source] || sourceMap[f._from] || (f.source || 'FMP');
+            const discTag = discCount > 0
+                ? `<span style="font-size:10px;color:#fbbf24;margin-left:8px;" title="存在 ${discCount} 个字段双源分歧，标记 ⚠">⚠ ${discCount} 项分歧</span>`
+                : (f.source === 'yahoo+fmp' ? '<span style="font-size:10px;color:#4ade80;margin-left:8px;" title="所有字段双源吻合">✓ 双源验证</span>' : '');
 
             const sectorLine = (f.sector || f.industry)
                 ? `<div style="font-size:11px;color:#94a3b8;margin-top:12px;padding-top:10px;border-top:1px dashed rgba(148,163,184,0.18);">${[f.sector, f.industry].filter(Boolean).join(' · ')}${f.country ? ' · '+f.country : ''}${f.exchange ? ' · '+f.exchange : ''}</div>`
                 : '';
-            const sourceLabel = f._from === 'cache' ? '缓存' : (f._from === 'cache_stale' ? '缓存(旧)' : 'FMP 实时');
+            const cacheLabel = f._from === 'cache' ? '缓存' : (f._from === 'cache_stale' ? '缓存(旧)' : '实时');
             const updatedLine = f.fetched_at
-                ? `<div style="font-size:10px;color:#64748b;margin-top:4px;">${sourceLabel} · 更新于 ${new Date(f.fetched_at).toLocaleString('zh-CN')}</div>`
+                ? `<div style="font-size:10px;color:#64748b;margin-top:4px;">${cacheLabel} · 更新于 ${new Date(f.fetched_at).toLocaleString('zh-CN')}</div>`
                 : '';
 
             const renderGroup = (g, isLast) => `
@@ -4044,7 +4064,7 @@
                     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(105px,1fr));gap:10px;">
                         ${g.fields.map(x => `
                             <div>
-                                <div style="font-size:10px;color:#94a3b8;letter-spacing:0.5px;margin-bottom:4px;line-height:1.2;">${x.label}</div>
+                                <div style="font-size:10px;color:#94a3b8;letter-spacing:0.5px;margin-bottom:4px;line-height:1.2;">${x.label}${renderSourceBadge(x.srcKey, fs, dc)}</div>
                                 <div style="font-size:15px;font-weight:700;color:${x.color || '#cbd5e1'};font-family:Montserrat,sans-serif;">${x.value}</div>
                             </div>
                         `).join('')}
@@ -4055,8 +4075,8 @@
             container.innerHTML = `
             <div style="padding:14px 16px;background:linear-gradient(135deg,rgba(193,166,115,0.06),rgba(15,23,42,0.6));border:1px solid rgba(193,166,115,0.20);border-radius:10px;">
                 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid rgba(193,166,115,0.15);">
-                    <span style="font-size:13px;font-weight:700;color:#C1A673;letter-spacing:0.8px;">基本面 / FUNDAMENTALS</span>
-                    <span style="font-size:10px;color:#64748b;">数据来源 FMP · TTM</span>
+                    <span style="font-size:13px;font-weight:700;color:#C1A673;letter-spacing:0.8px;">基本面 / FUNDAMENTALS${discTag}</span>
+                    <span style="font-size:10px;color:#64748b;">${sourceTag} · TTM</span>
                 </div>
                 ${visibleGroups.map((g, i) => renderGroup(g, i === visibleGroups.length - 1)).join('')}
                 ${sectorLine}
@@ -4067,16 +4087,21 @@
         }
     }
 
-    // 批量刷新所有持仓的基本面数据（Settings 调用）
+    // 批量刷新所有持仓的基本面数据（Settings 调用 — Phase 2.3 双源）
     async function refreshAllFundamentals() {
         const count = APP.holdings.filter(h => h.qty > 0).length;
-        if (!confirm(`即将从 FMP API 批量拉取 ${count} 只持仓股的扩充基本面数据（PE/Forward PE/PB/PS/PEG · ROE/ROIC/利润率 · D/E/流动比率 · 股息/EPS/市值/52W 等共 17+ 字段）。\n\n约需 ${Math.ceil(count * 1.5)} 秒（每只股 5 个 FMP endpoint）。\n\n继续？`)) return;
+        if (!confirm(`即将从 Yahoo Finance + FMP 双源 批量拉取 ${count} 只持仓股的扩充基本面（17+ 字段，含交叉验证）。\n\n约需 ${Math.ceil(count * 2)} 秒（双源并行 + 限速）。\n\n继续？`)) return;
         try {
             const result = await apiCall('/fundamentals/refresh-all', 'POST');
             const failedMsg = result.failed && result.failed.length > 0
                 ? `\n\n失败 ${result.failed.length} 只：\n${result.failed.slice(0, 8).map(f => `· ${f.symbol}`).join('\n')}${result.failed.length > 8 ? `\n…还有 ${result.failed.length - 8} 只` : ''}`
                 : '';
-            alert(`✅ 已成功刷新 ${result.ok}/${result.total} 只股票的基本面数据${failedMsg}\n\n点击任意股票名称查看基本面详情。`);
+            const srcs = result.sources || {};
+            const srcMsg = `\n\n📊 来源分布：双源 ${srcs['yahoo+fmp']||0} · 仅 Yahoo ${srcs.yahoo||0} · 仅 FMP ${srcs.fmp||0}`;
+            const discMsg = result.total_discrepancies > 0
+                ? `\n⚠ 发现 ${result.total_discrepancies} 处双源分歧（点击股票详情看 ⚠ 标记）`
+                : '\n✓ 所有双源字段均吻合';
+            alert(`✅ 已成功刷新 ${result.ok}/${result.total} 只股票${srcMsg}${discMsg}${failedMsg}`);
         } catch (e) {
             alert(`❌ 刷新失败：${e.message}`);
         }
