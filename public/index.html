@@ -4100,8 +4100,12 @@
             const srcMsg = `\n\n📊 来源分布：双源 ${srcs['yahoo+fmp']||0} · 仅 Yahoo ${srcs.yahoo||0} · 仅 FMP ${srcs.fmp||0}`;
             const discMsg = result.total_discrepancies > 0
                 ? `\n⚠ 发现 ${result.total_discrepancies} 处双源分歧（点击股票详情看 ⚠ 标记）`
-                : '\n✓ 所有双源字段均吻合';
-            alert(`✅ 已成功刷新 ${result.ok}/${result.total} 只股票${srcMsg}${discMsg}${failedMsg}`);
+                : (result.ok > 0 ? '\n✓ 所有双源字段均吻合' : '');
+            // Phase 2.3 调试：失败时暴露首个错误的具体信息
+            const errMsg = result.first_error
+                ? `\n\n🔍 首个失败具体原因：\n${result.first_error}`
+                : '';
+            alert(`已刷新 ${result.ok}/${result.total} 只股票${srcMsg}${discMsg}${errMsg}${failedMsg}`);
         } catch (e) {
             alert(`❌ 刷新失败：${e.message}`);
         }
