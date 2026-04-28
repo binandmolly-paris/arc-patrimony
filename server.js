@@ -231,10 +231,12 @@ async function initDB() {
       ADD COLUMN IF NOT EXISTS year_low NUMERIC(12,4),
       ADD COLUMN IF NOT EXISTS shares_out NUMERIC(20,2),
       ADD COLUMN IF NOT EXISTS price_avg_50 NUMERIC(12,4),
-      ADD COLUMN IF NOT EXISTS price_avg_200 NUMERIC(12,4)
+      ADD COLUMN IF NOT EXISTS price_avg_200 NUMERIC(12,4),
+      ADD COLUMN IF NOT EXISTS field_sources JSONB,
+      ADD COLUMN IF NOT EXISTS discrepancies JSONB
   `);
 
-  console.log("✅ 数据库表已就绪（含 Phase 2.1 扩充字段：12 列估值/利润率/52周）");
+  console.log("✅ 数据库表已就绪（Phase 2.3：含双源交叉检查字段）");
 }
 
 // ===== 自动初始化 LiuBin 用户 =====
@@ -1126,6 +1128,239 @@ async function fetchFMPFundamentals(symbol) {
   return result;
 }
 
+// ============================================================
+// Phase 2.3: Yahoo Finance quoteSummary 基本面源（覆盖全球市场）
+// ============================================================
+
+// 从 Yahoo {raw, fmt} 包装结构中提取原始数值
+const yRaw = (obj, key) => {
+  if (!obj || obj[key] == null) return null;
+  if (typeof obj[key] === 'number' || typeof obj[key] === 'string') return obj[key];
+  if (obj[key].raw != null) return obj[key].raw;
+  return null;
+};
+
+async function fetchYahooFundamentals(symbol) {
+  const result = { symbol, source: 'yahoo', raw_json: {} };
+  const modules = [
+    'summaryDetail', 'defaultKeyStatistics', 'financialData',
+    'price', 'assetProfile', 'calendarEvents', 'earnings'
+  ];
+  const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=${modules.join(',')}`;
+
+  const resp = await fetch(url, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Accept': 'application/json',
+    },
+  });
+  if (!resp.ok) {
+    throw new Error(`Yahoo quoteSummary HTTP ${resp.status}`);
+  }
+  const data = await resp.json();
+  const r = data?.quoteSummary?.result?.[0];
+  if (!r) throw new Error('Yahoo: no result');
+  result.raw_json = r;
+
+  const sd = r.summaryDetail || {};
+  const ks = r.defaultKeyStatistics || {};
+  const fd = r.financialData || {};
+  const pr = r.price || {};
+  const ap = r.assetProfile || {};
+
+  // 公司基础信息
+  result.company_name = pr.longName || pr.shortName || null;
+  result.sector       = ap.sector || null;
+  result.industry     = ap.industry || null;
+  result.country      = ap.country || null;
+  result.currency     = pr.currency || null;
+  result.exchange     = pr.exchangeName || pr.exchange || null;
+  result.ceo          = (ap.companyOfficers && ap.companyOfficers[0]?.name) || null;
+  result.website      = ap.website || null;
+  result.description  = ap.longBusinessSummary ? ap.longBusinessSummary.slice(0, 2000) : null;
+  result.employees    = yRaw(ap, 'fullTimeEmployees');
+
+  // 价格与市场数据
+  result.price          = yRaw(fd, 'currentPrice') ?? yRaw(pr, 'regularMarketPrice');
+  result.market_cap     = yRaw(pr, 'marketCap') ?? yRaw(sd, 'marketCap');
+  result.day_change     = yRaw(pr, 'regularMarketChange');
+  // Yahoo 给的 changePercent 是 decimal（-0.0127 = -1.27%），× 100 转为 percent 形式与 FMP 对齐
+  const yPct = yRaw(pr, 'regularMarketChangePercent');
+  result.day_change_pct = yPct != null ? yPct * 100 : null;
+  result.volume         = yRaw(pr, 'regularMarketVolume') ?? yRaw(sd, 'volume');
+  result.avg_volume     = yRaw(sd, 'averageVolume');
+  result.year_high      = yRaw(sd, 'fiftyTwoWeekHigh');
+  result.year_low       = yRaw(sd, 'fiftyTwoWeekLow');
+  result.price_avg_50   = yRaw(sd, 'fiftyDayAverage');
+  result.price_avg_200  = yRaw(sd, 'twoHundredDayAverage');
+  result.shares_out     = yRaw(ks, 'sharesOutstanding') ?? yRaw(ks, 'floatShares');
+  if (result.year_low != null && result.year_high != null) {
+    result.range_52w = `${result.year_low} - ${result.year_high}`;
+  }
+
+  // 估值
+  result.pe_ratio      = yRaw(sd, 'trailingPE') ?? yRaw(ks, 'trailingPE');
+  result.forward_pe    = yRaw(sd, 'forwardPE') ?? yRaw(ks, 'forwardPE');
+  result.pb_ratio      = yRaw(ks, 'priceToBook');
+  result.ps_ratio      = yRaw(sd, 'priceToSalesTrailing12Months');
+  result.peg_ratio     = yRaw(ks, 'pegRatio');
+  result.eps           = yRaw(ks, 'trailingEps');
+  result.beta          = yRaw(sd, 'beta') ?? yRaw(ks, 'beta');
+
+  // 盈利能力（Yahoo 都用 decimal 形式）
+  result.roe              = yRaw(fd, 'returnOnEquity');
+  result.gross_margin     = yRaw(fd, 'grossMargins');
+  result.operating_margin = yRaw(fd, 'operatingMargins');
+  result.net_margin       = yRaw(fd, 'profitMargins');
+  // Yahoo 没有 ROIC，留 null（FMP 端可填）
+
+  // 财务健康
+  let dte = yRaw(fd, 'debtToEquity');
+  // Yahoo 的 debtToEquity 是 percent 形式（145.6 表示 1.456 ratio），归一化
+  if (dte != null && dte > 10) dte = dte / 100;
+  result.debt_to_equity = dte;
+  result.current_ratio  = yRaw(fd, 'currentRatio');
+
+  // 股息
+  result.dividend_yield = yRaw(sd, 'dividendYield');
+  result.payout_ratio   = yRaw(sd, 'payoutRatio');
+  result.last_dividend  = yRaw(sd, 'dividendRate');
+
+  // 数值字段统一转 Number
+  ['market_cap','beta','last_dividend','day_change','day_change_pct','volume','avg_volume',
+   'pe_ratio','pb_ratio','ps_ratio','roe','roic','debt_to_equity','eps','dividend_yield','payout_ratio',
+   'price','forward_pe','peg_ratio','current_ratio','gross_margin','operating_margin','net_margin',
+   'year_high','year_low','shares_out','price_avg_50','price_avg_200','employees'
+  ].forEach(k => {
+    if (result[k] != null) {
+      const n = parseFloat(result[k]);
+      result[k] = isNaN(n) ? null : n;
+    }
+  });
+
+  return result;
+}
+
+// ============================================================
+// Phase 2.3: 双源融合 + 字段级交叉检查
+// ============================================================
+
+// 字段规则：哪个源是主源 + 容差（用于检测分歧）
+// tolerance = null 表示该字段单源（无法交叉检查）
+const FIELD_RULES = {
+  market_cap:       { primary: 'yahoo', tolerance: 0.02 },
+  beta:             { primary: 'yahoo', tolerance: 0.30 }, // 计算口径常差异 → 容忍度高
+  pe_ratio:         { primary: 'yahoo', tolerance: 0.05 },
+  pb_ratio:         { primary: 'fmp',   tolerance: 0.10 },
+  ps_ratio:         { primary: 'yahoo', tolerance: 0.10 },
+  eps:              { primary: 'yahoo', tolerance: 0.05 },
+  roe:              { primary: 'fmp',   tolerance: 0.10 },
+  forward_pe:       { primary: 'yahoo', tolerance: 0.15 },
+  peg_ratio:        { primary: 'yahoo', tolerance: 0.20 },
+  dividend_yield:   { primary: 'yahoo', tolerance: 0.03 },
+  payout_ratio:     { primary: 'yahoo', tolerance: 0.10 },
+  gross_margin:     { primary: 'fmp',   tolerance: 0.05 },
+  operating_margin: { primary: 'fmp',   tolerance: 0.05 },
+  net_margin:       { primary: 'fmp',   tolerance: 0.05 },
+  debt_to_equity:   { primary: 'fmp',   tolerance: 0.20 },
+  current_ratio:    { primary: 'fmp',   tolerance: 0.05 },
+  year_high:        { primary: 'yahoo', tolerance: 0.005 },
+  year_low:         { primary: 'yahoo', tolerance: 0.005 },
+  price_avg_50:     { primary: 'yahoo', tolerance: 0.02 },
+  price_avg_200:    { primary: 'yahoo', tolerance: 0.02 },
+  day_change_pct:   { primary: 'yahoo', tolerance: 0.10 },
+  price:            { primary: 'yahoo', tolerance: 0.005 },
+  shares_out:       { primary: 'yahoo', tolerance: 0.05 },
+  volume:           { primary: 'yahoo', tolerance: 0.10 },
+  avg_volume:       { primary: 'yahoo', tolerance: 0.10 },
+  roic:             { primary: 'fmp',   tolerance: null },  // FMP 独有
+  day_change:       { primary: 'yahoo', tolerance: 0.10 },
+  last_dividend:    { primary: 'yahoo', tolerance: 0.10 },
+  employees:        { primary: 'yahoo', tolerance: 0.05 },
+};
+
+// 文本/标识字段：不交叉检查，优先 Yahoo（更新更勤），FMP 兜底
+const TEXT_FIELDS = ['company_name','sector','industry','country','currency','ceo','website','exchange','description','range_52w'];
+
+function mergeWithCrossCheck(yahoo, fmp) {
+  const merged = { field_sources: {}, discrepancies: {} };
+
+  // 数值字段：按规则选主源 + 检测分歧
+  for (const [field, rule] of Object.entries(FIELD_RULES)) {
+    const yVal = yahoo[field];
+    const fVal = fmp[field];
+
+    let chosen = null;
+    if (rule.primary === 'yahoo') {
+      if (yVal != null) chosen = { val: yVal, src: 'yahoo' };
+      else if (fVal != null) chosen = { val: fVal, src: 'fmp' };
+    } else {
+      if (fVal != null) chosen = { val: fVal, src: 'fmp' };
+      else if (yVal != null) chosen = { val: yVal, src: 'yahoo' };
+    }
+
+    if (chosen) {
+      merged[field] = chosen.val;
+      merged.field_sources[field] = chosen.src;
+    }
+
+    // 双源都有值 + 有容差 → 交叉检查
+    if (yVal != null && fVal != null && rule.tolerance != null) {
+      const max = Math.max(Math.abs(yVal), Math.abs(fVal));
+      if (max > 0.01) {
+        const diffPct = Math.abs(yVal - fVal) / max;
+        if (diffPct > rule.tolerance) {
+          merged.discrepancies[field] = {
+            yahoo: parseFloat(yVal.toFixed(4)),
+            fmp: parseFloat(fVal.toFixed(4)),
+            diff_pct: parseFloat((diffPct * 100).toFixed(2)),
+          };
+        }
+      }
+    }
+  }
+
+  // 文本字段：优先 Yahoo
+  for (const field of TEXT_FIELDS) {
+    const yVal = yahoo[field];
+    const fVal = fmp[field];
+    if (yVal != null && yVal !== '') {
+      merged[field] = yVal;
+      merged.field_sources[field] = 'yahoo';
+    } else if (fVal != null && fVal !== '') {
+      merged[field] = fVal;
+      merged.field_sources[field] = 'fmp';
+    }
+  }
+
+  return merged;
+}
+
+// 双源同时拉取 + 融合（Phase 2.3 主入口）
+async function fetchFundamentalsHybrid(symbol) {
+  const [yResult, fResult] = await Promise.allSettled([
+    fetchYahooFundamentals(symbol),
+    fetchFMPFundamentals(symbol),
+  ]);
+  const yahoo = yResult.status === 'fulfilled' ? yResult.value : {};
+  const fmp   = fResult.status === 'fulfilled' ? fResult.value : {};
+
+  if (yResult.status === 'rejected') console.warn(`Yahoo failed for ${symbol}:`, yResult.reason?.message);
+  if (fResult.status === 'rejected') console.warn(`FMP failed for ${symbol}:`, fResult.reason?.message);
+
+  const merged = mergeWithCrossCheck(yahoo, fmp);
+  merged.symbol = symbol;
+  // source 字符串记录哪个源真正出了数据
+  const ySrcOK = yResult.status === 'fulfilled' && Object.keys(yahoo).length > 3;
+  const fSrcOK = fResult.status === 'fulfilled' && Object.keys(fmp).length > 3;
+  merged.source = ySrcOK && fSrcOK ? 'yahoo+fmp' : (ySrcOK ? 'yahoo' : (fSrcOK ? 'fmp' : 'none'));
+  merged.raw_json = {
+    yahoo: yahoo.raw_json || null,
+    fmp:   fmp.raw_json   || null,
+  };
+  return merged;
+}
+
 // UPSERT 到 fundamentals_latest（Phase 2.2 防线：跳过空数据 + COALESCE 保护现有值）
 async function saveFundamentalsToDB(d) {
   // 防线 1: 如果 FMP 返回完全空，抛错让调用者知道，避免用 NULL 覆盖 DB 里的好数据
@@ -1146,12 +1381,14 @@ async function saveFundamentalsToDB(d) {
       price, forward_pe, peg_ratio, current_ratio,
       gross_margin, operating_margin, net_margin,
       year_high, year_low, shares_out, price_avg_50, price_avg_200,
+      field_sources, discrepancies,
       source, fetched_at, raw_json
     ) VALUES (
       $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,
       $20,$21,$22,$23,$24,$25,$26,$27,$28,
       $29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,
-      $41,NOW(),$42
+      $41,$42,
+      $43,NOW(),$44
     )
     ON CONFLICT (symbol) DO UPDATE SET
       company_name   = COALESCE(EXCLUDED.company_name,   fundamentals_latest.company_name),
@@ -1193,6 +1430,8 @@ async function saveFundamentalsToDB(d) {
       shares_out     = COALESCE(EXCLUDED.shares_out,     fundamentals_latest.shares_out),
       price_avg_50   = COALESCE(EXCLUDED.price_avg_50,   fundamentals_latest.price_avg_50),
       price_avg_200  = COALESCE(EXCLUDED.price_avg_200,  fundamentals_latest.price_avg_200),
+      field_sources  = EXCLUDED.field_sources,
+      discrepancies  = EXCLUDED.discrepancies,
       source         = EXCLUDED.source,
       fetched_at     = NOW(),
       raw_json       = COALESCE(EXCLUDED.raw_json,       fundamentals_latest.raw_json)
@@ -1205,6 +1444,8 @@ async function saveFundamentalsToDB(d) {
     d.price, d.forward_pe, d.peg_ratio, d.current_ratio,
     d.gross_margin, d.operating_margin, d.net_margin,
     d.year_high, d.year_low, d.shares_out, d.price_avg_50, d.price_avg_200,
+    JSON.stringify(d.field_sources || {}),
+    JSON.stringify(d.discrepancies || {}),
     d.source, JSON.stringify(d.raw_json || {})
   ]);
 }
@@ -1235,13 +1476,13 @@ app.get("/api/fundamentals/:symbol", auth, async (req, res) => {
       return res.json({ ...cachedRow, _from: 'cache' });
     }
 
-    // 缓存过期 OR 缓存为空（被之前 NULL 覆盖污染过） → 触发刷新
+    // 缓存过期 OR 缓存为空（被之前 NULL 覆盖污染过） → 触发双源刷新
     if (emptyCache && cachedRow) {
-      console.log(`🔄 Auto-retry for ${symbol}: cache row is empty, attempting fresh FMP fetch`);
+      console.log(`🔄 Auto-retry for ${symbol}: cache row is empty, attempting hybrid fetch`);
     }
-    const fresh = await fetchFMPFundamentals(symbol);
+    const fresh = await fetchFundamentalsHybrid(symbol);
     await saveFundamentalsToDB(fresh); // 如果 fresh 也是空，会抛错被下面 catch 接住
-    res.json({ ...fresh, _from: 'fmp' });
+    res.json({ ...fresh, _from: fresh.source || 'hybrid' });
   } catch (e) {
     console.error(`Fundamentals error for ${symbol}:`, e.message);
     // Fallback：旧缓存（即使过期或空）也返回，至少前端能显示"数据不可用"提示而非 500
@@ -1255,36 +1496,42 @@ app.get("/api/fundamentals/:symbol", auth, async (req, res) => {
   }
 });
 
-// POST /api/fundamentals/refresh/:symbol — 强制刷新一只
+// POST /api/fundamentals/refresh/:symbol — 强制刷新一只（双源）
 app.post("/api/fundamentals/refresh/:symbol", auth, async (req, res) => {
   const symbol = req.params.symbol.trim().toUpperCase();
   try {
-    const data = await fetchFMPFundamentals(symbol);
+    const data = await fetchFundamentalsHybrid(symbol);
     await saveFundamentalsToDB(data);
-    res.json({ ok: true, symbol, _from: 'fmp', fetched_at: new Date().toISOString() });
+    res.json({ ok: true, symbol, _from: data.source || 'hybrid', fetched_at: new Date().toISOString() });
   } catch (e) {
     console.error(`Refresh failed for ${symbol}:`, e.message);
     res.status(500).json({ error: e.message });
   }
 });
 
-// POST /api/fundamentals/refresh-all — 批量刷新所有持仓
+// POST /api/fundamentals/refresh-all — 批量刷新所有持仓（双源）
 app.post("/api/fundamentals/refresh-all", auth, async (req, res) => {
   try {
     const r = await pool.query(
       "SELECT DISTINCT symbol FROM holdings WHERE user_id=$1 AND qty > 0 ORDER BY symbol",
       [req.userId]
     );
-    const result = { ok: 0, failed: [], total: r.rows.length };
+    const result = {
+      ok: 0, failed: [], total: r.rows.length,
+      sources: { 'yahoo+fmp': 0, yahoo: 0, fmp: 0 },
+      total_discrepancies: 0,
+    };
     for (const row of r.rows) {
       try {
-        const data = await fetchFMPFundamentals(row.symbol);
+        const data = await fetchFundamentalsHybrid(row.symbol);
         await saveFundamentalsToDB(data);
         result.ok++;
+        if (result.sources[data.source] != null) result.sources[data.source]++;
+        if (data.discrepancies) result.total_discrepancies += Object.keys(data.discrepancies).length;
       } catch (e) {
         result.failed.push({ symbol: row.symbol, error: e.message });
       }
-      // FMP Free 250/day, 加 300ms 间隔避免突发限流
+      // 双源：Yahoo + FMP 各 1 次。300ms 间隔保护双方限流
       await new Promise(rs => setTimeout(rs, 300));
     }
     res.json(result);
