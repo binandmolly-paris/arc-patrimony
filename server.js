@@ -1421,11 +1421,438 @@ function mergeWithCrossCheck(yahoo, fmp) {
   return merged;
 }
 
+// ============================================================
+// Phase 3.1: Tushare Pro 集成（A股 fundamentals + HK 价格基础）
+// API 文档: https://tushare.pro/document/2
+// ============================================================
+const TUSHARE_API = 'https://api.tushare.pro';
+
+async function fetchTushare(api_name, params = {}, fields = '') {
+  const token = process.env.TUSHARE_TOKEN;
+  if (!token) throw new Error('TUSHARE_TOKEN not configured');
+  const resp = await fetch(TUSHARE_API, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ api_name, token, params, fields }),
+  });
+  if (!resp.ok) throw new Error(`Tushare HTTP ${resp.status}`);
+  const data = await resp.json();
+  if (data.code !== 0) throw new Error(`Tushare ${api_name}: ${data.msg || 'error'}`);
+  // 把 {fields:[...], items:[[...]]} 二维数组转成对象数组
+  const f = data.data?.fields || [];
+  const items = data.data?.items || [];
+  return items.map(row => Object.fromEntries(f.map((k, i) => [k, row[i]])));
+}
+
+// Yahoo .SS → Tushare .SH；HK 4位 → 5位 padded
+function yahooToTushareTicker(symbol) {
+  if (symbol.endsWith('.SS')) return symbol.replace('.SS', '.SH');
+  if (symbol.endsWith('.SZ')) return symbol;
+  if (symbol.endsWith('.HK')) {
+    const num = symbol.replace('.HK', '');
+    return num.padStart(5, '0') + '.HK';
+  }
+  return symbol;
+}
+
+// 在 result 上把所有非空字段统一打上来源标签（Phase 3 单源 fetcher 用）
+function tagAllFieldsWithSource(result, source) {
+  result.field_sources = result.field_sources || {};
+  for (const k of Object.keys(result)) {
+    if (result[k] == null) continue;
+    if (['symbol','source','raw_json','field_sources','discrepancies'].includes(k)) continue;
+    result.field_sources[k] = source;
+  }
+}
+
+async function fetchTushareFundamentals(symbol) {
+  const result = { symbol, source: 'tushare', raw_json: {} };
+  const tsTicker = yahooToTushareTicker(symbol);
+  const isHK = symbol.endsWith('.HK');
+
+  if (isHK) {
+    // HK: 仅基本信息 + 价格（Tushare 暂不直接提供 HK fundamentals）
+    try {
+      const info = await fetchTushare('hk_basic', { ts_code: tsTicker });
+      if (info.length > 0) {
+        result.raw_json.hk_basic = info[0];
+        result.company_name = info[0].name || null;
+        result.country = '香港';
+        result.currency = 'HKD';
+        result.exchange = 'HKEX';
+      }
+    } catch (e) { console.warn(`Tushare hk_basic failed for ${symbol}:`, e.message); }
+
+    try {
+      const today = new Date().toISOString().slice(0,10).replace(/-/g, '');
+      const start = new Date(Date.now() - 14*86400000).toISOString().slice(0,10).replace(/-/g, '');
+      const prices = await fetchTushare('hk_daily', { ts_code: tsTicker, start_date: start, end_date: today });
+      if (prices.length > 0) {
+        const latest = prices.sort((a, b) => b.trade_date.localeCompare(a.trade_date))[0];
+        result.raw_json.hk_daily = latest;
+        result.price = parseFloat(latest.close) || null;
+        result.day_change = parseFloat(latest.change) || null;
+        result.day_change_pct = parseFloat(latest.pct_chg) || null;
+        result.volume = parseFloat(latest.vol) || null;
+      }
+    } catch (e) { console.warn(`Tushare hk_daily failed for ${symbol}:`, e.message); }
+  } else {
+    // A股: 基本信息 + 估值（daily_basic）+ 财务比率（fina_indicator）
+    try {
+      const basic = await fetchTushare('stock_basic',
+        { ts_code: tsTicker },
+        'ts_code,name,area,industry,list_date,market'
+      );
+      if (basic.length > 0) {
+        result.raw_json.stock_basic = basic[0];
+        result.company_name = basic[0].name || null;
+        result.industry = basic[0].industry || null;
+        result.country = '中国';
+        result.currency = 'CNY';
+        result.exchange = basic[0].market === '主板' ? 'SSE/SZSE' : (basic[0].market || null);
+      }
+    } catch (e) { console.warn(`Tushare stock_basic failed for ${symbol}:`, e.message); }
+
+    try {
+      const today = new Date().toISOString().slice(0,10).replace(/-/g, '');
+      const start = new Date(Date.now() - 14*86400000).toISOString().slice(0,10).replace(/-/g, '');
+      const db = await fetchTushare('daily_basic', { ts_code: tsTicker, start_date: start, end_date: today });
+      if (db.length > 0) {
+        const latest = db.sort((a, b) => b.trade_date.localeCompare(a.trade_date))[0];
+        result.raw_json.daily_basic = latest;
+        result.price = parseFloat(latest.close) || null;
+        result.pe_ratio = parseFloat(latest.pe_ttm) ?? parseFloat(latest.pe) ?? null;
+        result.pb_ratio = parseFloat(latest.pb) || null;
+        result.ps_ratio = parseFloat(latest.ps_ttm) ?? parseFloat(latest.ps) ?? null;
+        // dv 是 percent 形式（1.5 = 1.5%），转为 decimal 与其他源一致
+        const dv = parseFloat(latest.dv_ttm) || parseFloat(latest.dv_ratio);
+        if (!isNaN(dv)) result.dividend_yield = dv / 100;
+        // total_mv 单位：万元 → ×10000 转为 CNY
+        if (latest.total_mv) result.market_cap = parseFloat(latest.total_mv) * 10000;
+        if (latest.total_share) result.shares_out = parseFloat(latest.total_share) * 10000;
+      }
+    } catch (e) { console.warn(`Tushare daily_basic failed for ${symbol}:`, e.message); }
+
+    try {
+      // fina_indicator：取最新一期财报指标
+      const fi = await fetchTushare('fina_indicator', { ts_code: tsTicker });
+      if (fi.length > 0) {
+        const latest = fi.sort((a, b) => b.end_date.localeCompare(a.end_date))[0];
+        result.raw_json.fina_indicator = latest;
+        // Tushare 财务比率均为 percent 形式（15.5 = 15.5%），统一转为 decimal
+        const pct = (v) => { const n = parseFloat(v); return isNaN(n) ? null : n / 100; };
+        result.roe              = pct(latest.roe);
+        result.roic             = pct(latest.roic);
+        result.gross_margin     = pct(latest.grossprofit_margin);
+        result.operating_margin = pct(latest.op_of_gr);
+        result.net_margin       = pct(latest.netprofit_margin);
+        result.eps              = parseFloat(latest.eps) || null;
+        result.current_ratio    = parseFloat(latest.current_ratio) || null;
+        const de = parseFloat(latest.debt_to_eqt);
+        if (!isNaN(de)) result.debt_to_equity = de / 100;
+      }
+    } catch (e) { console.warn(`Tushare fina_indicator failed for ${symbol}:`, e.message); }
+  }
+
+  // 数值字段统一 Number 化
+  ['market_cap','beta','last_dividend','day_change','day_change_pct','volume','avg_volume',
+   'pe_ratio','pb_ratio','ps_ratio','roe','roic','debt_to_equity','eps','dividend_yield','payout_ratio',
+   'price','forward_pe','peg_ratio','current_ratio','gross_margin','operating_margin','net_margin',
+   'year_high','year_low','shares_out','price_avg_50','price_avg_200','employees'
+  ].forEach(k => {
+    if (result[k] != null) {
+      const n = parseFloat(result[k]);
+      result[k] = isNaN(n) ? null : n;
+    }
+  });
+
+  tagAllFieldsWithSource(result, 'tushare');
+  return result;
+}
+
+// ============================================================
+// Phase 3.2: J-Quants 集成（日股 fundamentals + 价格 + 5 年历史）
+// API 文档: https://jpx.gitbook.io/j-quants-en/api-reference
+// ============================================================
+const JQUANTS_API = 'https://api.jquants.com/v1';
+let jquantsTokens = null; // { idToken, refreshToken, idTokenExp, refreshTokenExp }
+
+async function getJQuantsIdToken() {
+  const now = Date.now();
+
+  // 缓存的 idToken 还有效（24h 内）→ 直接用
+  if (jquantsTokens?.idToken && jquantsTokens.idTokenExp > now + 60000) {
+    return jquantsTokens.idToken;
+  }
+
+  // 准备 refreshToken：优先用环境变量提供的（用户从 J-Quants 控制台手动复制的）
+  // 否则用之前缓存的 refreshToken
+  const envRefreshToken = process.env.JQUANTS_REFRESH_TOKEN;
+  let refreshToken = envRefreshToken || jquantsTokens?.refreshToken;
+  let refreshTokenExp = envRefreshToken
+    ? now + 6 * 24 * 60 * 60 * 1000  // env 提供的，假设刚配置时是新鲜的
+    : jquantsTokens?.refreshTokenExp;
+
+  // refreshToken 有效 → 换 idToken
+  if (refreshToken && (envRefreshToken || refreshTokenExp > now + 60000)) {
+    try {
+      const resp = await fetch(`${JQUANTS_API}/token/auth_refresh?refreshtoken=${encodeURIComponent(refreshToken)}`, { method: 'POST' });
+      if (resp.ok) {
+        const data = await resp.json();
+        jquantsTokens = {
+          idToken: data.idToken,
+          refreshToken,
+          idTokenExp: now + 23 * 60 * 60 * 1000,
+          refreshTokenExp: refreshTokenExp || (now + 6 * 24 * 60 * 60 * 1000),
+        };
+        console.log('✅ J-Quants idToken refreshed via refreshToken');
+        return jquantsTokens.idToken;
+      } else {
+        const txt = await resp.text();
+        console.warn(`J-Quants refresh failed HTTP ${resp.status}: ${txt.slice(0, 100)}`);
+      }
+    } catch (e) { console.warn('J-Quants refresh exception:', e.message); }
+  }
+
+  // refreshToken 没有 / 失效 → 用 email+password 重新登录拿一套新的
+  const email = process.env.JQUANTS_EMAIL;
+  const password = process.env.JQUANTS_PASSWORD;
+  if (!email || !password) {
+    throw new Error('J-Quants 凭证未配置：请在 Render 设置 JQUANTS_EMAIL+JQUANTS_PASSWORD（推荐）或 JQUANTS_REFRESH_TOKEN（每 7 天需手动更新）');
+  }
+
+  const authResp = await fetch(`${JQUANTS_API}/token/auth_user`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ mailaddress: email, password }),
+  });
+  if (!authResp.ok) {
+    const txt = await authResp.text();
+    throw new Error(`J-Quants auth_user HTTP ${authResp.status}: ${txt.slice(0, 120)}`);
+  }
+  const authData = await authResp.json();
+  const newRefreshToken = authData.refreshToken;
+  if (!newRefreshToken) throw new Error('J-Quants auth_user: response missing refreshToken');
+
+  const idResp = await fetch(`${JQUANTS_API}/token/auth_refresh?refreshtoken=${encodeURIComponent(newRefreshToken)}`, { method: 'POST' });
+  if (!idResp.ok) throw new Error(`J-Quants auth_refresh HTTP ${idResp.status}`);
+  const idData = await idResp.json();
+
+  jquantsTokens = {
+    idToken: idData.idToken,
+    refreshToken: newRefreshToken,
+    idTokenExp: now + 23 * 60 * 60 * 1000,
+    refreshTokenExp: now + 6 * 24 * 60 * 60 * 1000,
+  };
+  console.log('✅ J-Quants 完整登录成功（email+password）');
+  return jquantsTokens.idToken;
+}
+
+async function fetchJQuants(endpoint, params = {}) {
+  const token = await getJQuantsIdToken();
+  const qs = new URLSearchParams(params);
+  const url = `${JQUANTS_API}${endpoint}?${qs}`;
+  const resp = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!resp.ok) {
+    const txt = await resp.text();
+    throw new Error(`J-Quants ${endpoint} HTTP ${resp.status}: ${txt.slice(0, 100)}`);
+  }
+  return resp.json();
+}
+
+// Yahoo .T → J-Quants 5位代码（4位 + check digit '0'）
+// 7203.T → 72030
+function yahooToJQuantsCode(symbol) {
+  const m = symbol.match(/^(\d+)\.T$/i);
+  if (!m) return null;
+  return m[1].length === 4 ? m[1] + '0' : m[1];
+}
+
+async function fetchJQuantsFundamentals(symbol) {
+  const result = { symbol, source: 'jquants', raw_json: {} };
+  const code = yahooToJQuantsCode(symbol);
+  if (!code) throw new Error(`Invalid JP symbol: ${symbol}`);
+
+  // 1. 上市公司基本信息
+  try {
+    const info = await fetchJQuants('/listed/info', { code });
+    if (info.info && info.info.length > 0) {
+      const i = info.info[0];
+      result.raw_json.listed_info = i;
+      result.company_name = i.CompanyName || i.CompanyNameEnglish || null;
+      result.sector       = i.Sector33CodeName || i.Sector17CodeName || null;
+      result.industry     = i.Sector33CodeName || null;
+      result.country      = '日本';
+      result.currency     = 'JPY';
+      result.exchange     = i.MarketCodeName || 'TSE';
+    }
+  } catch (e) { console.warn(`J-Quants /listed/info failed for ${symbol}:`, e.message); }
+
+  // 2. 价格（最近交易日 + 1 年历史用于 52W 高低/SMA）
+  try {
+    const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const yearAgo = new Date(Date.now() - 365*86400000).toISOString().slice(0, 10).replace(/-/g, '');
+    const prices = await fetchJQuants('/prices/daily_quotes', { code, from: yearAgo, to: today });
+    if (prices.daily_quotes && prices.daily_quotes.length > 0) {
+      const sorted = prices.daily_quotes.sort((a, b) => b.Date.localeCompare(a.Date));
+      const latest = sorted[0];
+      result.raw_json.daily_quote_latest = latest;
+      result.price          = parseFloat(latest.Close) || null;
+      result.day_change     = (parseFloat(latest.Close) - parseFloat(latest.Open)) || null;
+      result.day_change_pct = result.price && latest.Open
+        ? ((result.price - parseFloat(latest.Open)) / parseFloat(latest.Open)) * 100
+        : null;
+      result.volume = parseFloat(latest.Volume) || null;
+
+      const closes = sorted.map(p => parseFloat(p.Close)).filter(p => !isNaN(p));
+      if (closes.length > 0) {
+        result.year_high = Math.max(...closes);
+        result.year_low  = Math.min(...closes);
+        result.range_52w = `${result.year_low} - ${result.year_high}`;
+      }
+      // SMA 50 / 200
+      if (closes.length >= 50) {
+        const sma50 = closes.slice(0, 50).reduce((a, b) => a + b, 0) / 50;
+        result.price_avg_50 = sma50;
+      }
+      if (closes.length >= 200) {
+        const sma200 = closes.slice(0, 200).reduce((a, b) => a + b, 0) / 200;
+        result.price_avg_200 = sma200;
+      }
+    }
+  } catch (e) { console.warn(`J-Quants /prices/daily_quotes failed for ${symbol}:`, e.message); }
+
+  // 3. 财报 Summary（Light 计划仅 Summary）
+  try {
+    const stmts = await fetchJQuants('/fins/statements', { code });
+    if (stmts.statements && stmts.statements.length > 0) {
+      // 按披露日期降序
+      const sorted = stmts.statements.sort((a, b) => (b.DisclosedDate || '').localeCompare(a.DisclosedDate || ''));
+      const latest = sorted[0];
+      result.raw_json.statements_latest = latest;
+
+      // 关键财务字段
+      result.eps = parseFloat(latest.EarningsPerShare) || null;
+      const bps = parseFloat(latest.BookValuePerShare);
+      const totalRev = parseFloat(latest.NetSales) || parseFloat(latest.OperatingRevenue);
+      const opIncome = parseFloat(latest.OperatingProfit);
+      const netIncome = parseFloat(latest.Profit);
+      const equity = parseFloat(latest.Equity);
+
+      if (result.price && result.eps) result.pe_ratio = result.price / result.eps;
+      if (result.price && bps && bps > 0) result.pb_ratio = result.price / bps;
+      if (totalRev && opIncome) result.operating_margin = opIncome / totalRev;
+      if (totalRev && netIncome) result.net_margin = netIncome / totalRev;
+      if (netIncome && equity && equity > 0) result.roe = netIncome / equity;
+
+      // Forward EPS → Forward PE
+      const fwdEps = parseFloat(latest.ForecastEarningsPerShare);
+      if (result.price && fwdEps) result.forward_pe = result.price / fwdEps;
+
+      // 年度分红 → 股息率
+      const divPerShare = parseFloat(latest.ResultDividendPerShareAnnual)
+                       || parseFloat(latest.ForecastDividendPerShareAnnual);
+      if (result.price && divPerShare) result.dividend_yield = divPerShare / result.price;
+      if (divPerShare) result.last_dividend = divPerShare;
+
+      // shares outstanding (用于市值)
+      const shares = parseFloat(latest.NumberOfIssuedAndOutstandingSharesAtTheEndOfFiscalYearIncludingTreasuryStock);
+      if (shares && result.price) {
+        result.shares_out = shares;
+        result.market_cap = shares * result.price;
+      }
+    }
+  } catch (e) { console.warn(`J-Quants /fins/statements failed for ${symbol}:`, e.message); }
+
+  // 数值字段统一 Number 化
+  ['market_cap','beta','last_dividend','day_change','day_change_pct','volume','avg_volume',
+   'pe_ratio','pb_ratio','ps_ratio','roe','roic','debt_to_equity','eps','dividend_yield','payout_ratio',
+   'price','forward_pe','peg_ratio','current_ratio','gross_margin','operating_margin','net_margin',
+   'year_high','year_low','shares_out','price_avg_50','price_avg_200','employees'
+  ].forEach(k => {
+    if (result[k] != null) {
+      const n = parseFloat(result[k]);
+      result[k] = isNaN(n) ? null : n;
+    }
+  });
+
+  tagAllFieldsWithSource(result, 'jquants');
+  return result;
+}
+
+
 // 检测某源返回的数据是否"实质有内容"（除了 symbol/source/raw_json 三个固定字段外是否有值）
 function hasSourceData(obj) {
   if (!obj) return false;
   return !!(obj.market_cap || obj.pe_ratio || obj.eps || obj.beta || obj.company_name
          || obj.dividend_yield || obj.roe || obj.day_change_pct || obj.price);
+}
+
+// ============================================================
+// Phase 3: 按市场后缀路由到最优数据源
+// US (no suffix / -, BRK-B 等) → Yahoo + FMP hybrid
+// .SS / .SZ → Tushare 主源（A 股最权威），FMP 备源
+// .HK → Tushare 提供基础+价格，FMP 补 fundamentals 缺口
+// .T → J-Quants 主源（JPX 官方），FMP 备源
+// ============================================================
+async function fetchFundamentalsByMarket(symbol) {
+  const upper = symbol.toUpperCase();
+  const hasTushare = !!process.env.TUSHARE_TOKEN;
+  const hasJQuants = !!(process.env.JQUANTS_REFRESH_TOKEN || (process.env.JQUANTS_EMAIL && process.env.JQUANTS_PASSWORD));
+
+  // 日股 → J-Quants 主，FMP 兜底
+  if (upper.endsWith('.T')) {
+    if (hasJQuants) {
+      try {
+        const r = await fetchJQuantsFundamentals(symbol);
+        if (hasSourceData(r)) return r;
+      } catch (e) { console.warn(`[router] J-Quants ${symbol}: ${e.message}`); }
+    }
+    return fetchFundamentalsHybrid(symbol); // 兜底走 FMP
+  }
+
+  // A 股 → Tushare 主，FMP 兜底
+  if (upper.endsWith('.SS') || upper.endsWith('.SZ')) {
+    if (hasTushare) {
+      try {
+        const r = await fetchTushareFundamentals(symbol);
+        if (hasSourceData(r)) return r;
+      } catch (e) { console.warn(`[router] Tushare A股 ${symbol}: ${e.message}`); }
+    }
+    return fetchFundamentalsHybrid(symbol);
+  }
+
+  // HK → Tushare 提供 price/profile，FMP 补 fundamentals 缺口（融合）
+  if (upper.endsWith('.HK')) {
+    let tushareR = {};
+    if (hasTushare) {
+      try { tushareR = await fetchTushareFundamentals(symbol); }
+      catch (e) { console.warn(`[router] Tushare HK ${symbol}: ${e.message}`); }
+    }
+    let fmpR = {};
+    try { fmpR = await fetchFMPFundamentals(symbol); }
+    catch (e) { /* ignore — FMP Free 可能不覆盖 HK */ }
+    // 融合：Tushare 字段优先（来自交易所），FMP 字段补缺
+    const merged = { symbol, source: 'tushare+fmp', raw_json: { tushare: tushareR.raw_json, fmp: fmpR.raw_json }, field_sources: {} };
+    for (const k of Object.keys(tushareR)) {
+      if (['symbol','source','raw_json','field_sources','discrepancies'].includes(k)) continue;
+      if (tushareR[k] != null) {
+        merged[k] = tushareR[k];
+        merged.field_sources[k] = 'tushare';
+      }
+    }
+    for (const k of Object.keys(fmpR)) {
+      if (['symbol','source','raw_json','field_sources','discrepancies','_errors'].includes(k)) continue;
+      if (fmpR[k] != null && merged[k] == null) {
+        merged[k] = fmpR[k];
+        merged.field_sources[k] = 'fmp';
+      }
+    }
+    return merged;
+  }
+
+  // 默认（美股 / BRK-B / 其他）→ Yahoo + FMP 双源（已有逻辑）
+  return fetchFundamentalsHybrid(symbol);
 }
 
 // Phase 2.3.2: Yahoo 默认启用（已切换到 v7/quote 主源 + v10 备源策略）
@@ -1632,8 +2059,8 @@ app.get("/api/fundamentals/:symbol", auth, async (req, res) => {
     if (emptyCache && cachedRow) {
       console.log(`🔄 Auto-retry for ${symbol}: cache row is empty, attempting hybrid fetch`);
     }
-    const fresh = await fetchFundamentalsHybrid(symbol);
-    await saveFundamentalsToDB(fresh); // 如果 fresh 也是空，会抛错被下面 catch 接住
+    const fresh = await fetchFundamentalsByMarket(symbol);
+    await saveFundamentalsToDB(fresh);
     res.json({ ...fresh, _from: fresh.source || 'hybrid' });
   } catch (e) {
     console.error(`Fundamentals error for ${symbol}:`, e.message);
@@ -1648,11 +2075,11 @@ app.get("/api/fundamentals/:symbol", auth, async (req, res) => {
   }
 });
 
-// POST /api/fundamentals/refresh/:symbol — 强制刷新一只（双源）
+// POST /api/fundamentals/refresh/:symbol — 强制刷新一只（按市场路由到最优源）
 app.post("/api/fundamentals/refresh/:symbol", auth, async (req, res) => {
   const symbol = req.params.symbol.trim().toUpperCase();
   try {
-    const data = await fetchFundamentalsHybrid(symbol);
+    const data = await fetchFundamentalsByMarket(symbol);
     await saveFundamentalsToDB(data);
     res.json({ ok: true, symbol, _from: data.source || 'hybrid', fetched_at: new Date().toISOString() });
   } catch (e) {
@@ -1670,13 +2097,13 @@ app.post("/api/fundamentals/refresh-all", auth, async (req, res) => {
     );
     const result = {
       ok: 0, failed: [], total: r.rows.length,
-      sources: { 'yahoo+fmp': 0, yahoo: 0, fmp: 0 },
+      sources: { 'yahoo+fmp': 0, yahoo: 0, fmp: 0, tushare: 0, jquants: 0, 'tushare+fmp': 0 },
       total_discrepancies: 0,
       first_error: null,  // Phase 2.3 调试：暴露首个失败的具体原因
     };
     for (const row of r.rows) {
       try {
-        const data = await fetchFundamentalsHybrid(row.symbol);
+        const data = await fetchFundamentalsByMarket(row.symbol);
         await saveFundamentalsToDB(data);
         result.ok++;
         if (result.sources[data.source] != null) result.sources[data.source]++;
