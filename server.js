@@ -1574,90 +1574,39 @@ async function fetchTushareFundamentals(symbol) {
 // Phase 3.2: J-Quants 集成（日股 fundamentals + 价格 + 5 年历史）
 // API 文档: https://jpx.gitbook.io/j-quants-en/api-reference
 // ============================================================
-const JQUANTS_API = 'https://api.jquants.com/v1';
-let jquantsTokens = null; // { idToken, refreshToken, idTokenExp, refreshTokenExp }
-
-async function getJQuantsIdToken() {
-  const now = Date.now();
-
-  // 缓存的 idToken 还有效（24h 内）→ 直接用
-  if (jquantsTokens?.idToken && jquantsTokens.idTokenExp > now + 60000) {
-    return jquantsTokens.idToken;
-  }
-
-  // 准备 refreshToken：优先用环境变量提供的（用户从 J-Quants 控制台手动复制的）
-  // 否则用之前缓存的 refreshToken
-  const envRefreshToken = process.env.JQUANTS_REFRESH_TOKEN;
-  let refreshToken = envRefreshToken || jquantsTokens?.refreshToken;
-  let refreshTokenExp = envRefreshToken
-    ? now + 6 * 24 * 60 * 60 * 1000  // env 提供的，假设刚配置时是新鲜的
-    : jquantsTokens?.refreshTokenExp;
-
-  // refreshToken 有效 → 换 idToken
-  if (refreshToken && (envRefreshToken || refreshTokenExp > now + 60000)) {
-    try {
-      const resp = await fetch(`${JQUANTS_API}/token/auth_refresh?refreshtoken=${encodeURIComponent(refreshToken)}`, { method: 'POST' });
-      if (resp.ok) {
-        const data = await resp.json();
-        jquantsTokens = {
-          idToken: data.idToken,
-          refreshToken,
-          idTokenExp: now + 23 * 60 * 60 * 1000,
-          refreshTokenExp: refreshTokenExp || (now + 6 * 24 * 60 * 60 * 1000),
-        };
-        console.log('✅ J-Quants idToken refreshed via refreshToken');
-        return jquantsTokens.idToken;
-      } else {
-        const txt = await resp.text();
-        console.warn(`J-Quants refresh failed HTTP ${resp.status}: ${txt.slice(0, 100)}`);
-      }
-    } catch (e) { console.warn('J-Quants refresh exception:', e.message); }
-  }
-
-  // refreshToken 没有 / 失效 → 用 email+password 重新登录拿一套新的
-  const email = process.env.JQUANTS_EMAIL;
-  const password = process.env.JQUANTS_PASSWORD;
-  if (!email || !password) {
-    throw new Error('J-Quants 凭证未配置：请在 Render 设置 JQUANTS_EMAIL+JQUANTS_PASSWORD（推荐）或 JQUANTS_REFRESH_TOKEN（每 7 天需手动更新）');
-  }
-
-  const authResp = await fetch(`${JQUANTS_API}/token/auth_user`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ mailaddress: email, password }),
-  });
-  if (!authResp.ok) {
-    const txt = await authResp.text();
-    throw new Error(`J-Quants auth_user HTTP ${authResp.status}: ${txt.slice(0, 120)}`);
-  }
-  const authData = await authResp.json();
-  const newRefreshToken = authData.refreshToken;
-  if (!newRefreshToken) throw new Error('J-Quants auth_user: response missing refreshToken');
-
-  const idResp = await fetch(`${JQUANTS_API}/token/auth_refresh?refreshtoken=${encodeURIComponent(newRefreshToken)}`, { method: 'POST' });
-  if (!idResp.ok) throw new Error(`J-Quants auth_refresh HTTP ${idResp.status}`);
-  const idData = await idResp.json();
-
-  jquantsTokens = {
-    idToken: idData.idToken,
-    refreshToken: newRefreshToken,
-    idTokenExp: now + 23 * 60 * 60 * 1000,
-    refreshTokenExp: now + 6 * 24 * 60 * 60 * 1000,
-  };
-  console.log('✅ J-Quants 完整登录成功（email+password）');
-  return jquantsTokens.idToken;
-}
+// J-Quants V2 API（2025-12-22 后注册的账号必须用 V2 + API Key 认证）
+const JQUANTS_API = 'https://api.jquants.com/v2';
 
 async function fetchJQuants(endpoint, params = {}) {
-  const token = await getJQuantsIdToken();
-  const qs = new URLSearchParams(params);
-  const url = `${JQUANTS_API}${endpoint}?${qs}`;
-  const resp = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-  if (!resp.ok) {
-    const txt = await resp.text();
-    throw new Error(`J-Quants ${endpoint} HTTP ${resp.status}: ${txt.slice(0, 100)}`);
+  const apiKey = process.env.JQUANTS_API_KEY;
+  if (!apiKey) {
+    throw new Error('J-Quants 凭证未配置：请在 Render 设置 JQUANTS_API_KEY（V2 API Key，从 J-Quants 控制台 API Keys 页面获取）');
   }
-  return resp.json();
+
+  // V2 用 pagination_key 分页，需要循环抓取所有数据
+  const allData = [];
+  let paginationKey = null;
+  let pageCount = 0;
+
+  while (true) {
+    const query = { ...params };
+    if (paginationKey) query.pagination_key = paginationKey;
+    const qs = new URLSearchParams(query);
+    const url = `${JQUANTS_API}${endpoint}?${qs}`;
+    const resp = await fetch(url, { headers: { 'x-api-key': apiKey } });
+    if (!resp.ok) {
+      const txt = await resp.text();
+      throw new Error(`J-Quants ${endpoint} HTTP ${resp.status}: ${txt.slice(0, 100)}`);
+    }
+    const payload = await resp.json();
+    if (Array.isArray(payload.data)) allData.push(...payload.data);
+
+    paginationKey = payload.pagination_key || null;
+    pageCount++;
+    if (!paginationKey || pageCount >= 10) break; // 安全上限：单次最多 10 页
+  }
+
+  return { data: allData };
 }
 
 // Yahoo .T → J-Quants 5位代码（4位 + check digit '0'）
@@ -1673,38 +1622,42 @@ async function fetchJQuantsFundamentals(symbol) {
   const code = yahooToJQuantsCode(symbol);
   if (!code) throw new Error(`Invalid JP symbol: ${symbol}`);
 
-  // 1. 上市公司基本信息
+  // 1. 上市公司基本信息（V2: /equities/master，字段名缩写）
   try {
-    const info = await fetchJQuants('/listed/info', { code });
-    if (info.info && info.info.length > 0) {
-      const i = info.info[0];
-      result.raw_json.listed_info = i;
-      result.company_name = i.CompanyName || i.CompanyNameEnglish || null;
-      result.sector       = i.Sector33CodeName || i.Sector17CodeName || null;
-      result.industry     = i.Sector33CodeName || null;
+    const info = await fetchJQuants('/equities/master', { code });
+    if (info.data && info.data.length > 0) {
+      const i = info.data[0];
+      result.raw_json.eq_master = i;
+      result.company_name = i.CoName || i.CoNameEn || null;
+      result.sector       = i.S33Nm || i.S17Nm || null;
+      result.industry     = i.S33Nm || null;
       result.country      = '日本';
       result.currency     = 'JPY';
-      result.exchange     = i.MarketCodeName || 'TSE';
+      result.exchange     = i.MktNm || 'TSE';
     }
-  } catch (e) { console.warn(`J-Quants /listed/info failed for ${symbol}:`, e.message); }
+  } catch (e) { console.warn(`J-Quants /equities/master failed for ${symbol}:`, e.message); }
 
   // 2. 价格（最近交易日 + 1 年历史用于 52W 高低/SMA）
+  // V2: /equities/bars/daily，字段名 O/H/L/C/Vo
   try {
     const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
     const yearAgo = new Date(Date.now() - 365*86400000).toISOString().slice(0, 10).replace(/-/g, '');
-    const prices = await fetchJQuants('/prices/daily_quotes', { code, from: yearAgo, to: today });
-    if (prices.daily_quotes && prices.daily_quotes.length > 0) {
-      const sorted = prices.daily_quotes.sort((a, b) => b.Date.localeCompare(a.Date));
+    const prices = await fetchJQuants('/equities/bars/daily', { code, from: yearAgo, to: today });
+    if (prices.data && prices.data.length > 0) {
+      const sorted = prices.data.sort((a, b) => (b.Date || '').localeCompare(a.Date || ''));
       const latest = sorted[0];
       result.raw_json.daily_quote_latest = latest;
-      result.price          = parseFloat(latest.Close) || null;
-      result.day_change     = (parseFloat(latest.Close) - parseFloat(latest.Open)) || null;
-      result.day_change_pct = result.price && latest.Open
-        ? ((result.price - parseFloat(latest.Open)) / parseFloat(latest.Open)) * 100
+      const closeP = parseFloat(latest.C);
+      const openP  = parseFloat(latest.O);
+      result.price          = isNaN(closeP) ? null : closeP;
+      result.day_change     = (!isNaN(closeP) && !isNaN(openP)) ? closeP - openP : null;
+      result.day_change_pct = (result.price && openP)
+        ? ((result.price - openP) / openP) * 100
         : null;
-      result.volume = parseFloat(latest.Volume) || null;
+      const vol = parseFloat(latest.Vo);
+      result.volume = isNaN(vol) ? null : vol;
 
-      const closes = sorted.map(p => parseFloat(p.Close)).filter(p => !isNaN(p));
+      const closes = sorted.map(p => parseFloat(p.C)).filter(p => !isNaN(p));
       if (closes.length > 0) {
         result.year_high = Math.max(...closes);
         result.year_low  = Math.min(...closes);
@@ -1720,24 +1673,24 @@ async function fetchJQuantsFundamentals(symbol) {
         result.price_avg_200 = sma200;
       }
     }
-  } catch (e) { console.warn(`J-Quants /prices/daily_quotes failed for ${symbol}:`, e.message); }
+  } catch (e) { console.warn(`J-Quants /equities/bars/daily failed for ${symbol}:`, e.message); }
 
-  // 3. 财报 Summary（Light 计划仅 Summary）
+  // 3. 财报 Summary（V2: /fins/summary，字段名缩写）
   try {
-    const stmts = await fetchJQuants('/fins/statements', { code });
-    if (stmts.statements && stmts.statements.length > 0) {
+    const stmts = await fetchJQuants('/fins/summary', { code });
+    if (stmts.data && stmts.data.length > 0) {
       // 按披露日期降序
-      const sorted = stmts.statements.sort((a, b) => (b.DisclosedDate || '').localeCompare(a.DisclosedDate || ''));
+      const sorted = stmts.data.sort((a, b) => (b.DiscDate || '').localeCompare(a.DiscDate || ''));
       const latest = sorted[0];
       result.raw_json.statements_latest = latest;
 
-      // 关键财务字段
-      result.eps = parseFloat(latest.EarningsPerShare) || null;
-      const bps = parseFloat(latest.BookValuePerShare);
-      const totalRev = parseFloat(latest.NetSales) || parseFloat(latest.OperatingRevenue);
-      const opIncome = parseFloat(latest.OperatingProfit);
-      const netIncome = parseFloat(latest.Profit);
-      const equity = parseFloat(latest.Equity);
+      // V2 财务字段映射（短字段名）
+      result.eps = parseFloat(latest.EPS) || null;
+      const bps = parseFloat(latest.BPS);
+      const totalRev = parseFloat(latest.Sales);
+      const opIncome = parseFloat(latest.OP);
+      const netIncome = parseFloat(latest.NP);
+      const equity = parseFloat(latest.Eq);
 
       if (result.price && result.eps) result.pe_ratio = result.price / result.eps;
       if (result.price && bps && bps > 0) result.pb_ratio = result.price / bps;
@@ -1746,23 +1699,22 @@ async function fetchJQuantsFundamentals(symbol) {
       if (netIncome && equity && equity > 0) result.roe = netIncome / equity;
 
       // Forward EPS → Forward PE
-      const fwdEps = parseFloat(latest.ForecastEarningsPerShare);
+      const fwdEps = parseFloat(latest.FEPS);
       if (result.price && fwdEps) result.forward_pe = result.price / fwdEps;
 
-      // 年度分红 → 股息率
-      const divPerShare = parseFloat(latest.ResultDividendPerShareAnnual)
-                       || parseFloat(latest.ForecastDividendPerShareAnnual);
+      // 年度每股分红 → 股息率（DivAnn = 实际年度，FDivAnn = 预测年度）
+      const divPerShare = parseFloat(latest.DivAnn) || parseFloat(latest.FDivAnn);
       if (result.price && divPerShare) result.dividend_yield = divPerShare / result.price;
       if (divPerShare) result.last_dividend = divPerShare;
 
       // shares outstanding (用于市值)
-      const shares = parseFloat(latest.NumberOfIssuedAndOutstandingSharesAtTheEndOfFiscalYearIncludingTreasuryStock);
+      const shares = parseFloat(latest.ShOutFY);
       if (shares && result.price) {
         result.shares_out = shares;
         result.market_cap = shares * result.price;
       }
     }
-  } catch (e) { console.warn(`J-Quants /fins/statements failed for ${symbol}:`, e.message); }
+  } catch (e) { console.warn(`J-Quants /fins/summary failed for ${symbol}:`, e.message); }
 
   // 数值字段统一 Number 化
   ['market_cap','beta','last_dividend','day_change','day_change_pct','volume','avg_volume',
@@ -1798,7 +1750,7 @@ function hasSourceData(obj) {
 async function fetchFundamentalsByMarket(symbol) {
   const upper = symbol.toUpperCase();
   const hasTushare = !!process.env.TUSHARE_TOKEN;
-  const hasJQuants = !!(process.env.JQUANTS_REFRESH_TOKEN || (process.env.JQUANTS_EMAIL && process.env.JQUANTS_PASSWORD));
+  const hasJQuants = !!process.env.JQUANTS_API_KEY;
 
   // 日股 → J-Quants 主，FMP 兜底
   if (upper.endsWith('.T')) {
