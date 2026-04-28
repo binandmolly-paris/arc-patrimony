@@ -3928,13 +3928,14 @@
     }
 
     // ===== Phase 2: 基本面 Fundamentals =====
-    // FMP 返回的 ROE / dividend_yield 有时是小数(0.15)，有时是百分数(15)，统一显示
+    // FMP 的 ROE / ROIC / 利润率 / 股息率 / 派息率 等字段总是 decimal 形式
+    // (0.15 = 15%, 1.5 = 150% 表示苹果这种回购大户)，无脑 × 100 即可
+    // 注意：day_change_pct 不能用此函数（FMP 那个字段已经是百分数形式）
     function pctSmart(v) {
         if (v == null) return null;
         const n = parseFloat(v);
         if (isNaN(n)) return null;
-        const v100 = Math.abs(n) < 1 ? n * 100 : n;
-        return v100.toFixed(2) + '%';
+        return (n * 100).toFixed(2) + '%';
     }
 
     function fmtMarketCap(n) {
@@ -4010,7 +4011,7 @@
                                                                 : null,
                                                           color: '#cbd5e1' },
                         { label: '日变动 Day Chg',        value: f.day_change_pct != null
-                                                                ? (parseFloat(f.day_change_pct) >= 0 ? '+' : '') + pctSmart(f.day_change_pct)
+                                                                ? (parseFloat(f.day_change_pct) >= 0 ? '+' : '') + parseFloat(f.day_change_pct).toFixed(2) + '%'
                                                                 : null,
                                                           color: parseFloat(f.day_change_pct) >= 0 ? '#4ade80' : '#f87171' },
                         { label: '50日均价 SMA50',        value: num(f.price_avg_50),        color: '#94a3b8' },
