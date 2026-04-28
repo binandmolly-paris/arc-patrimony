@@ -1191,106 +1191,125 @@ async function getYahooSession(forceRefresh = false) {
 
 async function fetchYahooFundamentals(symbol) {
   const result = { symbol, source: 'yahoo', raw_json: {} };
-  const modules = [
-    'summaryDetail', 'defaultKeyStatistics', 'financialData',
-    'price', 'assetProfile', 'calendarEvents', 'earnings'
-  ];
-  const session = await getYahooSession();
 
-  const buildUrl = (s) => {
-    const crumb = s?.crumb ? `&crumb=${encodeURIComponent(s.crumb)}` : '';
-    return `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=${modules.join(',')}${crumb}`;
-  };
-  const buildHeaders = (s) => ({
-    'User-Agent': YAHOO_UA,
-    'Accept': 'application/json',
-    'Accept-Language': 'en-US,en;q=0.5',
-    ...(s?.cookies ? { 'Cookie': s.cookies } : {}),
-  });
+  // ========================================================
+  // 第 1 步：v7/finance/quote — 限速宽松，无需 crumb，覆盖大部分关键字段
+  // 此 endpoint 跟 chart endpoint 同级别，对 Render 数据中心 IP 友好
+  // ========================================================
+  try {
+    const v7Url = `https://query2.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(symbol)}`;
+    const v7Resp = await fetch(v7Url, {
+      headers: {
+        'User-Agent': YAHOO_UA,
+        'Accept': 'application/json',
+        'Accept-Language': 'en-US,en;q=0.5',
+      },
+    });
+    if (v7Resp.ok) {
+      const v7Data = await v7Resp.json();
+      const q = v7Data?.quoteResponse?.result?.[0];
+      if (q) {
+        result.raw_json.v7_quote = q;
+        result.company_name   = q.longName || q.shortName || null;
+        result.exchange       = q.fullExchangeName || q.exchange || null;
+        result.currency       = q.currency || null;
+        result.market_cap     = q.marketCap ?? null;
+        result.shares_out     = q.sharesOutstanding ?? null;
+        result.price          = q.regularMarketPrice ?? null;
+        result.day_change     = q.regularMarketChange ?? null;
+        result.day_change_pct = q.regularMarketChangePercent ?? null;  // v7 已是 percent 形式
+        result.volume         = q.regularMarketVolume ?? null;
+        result.avg_volume     = q.averageDailyVolume3Month ?? null;
+        result.year_high      = q.fiftyTwoWeekHigh ?? null;
+        result.year_low       = q.fiftyTwoWeekLow ?? null;
+        result.price_avg_50   = q.fiftyDayAverage ?? null;
+        result.price_avg_200  = q.twoHundredDayAverage ?? null;
+        result.pe_ratio       = q.trailingPE ?? null;
+        result.forward_pe     = q.forwardPE ?? null;
+        result.eps            = q.epsTrailingTwelveMonths ?? null;
+        result.pb_ratio       = q.priceToBook ?? null;
+        // v7 dividend yield 已是 percent (1.5 = 1.5%)，转为 decimal 形式（0.015）与其他源对齐
+        result.dividend_yield = q.trailingAnnualDividendYield != null ? q.trailingAnnualDividendYield
+                              : (q.dividendYield != null ? q.dividendYield / 100 : null);
+        result.last_dividend  = q.trailingAnnualDividendRate ?? null;
+        if (result.year_low != null && result.year_high != null) {
+          result.range_52w = `${result.year_low} - ${result.year_high}`;
+        }
+      }
+    } else {
+      console.warn(`Yahoo v7/quote HTTP ${v7Resp.status} for ${symbol}`);
+    }
+  } catch (e) {
+    console.warn(`Yahoo v7/quote 失败 for ${symbol}:`, e.message);
+  }
 
-  let resp = await fetch(buildUrl(session), { headers: buildHeaders(session) });
-  // 401 / 403 / Invalid Crumb → 重新建立 session 一次
-  if (resp.status === 401 || resp.status === 403) {
-    const fresh = await getYahooSession(true);
-    if (fresh) {
-      resp = await fetch(buildUrl(fresh), { headers: buildHeaders(fresh) });
+  // ========================================================
+  // 第 2 步：v10/quoteSummary — 限速严，仅在 v7 拿不到的深度字段（ROE/利润率/PEG/Beta）调用
+  // 失败不影响 v7 已拿到的字段
+  // ========================================================
+  const needDeep = result.roe == null || result.gross_margin == null || result.peg_ratio == null;
+  if (needDeep) {
+    try {
+      const session = await getYahooSession();
+      const modules = ['defaultKeyStatistics', 'financialData', 'assetProfile', 'summaryDetail'];
+      const buildUrl = (s) => {
+        const crumb = s?.crumb ? `&crumb=${encodeURIComponent(s.crumb)}` : '';
+        return `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=${modules.join(',')}${crumb}`;
+      };
+      const buildHeaders = (s) => ({
+        'User-Agent': YAHOO_UA,
+        'Accept': 'application/json',
+        'Accept-Language': 'en-US,en;q=0.5',
+        ...(s?.cookies ? { 'Cookie': s.cookies } : {}),
+      });
+      let resp = await fetch(buildUrl(session), { headers: buildHeaders(session) });
+      if (resp.status === 401 || resp.status === 403) {
+        const fresh = await getYahooSession(true);
+        if (fresh) resp = await fetch(buildUrl(fresh), { headers: buildHeaders(fresh) });
+      }
+      if (resp.ok) {
+        const data = await resp.json();
+        const r = data?.quoteSummary?.result?.[0];
+        if (r) {
+          result.raw_json.v10_quoteSummary = r;
+          const sd = r.summaryDetail || {};
+          const ks = r.defaultKeyStatistics || {};
+          const fd = r.financialData || {};
+          const ap = r.assetProfile || {};
+
+          // 用 v10 补 v7 没给的深度字段
+          result.sector            = result.sector            ?? (ap.sector || null);
+          result.industry          = result.industry          ?? (ap.industry || null);
+          result.country           = result.country           ?? (ap.country || null);
+          result.ceo               = result.ceo               ?? ((ap.companyOfficers && ap.companyOfficers[0]?.name) || null);
+          result.website           = result.website           ?? (ap.website || null);
+          result.description       = result.description       ?? (ap.longBusinessSummary ? ap.longBusinessSummary.slice(0, 2000) : null);
+          result.employees         = result.employees         ?? yRaw(ap, 'fullTimeEmployees');
+          result.peg_ratio         = result.peg_ratio         ?? yRaw(ks, 'pegRatio');
+          result.beta              = result.beta              ?? yRaw(sd, 'beta') ?? yRaw(ks, 'beta');
+          result.ps_ratio          = result.ps_ratio          ?? yRaw(sd, 'priceToSalesTrailing12Months');
+          result.payout_ratio      = result.payout_ratio      ?? yRaw(sd, 'payoutRatio');
+          result.roe               = result.roe               ?? yRaw(fd, 'returnOnEquity');
+          result.gross_margin      = result.gross_margin      ?? yRaw(fd, 'grossMargins');
+          result.operating_margin  = result.operating_margin  ?? yRaw(fd, 'operatingMargins');
+          result.net_margin        = result.net_margin        ?? yRaw(fd, 'profitMargins');
+          let dte = yRaw(fd, 'debtToEquity');
+          if (dte != null && dte > 10) dte = dte / 100;
+          result.debt_to_equity    = result.debt_to_equity    ?? dte;
+          result.current_ratio     = result.current_ratio     ?? yRaw(fd, 'currentRatio');
+        }
+      } else {
+        console.warn(`Yahoo v10 HTTP ${resp.status} for ${symbol}（v7 字段保留）`);
+      }
+    } catch (e) {
+      console.warn(`Yahoo v10 失败 for ${symbol}（v7 字段保留）:`, e.message);
     }
   }
-  if (!resp.ok) {
-    const txt = await resp.text();
-    throw new Error(`Yahoo HTTP ${resp.status}: ${txt.slice(0, 120)}`);
+
+  // 如果 v7 + v10 都没拿到关键数据，抛错让 hybrid 知道
+  if (!hasSourceData(result)) {
+    throw new Error('Yahoo: v7 + v10 均无关键字段');
   }
-  const data = await resp.json();
-  const r = data?.quoteSummary?.result?.[0];
-  if (!r) {
-    const errInfo = data?.quoteSummary?.error;
-    throw new Error(`Yahoo: no result${errInfo ? ' · ' + JSON.stringify(errInfo).slice(0, 100) : ''}`);
-  }
-  result.raw_json = r;
-
-  const sd = r.summaryDetail || {};
-  const ks = r.defaultKeyStatistics || {};
-  const fd = r.financialData || {};
-  const pr = r.price || {};
-  const ap = r.assetProfile || {};
-
-  // 公司基础信息
-  result.company_name = pr.longName || pr.shortName || null;
-  result.sector       = ap.sector || null;
-  result.industry     = ap.industry || null;
-  result.country      = ap.country || null;
-  result.currency     = pr.currency || null;
-  result.exchange     = pr.exchangeName || pr.exchange || null;
-  result.ceo          = (ap.companyOfficers && ap.companyOfficers[0]?.name) || null;
-  result.website      = ap.website || null;
-  result.description  = ap.longBusinessSummary ? ap.longBusinessSummary.slice(0, 2000) : null;
-  result.employees    = yRaw(ap, 'fullTimeEmployees');
-
-  // 价格与市场数据
-  result.price          = yRaw(fd, 'currentPrice') ?? yRaw(pr, 'regularMarketPrice');
-  result.market_cap     = yRaw(pr, 'marketCap') ?? yRaw(sd, 'marketCap');
-  result.day_change     = yRaw(pr, 'regularMarketChange');
-  // Yahoo 给的 changePercent 是 decimal（-0.0127 = -1.27%），× 100 转为 percent 形式与 FMP 对齐
-  const yPct = yRaw(pr, 'regularMarketChangePercent');
-  result.day_change_pct = yPct != null ? yPct * 100 : null;
-  result.volume         = yRaw(pr, 'regularMarketVolume') ?? yRaw(sd, 'volume');
-  result.avg_volume     = yRaw(sd, 'averageVolume');
-  result.year_high      = yRaw(sd, 'fiftyTwoWeekHigh');
-  result.year_low       = yRaw(sd, 'fiftyTwoWeekLow');
-  result.price_avg_50   = yRaw(sd, 'fiftyDayAverage');
-  result.price_avg_200  = yRaw(sd, 'twoHundredDayAverage');
-  result.shares_out     = yRaw(ks, 'sharesOutstanding') ?? yRaw(ks, 'floatShares');
-  if (result.year_low != null && result.year_high != null) {
-    result.range_52w = `${result.year_low} - ${result.year_high}`;
-  }
-
-  // 估值
-  result.pe_ratio      = yRaw(sd, 'trailingPE') ?? yRaw(ks, 'trailingPE');
-  result.forward_pe    = yRaw(sd, 'forwardPE') ?? yRaw(ks, 'forwardPE');
-  result.pb_ratio      = yRaw(ks, 'priceToBook');
-  result.ps_ratio      = yRaw(sd, 'priceToSalesTrailing12Months');
-  result.peg_ratio     = yRaw(ks, 'pegRatio');
-  result.eps           = yRaw(ks, 'trailingEps');
-  result.beta          = yRaw(sd, 'beta') ?? yRaw(ks, 'beta');
-
-  // 盈利能力（Yahoo 都用 decimal 形式）
-  result.roe              = yRaw(fd, 'returnOnEquity');
-  result.gross_margin     = yRaw(fd, 'grossMargins');
-  result.operating_margin = yRaw(fd, 'operatingMargins');
-  result.net_margin       = yRaw(fd, 'profitMargins');
-  // Yahoo 没有 ROIC，留 null（FMP 端可填）
-
-  // 财务健康
-  let dte = yRaw(fd, 'debtToEquity');
-  // Yahoo 的 debtToEquity 是 percent 形式（145.6 表示 1.456 ratio），归一化
-  if (dte != null && dte > 10) dte = dte / 100;
-  result.debt_to_equity = dte;
-  result.current_ratio  = yRaw(fd, 'currentRatio');
-
-  // 股息
-  result.dividend_yield = yRaw(sd, 'dividendYield');
-  result.payout_ratio   = yRaw(sd, 'payoutRatio');
-  result.last_dividend  = yRaw(sd, 'dividendRate');
 
   // 数值字段统一转 Number
   ['market_cap','beta','last_dividend','day_change','day_change_pct','volume','avg_volume',
@@ -1409,12 +1428,17 @@ function hasSourceData(obj) {
          || obj.dividend_yield || obj.roe || obj.day_change_pct || obj.price);
 }
 
+// Phase 2.3.2: Yahoo 默认启用（已切换到 v7/quote 主源 + v10 备源策略）
+// v7/quote 与 chart endpoint 同级别限速，对 Render IP 友好
+// 如需紧急禁用：Render 环境变量 ENABLE_YAHOO=false
+const ENABLE_YAHOO = process.env.ENABLE_YAHOO !== 'false';
+
 // 双源同时拉取 + 融合（Phase 2.3 主入口；空数据时抛带明细的错）
 async function fetchFundamentalsHybrid(symbol) {
-  const [yResult, fResult] = await Promise.allSettled([
-    fetchYahooFundamentals(symbol),
-    fetchFMPFundamentals(symbol),
-  ]);
+  const calls = ENABLE_YAHOO
+    ? [fetchYahooFundamentals(symbol), fetchFMPFundamentals(symbol)]
+    : [Promise.resolve({}), fetchFMPFundamentals(symbol)];
+  const [yResult, fResult] = await Promise.allSettled(calls);
   const yahoo = yResult.status === 'fulfilled' ? yResult.value : {};
   const fmp   = fResult.status === 'fulfilled' ? fResult.value : {};
 
@@ -1545,8 +1569,8 @@ async function saveFundamentalsToDB(d) {
   ]);
 }
 
-// Phase 2.3 调试 endpoint：单独测试 Yahoo / FMP 单源，看具体返回内容/错误
-app.get("/api/debug/source/:source/:symbol", auth, async (req, res) => {
+// Phase 2.3 调试 endpoint：单独测试 Yahoo / FMP 单源（公开访问，仅供诊断用）
+app.get("/api/debug/source/:source/:symbol", async (req, res) => {
   const source = req.params.source;
   const symbol = req.params.symbol.trim().toUpperCase();
   const fn = source === 'yahoo' ? fetchYahooFundamentals
