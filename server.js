@@ -1140,26 +1140,92 @@ const yRaw = (obj, key) => {
   return null;
 };
 
+// Yahoo Finance 反爬：先取 session cookie + crumb token，再用 crumb 访问 quoteSummary
+// 这是 yfinance / yahoo-finance2 等主流库使用的标准流程
+const YAHOO_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+let yahooSession = null; // { cookies, crumb, expiresAt }
+
+async function getYahooSession(forceRefresh = false) {
+  if (!forceRefresh && yahooSession && yahooSession.expiresAt > Date.now()) {
+    return yahooSession;
+  }
+  try {
+    // Step 1: 触达 fc.yahoo.com 获取 session cookies (A1 / A1S 等)
+    const r1 = await fetch('https://fc.yahoo.com', {
+      headers: { 'User-Agent': YAHOO_UA, 'Accept': '*/*', 'Accept-Language': 'en-US,en;q=0.5' },
+      redirect: 'manual',
+    });
+    let cookies = '';
+    const setCookies = (typeof r1.headers.getSetCookie === 'function')
+      ? r1.headers.getSetCookie()
+      : (r1.headers.raw ? r1.headers.raw()['set-cookie'] : []);
+    if (Array.isArray(setCookies) && setCookies.length > 0) {
+      cookies = setCookies.map(c => c.split(';')[0]).join('; ');
+    }
+
+    // Step 2: 用 cookie 拿 crumb
+    const r2 = await fetch('https://query2.finance.yahoo.com/v1/test/getcrumb', {
+      headers: {
+        'User-Agent': YAHOO_UA,
+        'Accept': 'text/plain',
+        'Cookie': cookies,
+      },
+    });
+    const crumbBody = (await r2.text()).trim();
+    if (!r2.ok || !crumbBody || crumbBody.length > 50 || crumbBody.length < 5) {
+      throw new Error(`crumb fetch HTTP ${r2.status}, body length ${crumbBody.length}`);
+    }
+    yahooSession = {
+      cookies,
+      crumb: crumbBody,
+      expiresAt: Date.now() + 60 * 60 * 1000, // 1 小时
+    };
+    console.log(`✅ Yahoo session 建立: crumb=${crumbBody.slice(0, 8)}..., cookies len=${cookies.length}`);
+    return yahooSession;
+  } catch (e) {
+    console.warn(`⚠️ Yahoo session 建立失败: ${e.message}（将无 crumb 重试）`);
+    yahooSession = null;
+    return null;
+  }
+}
+
 async function fetchYahooFundamentals(symbol) {
   const result = { symbol, source: 'yahoo', raw_json: {} };
   const modules = [
     'summaryDetail', 'defaultKeyStatistics', 'financialData',
     'price', 'assetProfile', 'calendarEvents', 'earnings'
   ];
-  const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=${modules.join(',')}`;
+  const session = await getYahooSession();
 
-  const resp = await fetch(url, {
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      'Accept': 'application/json',
-    },
+  const buildUrl = (s) => {
+    const crumb = s?.crumb ? `&crumb=${encodeURIComponent(s.crumb)}` : '';
+    return `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=${modules.join(',')}${crumb}`;
+  };
+  const buildHeaders = (s) => ({
+    'User-Agent': YAHOO_UA,
+    'Accept': 'application/json',
+    'Accept-Language': 'en-US,en;q=0.5',
+    ...(s?.cookies ? { 'Cookie': s.cookies } : {}),
   });
+
+  let resp = await fetch(buildUrl(session), { headers: buildHeaders(session) });
+  // 401 / 403 / Invalid Crumb → 重新建立 session 一次
+  if (resp.status === 401 || resp.status === 403) {
+    const fresh = await getYahooSession(true);
+    if (fresh) {
+      resp = await fetch(buildUrl(fresh), { headers: buildHeaders(fresh) });
+    }
+  }
   if (!resp.ok) {
-    throw new Error(`Yahoo quoteSummary HTTP ${resp.status}`);
+    const txt = await resp.text();
+    throw new Error(`Yahoo HTTP ${resp.status}: ${txt.slice(0, 120)}`);
   }
   const data = await resp.json();
   const r = data?.quoteSummary?.result?.[0];
-  if (!r) throw new Error('Yahoo: no result');
+  if (!r) {
+    const errInfo = data?.quoteSummary?.error;
+    throw new Error(`Yahoo: no result${errInfo ? ' · ' + JSON.stringify(errInfo).slice(0, 100) : ''}`);
+  }
   result.raw_json = r;
 
   const sd = r.summaryDetail || {};
@@ -1520,6 +1586,7 @@ app.post("/api/fundamentals/refresh-all", auth, async (req, res) => {
       ok: 0, failed: [], total: r.rows.length,
       sources: { 'yahoo+fmp': 0, yahoo: 0, fmp: 0 },
       total_discrepancies: 0,
+      first_error: null,  // Phase 2.3 调试：暴露首个失败的具体原因
     };
     for (const row of r.rows) {
       try {
@@ -1530,8 +1597,9 @@ app.post("/api/fundamentals/refresh-all", auth, async (req, res) => {
         if (data.discrepancies) result.total_discrepancies += Object.keys(data.discrepancies).length;
       } catch (e) {
         result.failed.push({ symbol: row.symbol, error: e.message });
+        if (!result.first_error) result.first_error = `${row.symbol}: ${e.message}`;
+        console.warn(`❌ ${row.symbol}: ${e.message}`);
       }
-      // 双源：Yahoo + FMP 各 1 次。300ms 间隔保护双方限流
       await new Promise(rs => setTimeout(rs, 300));
     }
     res.json(result);
