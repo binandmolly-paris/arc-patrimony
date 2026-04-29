@@ -2747,33 +2747,39 @@ ${JSON.stringify(portfolioBrief, null, 2)}
 
 ⚠️ 严格遵守 system prompt 中的铁律：只看 PE/财务，不看单纯股价；必须有 web_search 实证；港股数据不全的标"建议持有"。`;
 
-  // 调 Claude（含 web_search 工具 + adaptive thinking + prompt cache）
-  // 处理 pause_turn（web_search 服务端循环达到 10 次会暂停）
-  const messages = [{ role: 'user', content: userPrompt }];
+  // 流式调用 Claude (Sonnet 4.6 + adaptive thinking + web_search + prompt cache)
+  // 流式可以避免 Render proxy / SDK 超时；pause_turn 时 replace messages 不要 append
+  console.log(`🤖 AI report STARTED user=${userId} date=${today}`);
+  let messages = [{ role: 'user', content: userPrompt }];
   let response;
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
   let cacheReadTokens = 0;
-  for (let attempt = 0; attempt < 4; attempt++) {
-    response = await client.messages.create({
-      model: 'claude-opus-4-7',
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const stream = client.messages.stream({
+      model: 'claude-sonnet-4-6',
       max_tokens: 16000,
       thinking: { type: 'adaptive' },
-      output_config: { effort: 'high' },
+      output_config: { effort: 'medium' },
       system: [{
         type: 'text',
         text: AI_REPORT_SYSTEM_PROMPT,
         cache_control: { type: 'ephemeral' },
       }],
-      tools: [{ type: 'web_search_20260209', name: 'web_search', max_uses: 7 }],
+      tools: [{ type: 'web_search_20260209', name: 'web_search', max_uses: 4 }],
       messages,
     });
+    response = await stream.finalMessage();
     totalInputTokens += response.usage.input_tokens || 0;
     totalOutputTokens += response.usage.output_tokens || 0;
     cacheReadTokens += response.usage.cache_read_input_tokens || 0;
+    console.log(`🤖 turn=${attempt} stop=${response.stop_reason} in=${response.usage.input_tokens} out=${response.usage.output_tokens}`);
     if (response.stop_reason === 'pause_turn') {
-      // server tool reached iteration limit; resume by appending and re-sending
-      messages.push({ role: 'assistant', content: response.content });
+      // server tool hit cap; resume — REPLACE messages with [user, latest assistant]
+      messages = [
+        { role: 'user', content: userPrompt },
+        { role: 'assistant', content: response.content },
+      ];
       continue;
     }
     break;
@@ -2800,7 +2806,7 @@ ${JSON.stringify(portfolioBrief, null, 2)}
        prompt_tokens = EXCLUDED.prompt_tokens,
        completion_tokens = EXCLUDED.completion_tokens,
        generated_at = NOW()`,
-    [userId, today, summaryMd, 'claude-opus-4-7', totalInputTokens, totalOutputTokens]
+    [userId, today, summaryMd, 'claude-sonnet-4-6', totalInputTokens, totalOutputTokens]
   );
 
   console.log(`🤖 AI report user=${userId} date=${today} | input=${totalInputTokens} output=${totalOutputTokens} cache_read=${cacheReadTokens}`);
