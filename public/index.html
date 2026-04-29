@@ -545,27 +545,21 @@
             margin-bottom: 10px;
             flex-wrap: wrap;
         }
-        .stat-pct-lg {
-            font-size: 22px;
-            font-weight: 600;
+        .stat-pct-lg, .stat-amount-sm {
+            font-size: 19px;
+            font-weight: 500;
             font-family: 'Montserrat', sans-serif;
             letter-spacing: -0.3px;
             line-height: 1;
         }
         .stat-amount-sm {
-            font-size: 13px;
-            font-weight: 400;
-            color: #94a3b8;
-            font-family: 'Montserrat', sans-serif;
-            letter-spacing: -0.2px;
+            color: inherit;  /* 跟 % 同色（涨绿跌红） */
         }
         @media (max-width: 768px) {
-            .stat-pct-lg { font-size: 19px; }
-            .stat-amount-sm { font-size: 12px; }
+            .stat-pct-lg, .stat-amount-sm { font-size: 17px; }
         }
         @media (max-width: 480px) {
-            .stat-pct-lg { font-size: 17px; }
-            .stat-amount-sm { font-size: 11px; }
+            .stat-pct-lg, .stat-amount-sm { font-size: 15px; }
         }
 
         .stat-dot {
@@ -923,6 +917,62 @@
             font-weight: 600;
             color: #e2e8f0;
             margin-bottom: 20px;
+        }
+
+        /* Phase 3.6: 股票输入框自动补全（支持代码或中文名搜索）*/
+        .symbol-autocomplete-wrap {
+            position: relative;
+        }
+        .symbol-autocomplete-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: rgba(15, 23, 42, 0.96);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--gold-border);
+            border-radius: 8px;
+            margin-top: 4px;
+            max-height: 260px;
+            overflow-y: auto;
+            z-index: 1100;
+            display: none;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+        }
+        .symbol-autocomplete-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 9px 12px;
+            cursor: pointer;
+            border-bottom: 1px solid rgba(148,163,184,0.08);
+            transition: background 0.12s;
+        }
+        .symbol-autocomplete-item:last-child { border-bottom: none; }
+        .symbol-autocomplete-item:hover, .symbol-autocomplete-item.active {
+            background: rgba(193,166,115,0.14);
+        }
+        .symbol-autocomplete-item .ac-sym {
+            font-family: Montserrat, sans-serif;
+            font-size: 13px;
+            color: #e2e8f0;
+            font-weight: 500;
+            min-width: 80px;
+        }
+        .symbol-autocomplete-item .ac-name {
+            font-size: 12px;
+            color: #94a3b8;
+            flex: 1;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .symbol-autocomplete-item .ac-region {
+            font-size: 10px;
+            color: #64748b;
+            white-space: nowrap;
         }
 
         .modal-close {
@@ -2444,7 +2494,12 @@
                         <!-- Symbol input (Buy) / picker label (Sell + Dividend) -->
                         <div class="form-group">
                             <label class="form-label" id="tradeSymbolLabel">Stock Symbol</label>
-                            <input type="text" id="tradeSymbol" class="form-input" placeholder="e.g. AAPL / 0700.HK / 7203.T / 600036.SS" onblur="autoFillTrade()" style="text-transform:uppercase;">
+                            <div class="symbol-autocomplete-wrap">
+                                <input type="text" id="tradeSymbol" class="form-input" placeholder="代码或中文名 (AAPL / 苹果 / 腾讯 / 0700.HK)"
+                                    oninput="showSymbolAutocomplete('tradeSymbol', 'tradeSymbolDropdown', selectTradeStock)"
+                                    onblur="setTimeout(() => { const dd=document.getElementById('tradeSymbolDropdown'); if(dd) dd.style.display='none'; autoFillTrade(); }, 200)">
+                                <div id="tradeSymbolDropdown" class="symbol-autocomplete-dropdown"></div>
+                            </div>
                             <!-- Quick pick chips for Sell/Dividend (only existing holdings) -->
                             <div id="tradeHoldingPicker" style="display:none;margin-top:10px;">
                                 <div style="font-size:10px;color:#94a3b8;letter-spacing:0.8px;margin-bottom:6px;">QUICK PICK FROM HOLDINGS</div>
@@ -2545,6 +2600,19 @@
                 </div>
             </div>
 
+            <div class="modal" id="todayPLModal">
+                <div class="modal-content" style="position: relative; max-width: 600px;">
+                    <button class="modal-close" onclick="closeModal('todayPLModal')">×</button>
+                    <div class="modal-header" style="display:flex;justify-content:space-between;align-items:center;">
+                        <span>📊 今日浮盈亏明细</span>
+                        <button onclick="toggleTodayPLSort()" id="todayPLSortBtn" style="background:rgba(193,166,115,0.12);color:var(--gold-light);border:1px solid rgba(193,166,115,0.3);padding:4px 10px;border-radius:6px;font-size:11px;cursor:pointer;">
+                            <span id="todayPLSortIcon">↓</span> <span id="todayPLSortLabel">由高到低</span>
+                        </button>
+                    </div>
+                    <div id="todayPLBreakdownBody"></div>
+                </div>
+            </div>
+
             <div class="modal" id="passwordModal">
                 <div class="modal-content" style="position: relative; max-width: 420px;">
                     <button class="modal-close" onclick="closeModal('passwordModal')">×</button>
@@ -2574,7 +2642,12 @@
                     <div class="modal-header">New Alert</div>
                     <div class="form-group">
                         <label class="form-label">Stock Symbol</label>
-                        <input type="text" id="alertSymbol" class="form-input" placeholder="e.g.: AAPL" onblur="autoFillAlert()" style="text-transform:uppercase;">
+                        <div class="symbol-autocomplete-wrap">
+                            <input type="text" id="alertSymbol" class="form-input" placeholder="代码或中文名 (AAPL / 腾讯 / 0700.HK)"
+                                oninput="showSymbolAutocomplete('alertSymbol', 'alertSymbolDropdown', selectAlertStock)"
+                                onblur="setTimeout(() => { const dd=document.getElementById('alertSymbolDropdown'); if(dd) dd.style.display='none'; autoFillAlert(); }, 200)">
+                            <div id="alertSymbolDropdown" class="symbol-autocomplete-dropdown"></div>
+                        </div>
                     </div>
                     <div class="form-group">
                         <label class="form-label">Stock Name</label>
@@ -2912,10 +2985,10 @@
                     `}
                 </div>
 
-                <!-- ===== Card 2: Today P&L (% 主，金额次) ===== -->
-                <div class="stat-card stat-today ${todayPL>=0?'pulse-up':'pulse-down'}">
+                <!-- ===== Card 2: Today P&L (点击展开详情) ===== -->
+                <div class="stat-card stat-today ${todayPL>=0?'pulse-up':'pulse-down'}" onclick="openTodayPLBreakdown()" style="cursor:pointer;" title="点击查看分地区/分股票明细">
                     <div class="stat-label-row">
-                        <span class="stat-label">Today P&L / 今日浮盈亏</span>
+                        <span class="stat-label">Today P&L / 今日浮盈亏 ›</span>
                         <span class="stat-dot ${todayPL>=0?'dot-up':'dot-down'}"></span>
                     </div>
                     <div class="stat-pnl-row">
@@ -4685,6 +4758,138 @@
         container.innerHTML = html;
     }
 
+    // ===== Today P&L 详情弹窗（Phase 3.6）=====
+    // 排序状态：true = 由高到低（默认），false = 由低到高
+    let todayPLSortDesc = true;
+
+    function openTodayPLBreakdown() {
+        renderTodayPLBreakdown();
+        openModal('todayPLModal');
+    }
+
+    function toggleTodayPLSort() {
+        todayPLSortDesc = !todayPLSortDesc;
+        document.getElementById('todayPLSortIcon').textContent = todayPLSortDesc ? '↓' : '↑';
+        document.getElementById('todayPLSortLabel').textContent = todayPLSortDesc ? '由高到低' : '由低到高';
+        renderTodayPLBreakdown();
+    }
+
+    function renderTodayPLBreakdown() {
+        const body = document.getElementById('todayPLBreakdownBody');
+        if (!body) return;
+        const activeHoldings = APP.holdings.filter(h => h.qty > 0);
+
+        // 重算 latestSessionDate（与首页保持一致）
+        let latestSessionDate = '';
+        activeHoldings.forEach(h => {
+            const pd = APP.prices[h.symbol];
+            if (!pd || !pd.prevClose || !pd.price) return;
+            const d = getStockSessionDate(h, pd);
+            if (d > latestSessionDate) latestSessionDate = d;
+        });
+
+        // 按 region 分组，每股算 delta（按本地货币 → USD）
+        const byRegion = {}; // { region: { included: [{symbol, name, delta, sessionDate}], pending: [...], totalIncluded } }
+        activeHoldings.forEach(h => {
+            const pd = APP.prices[h.symbol];
+            if (!pd || !pd.prevClose || !pd.price) return;
+            const fx = APP.FX_RATES[h.currency] || 1;
+            const delta = h.qty * (pd.price - pd.prevClose) * fx;  // USD
+            const localDelta = h.qty * (pd.price - pd.prevClose);  // 本地货币
+            const sessionDate = getStockSessionDate(h, pd);
+            const r = h.region || '其他';
+            if (!byRegion[r]) byRegion[r] = { included: [], pending: [], totalIncluded: 0, totalPending: 0 };
+            const entry = { symbol: h.symbol, name: h.name || h.symbol, delta, localDelta, currency: h.currency, sessionDate, price: pd.price, prevClose: pd.prevClose };
+            if (sessionDate === latestSessionDate) {
+                byRegion[r].included.push(entry);
+                byRegion[r].totalIncluded += delta;
+            } else {
+                byRegion[r].pending.push(entry);
+                byRegion[r].totalPending += delta;
+            }
+        });
+
+        // 排序方向
+        const cmp = (a, b) => todayPLSortDesc ? (b.delta - a.delta) : (a.delta - b.delta);
+        const cmpRegion = (a, b) => todayPLSortDesc ? (b[1].totalIncluded - a[1].totalIncluded) : (a[1].totalIncluded - b[1].totalIncluded);
+
+        // 区域排序
+        const sortedRegions = Object.entries(byRegion).sort(cmpRegion);
+
+        // 总计
+        const totalIncluded = sortedRegions.reduce((s, [r, info]) => s + info.totalIncluded, 0);
+        const totalPending  = sortedRegions.reduce((s, [r, info]) => s + info.totalPending, 0);
+
+        const flagOf = r => r==='美国'?'🇺🇸':r==='中国'?'🇨🇳':r==='日本'?'🇯🇵':'🌐';
+        const cs = c => c==='CNY'?'¥':c==='JPY'?'¥':c==='HKD'?'HK$':'$';
+        const cls = v => v >= 0 ? 'price-positive' : 'price-negative';
+        const sgn = v => v >= 0 ? '+' : '';
+
+        let html = `
+            <div style="font-size:11px;color:#64748b;margin-bottom:12px;line-height:1.5;">
+                以"全市场最新会话日期 ${latestSessionDate}"为准，本地交易日早于此的进入"待开盘"。
+            </div>
+            <div style="background:rgba(15,23,42,0.5);padding:10px 14px;border-radius:8px;margin-bottom:14px;">
+                <div style="display:flex;justify-content:space-between;font-size:11px;color:#94a3b8;">
+                    <span>已计入今日</span>
+                    <span class="${cls(totalIncluded)}" style="font-weight:600;">${sgn(totalIncluded)}$${fmtNum(totalIncluded)}</span>
+                </div>
+                ${totalPending !== 0 ? `
+                <div style="display:flex;justify-content:space-between;font-size:11px;color:#475569;margin-top:4px;">
+                    <span>⏰ 待开盘（不计入）</span>
+                    <span style="opacity:0.7;">${sgn(totalPending)}$${fmtNum(totalPending)}</span>
+                </div>` : ''}
+            </div>
+        `;
+
+        sortedRegions.forEach(([region, info]) => {
+            if (info.included.length === 0 && info.pending.length === 0) return;
+            const sortedStocks = info.included.slice().sort(cmp);
+            html += `
+                <div style="margin-bottom:14px;">
+                    <div style="display:flex;justify-content:space-between;align-items:baseline;padding:8px 12px;background:rgba(30,41,59,0.45);border-radius:8px 8px 0 0;border:1px solid var(--gold-border);border-bottom:none;">
+                        <span style="font-size:13px;color:#cbd5e1;font-weight:500;">${flagOf(region)} ${region} <span style="color:#64748b;font-size:11px;">(${info.included.length}只已计入)</span></span>
+                        <span class="${cls(info.totalIncluded)}" style="font-size:14px;font-weight:600;font-family:Montserrat;">${sgn(info.totalIncluded)}$${fmtNum(info.totalIncluded)}</span>
+                    </div>
+                    <div style="border:1px solid var(--gold-border);border-radius:0 0 8px 8px;overflow:hidden;">
+            `;
+            sortedStocks.forEach((s, idx) => {
+                const isLast = idx === sortedStocks.length - 1 && info.pending.length === 0;
+                html += `
+                    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;${!isLast ? 'border-bottom:1px solid rgba(148,163,184,0.08);' : ''}">
+                        <div style="min-width:0;flex:1;">
+                            <div style="font-size:13px;color:#e2e8f0;font-weight:500;font-family:Montserrat;">${s.symbol}</div>
+                            <div style="font-size:11px;color:#64748b;margin-top:2px;">${s.name}</div>
+                        </div>
+                        <div style="text-align:right;">
+                            <div class="${cls(s.delta)}" style="font-size:13px;font-weight:500;font-family:Montserrat;">${sgn(s.delta)}$${fmtNum(s.delta, 0)}</div>
+                            <div style="font-size:10px;color:#64748b;margin-top:2px;">${cs(s.currency)}${fmtNum(s.prevClose,2)} → ${cs(s.currency)}${fmtNum(s.price,2)}</div>
+                        </div>
+                    </div>
+                `;
+            });
+            // pending（用淡色显示）
+            info.pending.forEach((s, idx) => {
+                const isLast = idx === info.pending.length - 1;
+                html += `
+                    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;opacity:0.55;${!isLast ? 'border-bottom:1px solid rgba(148,163,184,0.08);' : ''}">
+                        <div style="min-width:0;flex:1;">
+                            <div style="font-size:13px;color:#94a3b8;font-family:Montserrat;">${s.symbol} <span style="font-size:10px;color:#64748b;">⏰ ${s.sessionDate}</span></div>
+                            <div style="font-size:11px;color:#64748b;margin-top:2px;">${s.name}</div>
+                        </div>
+                        <div style="text-align:right;">
+                            <div class="${cls(s.delta)}" style="font-size:13px;font-family:Montserrat;">${sgn(s.delta)}$${fmtNum(s.delta, 0)}</div>
+                            <div style="font-size:10px;color:#64748b;margin-top:2px;">待开盘</div>
+                        </div>
+                    </div>
+                `;
+            });
+            html += `</div></div>`;
+        });
+
+        body.innerHTML = html;
+    }
+
     async function changePassword() {
         const oldPwd = document.getElementById('oldPwd').value;
         const newPwd = document.getElementById('newPwd').value;
@@ -4717,9 +4922,88 @@
         if (modal) modal.classList.remove('show');
     }
 
+    // ===== Phase 3.6: 股票输入框自动补全（代码 / 中文名 / 英文名 都能搜）=====
+    function showSymbolAutocomplete(inputId, dropdownId, onSelectFnName) {
+        const input = document.getElementById(inputId);
+        const dropdown = document.getElementById(dropdownId);
+        if (!input || !dropdown) return;
+        const q = (input.value || '').trim();
+        if (!q || q.length < 1) {
+            dropdown.style.display = 'none';
+            return;
+        }
+        const qUpper = q.toUpperCase();
+        // 在持仓里搜：symbol 前缀 OR symbol 包含 OR name 包含（中英都行）
+        const seen = new Set();
+        const matches = APP.holdings
+            .filter(h => h.qty > 0 || h.qty === 0)  // 包括清仓的也允许
+            .filter(h => {
+                const sym = (h.symbol || '').toUpperCase();
+                const nm = (h.name || '');
+                const hit = sym.includes(qUpper) || nm.includes(q) || nm.toUpperCase().includes(qUpper);
+                if (!hit) return false;
+                if (seen.has(sym)) return false;
+                seen.add(sym);
+                return true;
+            })
+            // 排序：symbol 完全相等 > symbol 前缀 > 其他
+            .sort((a, b) => {
+                const sa = a.symbol.toUpperCase(), sb = b.symbol.toUpperCase();
+                if (sa === qUpper) return -1;
+                if (sb === qUpper) return 1;
+                if (sa.startsWith(qUpper) && !sb.startsWith(qUpper)) return -1;
+                if (sb.startsWith(qUpper) && !sa.startsWith(qUpper)) return 1;
+                return 0;
+            })
+            .slice(0, 8);
+
+        if (matches.length === 0) {
+            dropdown.style.display = 'none';
+            return;
+        }
+
+        const flagOf = r => r==='美国'?'🇺🇸':r==='中国'?'🇨🇳':r==='日本'?'🇯🇵':'';
+        dropdown.innerHTML = matches.map(h => {
+            // mousedown 在 input.onblur 之前触发，所以选中能稳定生效
+            const safeSym = (h.symbol || '').replace(/'/g, "\\'");
+            return `
+                <div class="symbol-autocomplete-item" onmousedown="event.preventDefault(); ${onSelectFnName}('${safeSym}')">
+                    <span class="ac-sym">${h.symbol}</span>
+                    <span class="ac-name">${h.name || ''}</span>
+                    <span class="ac-region">${flagOf(h.region)} ${h.region || ''}</span>
+                </div>
+            `;
+        }).join('');
+        dropdown.style.display = 'block';
+    }
+
+    function selectTradeStock(symbol) {
+        const dd = document.getElementById('tradeSymbolDropdown');
+        if (dd) dd.style.display = 'none';
+        const inp = document.getElementById('tradeSymbol');
+        if (inp) inp.value = symbol;
+        autoFillTrade();
+    }
+
+    function selectAlertStock(symbol) {
+        const dd = document.getElementById('alertSymbolDropdown');
+        if (dd) dd.style.display = 'none';
+        const inp = document.getElementById('alertSymbol');
+        if (inp) inp.value = symbol;
+        autoFillAlert();
+    }
+
     async function autoFillTrade() {
         let sym = document.getElementById('tradeSymbol').value.trim();
         if (!sym) return;
+        // Phase 3.6: 如果输入里含中文/日文等非 ASCII，先试着按 name 在 holdings 里匹配
+        if (/[^\x00-\x7F]/.test(sym)) {
+            const nameHit = APP.holdings.find(h => (h.name || '') === sym)
+                          || APP.holdings.find(h => (h.name || '').includes(sym));
+            if (nameHit) {
+                sym = nameHit.symbol;
+            }
+        }
         sym = sym.toUpperCase();
         document.getElementById('tradeSymbol').value = sym;
 
@@ -4777,8 +5061,15 @@
     }
 
     async function autoFillAlert() {
-        let sym = document.getElementById('alertSymbol').value.trim().toUpperCase();
-        if (!sym) return;
+        let raw = document.getElementById('alertSymbol').value.trim();
+        if (!raw) return;
+        // Phase 3.6: 输入是中文 name，反查 symbol
+        if (/[^\x00-\x7F]/.test(raw)) {
+            const nameHit = APP.holdings.find(h => (h.name || '') === raw)
+                          || APP.holdings.find(h => (h.name || '').includes(raw));
+            if (nameHit) raw = nameHit.symbol;
+        }
+        let sym = raw.toUpperCase();
         document.getElementById('alertSymbol').value = sym;
         const match = APP.holdings.find(h => h.symbol.toUpperCase() === sym);
         if (match) {
