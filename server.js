@@ -2534,8 +2534,9 @@ function checkCronToken(req, res) {
 
 // ===== 1. cron/fundamentals-refresh ======================
 // 每天 8:55am Beijing 跑，让 AI 报告读到当天最新 PE/ROE/财报
-app.post('/api/cron/fundamentals-refresh', async (req, res) => {
-  if (!checkCronToken(req, res)) return;
+// 立刻返回 200（避免 cron-job.org 30s 超时），后台跑实际工作
+async function runFundamentalsRefresh() {
+  const startedAt = Date.now();
   try {
     const userRows = await pool.query('SELECT DISTINCT user_id FROM holdings WHERE qty > 0');
     const summary = { users: 0, ok: 0, failed: [] };
@@ -2557,12 +2558,19 @@ app.post('/api/cron/fundamentals-refresh', async (req, res) => {
         await new Promise(r => setTimeout(r, 300));
       }
     }
-    console.log(`✅ Cron fundamentals refresh: ${summary.ok} ok, ${summary.failed.length} failed across ${summary.users} user(s)`);
-    res.json({ ok: true, summary });
+    const dur = Math.round((Date.now() - startedAt) / 1000);
+    console.log(`✅ Cron fundamentals refresh done in ${dur}s: ${summary.ok} ok, ${summary.failed.length} failed across ${summary.users} user(s)`);
   } catch (e) {
-    console.error('Cron fundamentals-refresh error:', e.message);
-    res.status(500).json({ error: e.message });
+    console.error('runFundamentalsRefresh error:', e.message);
   }
+}
+
+app.post('/api/cron/fundamentals-refresh', async (req, res) => {
+  if (!checkCronToken(req, res)) return;
+  // 立刻 200 给 cron-job.org，避免 30s 超时
+  res.json({ ok: true, message: 'Fundamentals refresh started in background' });
+  // 后台跑（fire-and-forget）
+  runFundamentalsRefresh().catch(e => console.error('Background fund refresh:', e.message));
 });
 
 // ===== 2. AI 报告生成核心 ============================
@@ -2800,25 +2808,34 @@ ${JSON.stringify(portfolioBrief, null, 2)}
 }
 
 // ===== 3. cron/ai-report =================================
-app.post('/api/cron/ai-report', async (req, res) => {
-  if (!checkCronToken(req, res)) return;
+// 同样：立刻 200 给 cron-job.org（AI 报告生成要 60-90s，远超 30s 限制）
+async function runCronAIReport() {
+  const startedAt = Date.now();
   try {
     const users = await pool.query('SELECT DISTINCT id FROM users WHERE id IN (SELECT DISTINCT user_id FROM holdings WHERE qty > 0)');
-    const results = [];
+    let okCount = 0, failCount = 0;
     for (const u of users.rows) {
       try {
         const r = await generateAIReport(u.id);
-        results.push({ userId: u.id, ok: true, date: r.date });
+        okCount++;
+        console.log(`✅ AI report cron user ${u.id} → ${r.date}`);
       } catch (e) {
+        failCount++;
         console.error(`[cron-ai] user ${u.id} failed:`, e.message);
-        results.push({ userId: u.id, ok: false, error: e.message });
       }
     }
-    res.json({ ok: true, results });
+    const dur = Math.round((Date.now() - startedAt) / 1000);
+    console.log(`✅ Cron AI report done in ${dur}s: ${okCount} ok, ${failCount} failed`);
   } catch (e) {
-    console.error('Cron ai-report error:', e.message);
-    res.status(500).json({ error: e.message });
+    console.error('runCronAIReport error:', e.message);
   }
+}
+
+app.post('/api/cron/ai-report', async (req, res) => {
+  if (!checkCronToken(req, res)) return;
+  // 立刻 200，后台跑实际报告生成（60-90s 不阻塞 cron-job.org）
+  res.json({ ok: true, message: 'AI report generation started in background' });
+  runCronAIReport().catch(e => console.error('Background ai report:', e.message));
 });
 
 // ===== 4. 手动触发（auth 用户专用，方便调试 / 立刻生成）======
