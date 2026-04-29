@@ -2838,15 +2838,35 @@ app.post('/api/cron/ai-report', async (req, res) => {
   runCronAIReport().catch(e => console.error('Background ai report:', e.message));
 });
 
-// ===== 4. 手动触发（auth 用户专用，方便调试 / 立刻生成）======
-app.post('/api/ai-report/generate', auth, async (req, res) => {
-  try {
-    const r = await generateAIReport(req.userId);
-    res.json(r);
-  } catch (e) {
-    console.error('Manual AI report error:', e.message);
-    res.status(500).json({ error: e.message });
+// ===== 4. 手动触发（异步：立即返回，后台跑，前端轮询 /status）======
+const aiReportStatus = new Map(); // userId -> { state: 'running'|'done'|'error', startedAt, finishedAt?, date?, error? }
+
+function startBackgroundAIReport(userId) {
+  const cur = aiReportStatus.get(userId);
+  if (cur?.state === 'running') {
+    return { state: 'running', message: 'already running', startedAt: cur.startedAt };
   }
+  const startedAt = Date.now();
+  aiReportStatus.set(userId, { state: 'running', startedAt });
+  generateAIReport(userId)
+    .then(r => {
+      aiReportStatus.set(userId, { state: 'done', startedAt, finishedAt: Date.now(), date: r.date });
+    })
+    .catch(e => {
+      console.error('Manual AI report error:', e.message);
+      aiReportStatus.set(userId, { state: 'error', startedAt, finishedAt: Date.now(), error: e.message });
+    });
+  return { state: 'running', message: 'started', startedAt };
+}
+
+app.post('/api/ai-report/generate', auth, async (req, res) => {
+  const r = startBackgroundAIReport(req.userId);
+  res.status(202).json(r);
+});
+
+app.get('/api/ai-report/status', auth, async (req, res) => {
+  const s = aiReportStatus.get(req.userId);
+  res.json(s || { state: 'idle' });
 });
 
 // ===== 5. 前端读取最新报告 ===============================
