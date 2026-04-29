@@ -2500,6 +2500,383 @@ async function maybeStartupSnapshot() {
   }
 }
 
+// ============================================================
+// Phase 4: AI 决策派每日报告 (Claude Opus 4.7 + web_search)
+// ============================================================
+// - cron/fundamentals-refresh @ 8:55am Beijing → 强制刷新所有持仓基本面
+// - cron/ai-report @ 9:05am Beijing            → 调 Claude 生成日报
+// - GET /api/ai-report/latest                  → 前端读取
+// - GET /api/ai-report/dates                   → 历史日期列表
+// ============================================================
+const Anthropic = require('@anthropic-ai/sdk');
+let _anthropicClient = null;
+function getAnthropicClient() {
+  if (_anthropicClient) return _anthropicClient;
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) throw new Error('ANTHROPIC_API_KEY not configured');
+  _anthropicClient = new Anthropic({ apiKey });
+  return _anthropicClient;
+}
+
+// 强 cron token 校验（与现有 snapshot cron 一致）
+function checkCronToken(req, res) {
+  const token = req.headers['x-cron-token'];
+  if (!process.env.CRON_SECRET) {
+    res.status(500).json({ error: 'CRON_SECRET not configured on server' });
+    return false;
+  }
+  if (!token || token !== process.env.CRON_SECRET) {
+    res.status(401).json({ error: 'Invalid cron token' });
+    return false;
+  }
+  return true;
+}
+
+// ===== 1. cron/fundamentals-refresh ======================
+// 每天 8:55am Beijing 跑，让 AI 报告读到当天最新 PE/ROE/财报
+app.post('/api/cron/fundamentals-refresh', async (req, res) => {
+  if (!checkCronToken(req, res)) return;
+  try {
+    const userRows = await pool.query('SELECT DISTINCT user_id FROM holdings WHERE qty > 0');
+    const summary = { users: 0, ok: 0, failed: [] };
+    for (const u of userRows.rows) {
+      const symRows = await pool.query(
+        'SELECT DISTINCT symbol FROM holdings WHERE user_id=$1 AND qty > 0',
+        [u.user_id]
+      );
+      summary.users++;
+      for (const s of symRows.rows) {
+        try {
+          const data = await fetchFundamentalsByMarket(s.symbol);
+          await saveFundamentalsToDB(data);
+          summary.ok++;
+        } catch (e) {
+          summary.failed.push({ symbol: s.symbol, error: e.message });
+          console.warn(`[cron-fund] ❌ ${s.symbol}: ${e.message}`);
+        }
+        await new Promise(r => setTimeout(r, 300));
+      }
+    }
+    console.log(`✅ Cron fundamentals refresh: ${summary.ok} ok, ${summary.failed.length} failed across ${summary.users} user(s)`);
+    res.json({ ok: true, summary });
+  } catch (e) {
+    console.error('Cron fundamentals-refresh error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ===== 2. AI 报告生成核心 ============================
+// 收集用户持仓 + 基本面 + 最近交易 + 最新快照，作为 Claude 上下文
+async function buildAIReportContext(userId) {
+  const holdingsR = await pool.query(
+    `SELECT symbol, name, qty, avg_cost, currency, region, sector, attribute
+     FROM holdings WHERE user_id=$1 AND qty > 0 ORDER BY symbol`,
+    [userId]
+  );
+  const fundR = await pool.query(
+    `SELECT f.symbol, f.company_name, f.sector, f.industry, f.country, f.currency,
+            f.price, f.market_cap, f.beta, f.pe_ratio, f.forward_pe, f.pb_ratio, f.ps_ratio,
+            f.peg_ratio, f.eps, f.dividend_yield, f.payout_ratio,
+            f.roe, f.roic, f.gross_margin, f.operating_margin, f.net_margin,
+            f.debt_to_equity, f.current_ratio, f.day_change_pct,
+            f.year_high, f.year_low, f.price_avg_50, f.price_avg_200,
+            f.source, f.fetched_at
+     FROM fundamentals_latest f
+     INNER JOIN holdings h ON f.symbol = h.symbol AND h.user_id=$1 AND h.qty > 0`,
+    [userId]
+  );
+  const tradesR = await pool.query(
+    `SELECT symbol, action, qty, price, currency, date
+     FROM trades WHERE user_id=$1 AND date >= NOW() - INTERVAL '30 days'
+     ORDER BY date DESC LIMIT 50`,
+    [userId]
+  );
+  const snapR = await pool.query(
+    `SELECT date, total_value_usd, total_cost_usd, unrealized_pl_usd, realized_pl_usd,
+            dividend_total_usd, cumulative_pl_usd, region_values
+     FROM daily_snapshot WHERE user_id=$1 ORDER BY date DESC LIMIT 1`,
+    [userId]
+  );
+  return {
+    holdings: holdingsR.rows,
+    fundamentals: fundR.rows,
+    recentTrades: tradesR.rows,
+    latestSnapshot: snapR.rows[0] || null,
+  };
+}
+
+// System prompt（Phase 4 铁律 + 5 栏目结构）
+const AI_REPORT_SYSTEM_PROMPT = `你是凯旋门 Family Office 的 AI 投资助理，每天为 LiuBin 生成"决策派"投资日报。
+
+## 🚨 核心铁律（不可违反）
+
+1. **只看 PE / 财务，不看股价**
+   - 单纯股价上涨/下跌不是建议依据
+   - 每条买入/减仓建议必须引用至少 2 个核心财务指标（PE / PB / ROE / 利润率 / EPS 增长 / 股息率 / D/E）
+   - 反面例子：❌ "TSLA 跌 5%，建议加仓"
+   - 正面例子：✅ "TSLA 跌 5% → PE 71 仍高于 5 年中位数 55 → 不是买点，观望"
+
+2. **必须含具体新闻 + 财报数据**
+   - 用 web_search 工具查最近 24 小时全球宏观新闻、各市场新闻、持仓个股新闻
+   - 用 web_search 查昨日发财报的持仓股（实际营收 vs 预期、机构动作、目标价调整）
+   - 用 web_search 查未来 3 天即将发财报的持仓股
+   - 不能编造新闻 / 财报；查不到就如实说"今日无重大消息"
+   - 老于 72 小时的新闻不引用
+
+3. **港股 / 数据不全的股票**
+   - 港股目前只有股价，PE/ROE 等基本面缺失（ETF 类如 SPDR Gold 也是）
+   - 对这类股标"基本面数据不全，建议持有观望"，不强行编造分析
+
+## 📋 必含 5 个栏目（按此顺序输出 Markdown）
+
+### 📅 昨日财报回顾
+列出**所有**昨天发财报的持仓股。每只股：
+- 实际营收 vs 预期（beat/miss + %）
+- 实际 EPS vs 预期
+- 重点观察项（如 AAPL 服务业务增长 / MSFT Azure 增速）
+- 指引调整
+- 盘后/今早股价反应
+- 机构动作（升降目标价、评级调整）
+- 对你持仓的影响
+
+如果**昨日无持仓股发财报**，就明说"昨日无持仓股发布财报"，不要编。
+
+### 📅 即将发布财报（今日 + 未来 3 天）
+为持仓中即将发财报的股票点名：
+- 代码 + 名称
+- 日期 + 时间（盘前/盘后）
+- 共识 EPS / 营收
+- 重点关注什么（基于这家公司近季度的关键看点）
+
+### 🌍 今日宏观三件事
+全球今天最重要的 3 条宏观新闻（美联储/政治/汇率/油价/AI政策等）。每条都要：
+- 来自 web_search 实证
+- 简明 1-2 句
+- 影响哪个市场 / 哪类股
+
+### 🎯 操作建议
+按 🔴 减仓 / 🟢 加仓 / 🟡 持有 三档输出。每条建议：
+- 必须列出至少 2 个核心财务依据（PE / ROE / 利润率 等）
+- 可叠加新闻补强
+- 用柔和措辞（"建议减仓 30%" 而不是 "立刻清仓"）
+- 港股标"数据不全，建议持有"
+
+### 📚 引用源
+列出本报告所有引用的新闻 / 数据源（路透 / FT / 日经 / 高盛研报等），按时间排序。
+
+## 🎨 输出风格
+
+- Markdown 格式
+- 每个栏目用 Heading 2 (##) + emoji
+- 数据表格优先用列表，不用 HTML 表格
+- 避免冗长前言，直接进 5 个栏目
+- 中文为主，专有名词保留英文`;
+
+async function generateAIReport(userId, opts = {}) {
+  const client = getAnthropicClient();
+  const ctx = await buildAIReportContext(userId);
+  const today = new Date().toISOString().slice(0, 10);
+
+  // 把上下文打包给 Claude（基本面表只挑关键字段）
+  const portfolioBrief = {
+    today_date: today,
+    holdings_count: ctx.holdings.length,
+    holdings_by_region: ctx.holdings.reduce((acc, h) => {
+      acc[h.region] = (acc[h.region] || 0) + 1;
+      return acc;
+    }, {}),
+    holdings_detail: ctx.holdings.map(h => {
+      const f = ctx.fundamentals.find(x => x.symbol === h.symbol) || {};
+      return {
+        symbol: h.symbol,
+        name: h.name,
+        qty: parseFloat(h.qty),
+        avg_cost: parseFloat(h.avg_cost),
+        currency: h.currency,
+        region: h.region,
+        sector: h.sector,
+        // fundamentals
+        price: f.price,
+        pe: f.pe_ratio,
+        forward_pe: f.forward_pe,
+        pb: f.pb_ratio,
+        ps: f.ps_ratio,
+        roe: f.roe,
+        roic: f.roic,
+        net_margin: f.net_margin,
+        op_margin: f.operating_margin,
+        gross_margin: f.gross_margin,
+        d_to_e: f.debt_to_equity,
+        current_ratio: f.current_ratio,
+        eps: f.eps,
+        div_yield: f.dividend_yield,
+        market_cap: f.market_cap,
+        year_high: f.year_high,
+        year_low: f.year_low,
+        sma50: f.price_avg_50,
+        sma200: f.price_avg_200,
+        day_change_pct: f.day_change_pct,
+        source: f.source,
+      };
+    }),
+    snapshot: ctx.latestSnapshot,
+    recent_trades: ctx.recentTrades,
+  };
+
+  const userPrompt = `今天是 ${today}。
+
+请用 web_search 工具搜索：
+1. 全球宏观新闻（最近 24h）
+2. 美股 / 中国 / 日本市场各自的关键新闻
+3. 我持仓中昨日发布财报的股票实际数据 + 机构动作
+4. 我持仓中今日及未来 3 天将发布财报的股票
+
+然后基于以下持仓+基本面数据，按 5 栏目结构输出今日决策派日报：
+
+\`\`\`json
+${JSON.stringify(portfolioBrief, null, 2)}
+\`\`\`
+
+⚠️ 严格遵守 system prompt 中的铁律：只看 PE/财务，不看单纯股价；必须有 web_search 实证；港股数据不全的标"建议持有"。`;
+
+  // 调 Claude（含 web_search 工具 + adaptive thinking + prompt cache）
+  // 处理 pause_turn（web_search 服务端循环达到 10 次会暂停）
+  const messages = [{ role: 'user', content: userPrompt }];
+  let response;
+  let totalInputTokens = 0;
+  let totalOutputTokens = 0;
+  let cacheReadTokens = 0;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    response = await client.messages.create({
+      model: 'claude-opus-4-7',
+      max_tokens: 16000,
+      thinking: { type: 'adaptive' },
+      output_config: { effort: 'high' },
+      system: [{
+        type: 'text',
+        text: AI_REPORT_SYSTEM_PROMPT,
+        cache_control: { type: 'ephemeral' },
+      }],
+      tools: [{ type: 'web_search_20260209', name: 'web_search', max_uses: 7 }],
+      messages,
+    });
+    totalInputTokens += response.usage.input_tokens || 0;
+    totalOutputTokens += response.usage.output_tokens || 0;
+    cacheReadTokens += response.usage.cache_read_input_tokens || 0;
+    if (response.stop_reason === 'pause_turn') {
+      // server tool reached iteration limit; resume by appending and re-sending
+      messages.push({ role: 'assistant', content: response.content });
+      continue;
+    }
+    break;
+  }
+
+  // 提取 markdown 文本（拼接所有 text block）
+  const summaryMd = response.content
+    .filter(b => b.type === 'text')
+    .map(b => b.text)
+    .join('\n\n')
+    .trim();
+
+  if (!summaryMd) {
+    throw new Error('Claude returned no text content');
+  }
+
+  // 写入 DB（覆盖当天的）
+  await pool.query(
+    `INSERT INTO ai_daily_summary (user_id, date, summary_md, model, prompt_tokens, completion_tokens, generated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, NOW())
+     ON CONFLICT (user_id, date) DO UPDATE SET
+       summary_md = EXCLUDED.summary_md,
+       model = EXCLUDED.model,
+       prompt_tokens = EXCLUDED.prompt_tokens,
+       completion_tokens = EXCLUDED.completion_tokens,
+       generated_at = NOW()`,
+    [userId, today, summaryMd, 'claude-opus-4-7', totalInputTokens, totalOutputTokens]
+  );
+
+  console.log(`🤖 AI report user=${userId} date=${today} | input=${totalInputTokens} output=${totalOutputTokens} cache_read=${cacheReadTokens}`);
+  return { date: today, summary_md: summaryMd, prompt_tokens: totalInputTokens, completion_tokens: totalOutputTokens };
+}
+
+// ===== 3. cron/ai-report =================================
+app.post('/api/cron/ai-report', async (req, res) => {
+  if (!checkCronToken(req, res)) return;
+  try {
+    const users = await pool.query('SELECT DISTINCT id FROM users WHERE id IN (SELECT DISTINCT user_id FROM holdings WHERE qty > 0)');
+    const results = [];
+    for (const u of users.rows) {
+      try {
+        const r = await generateAIReport(u.id);
+        results.push({ userId: u.id, ok: true, date: r.date });
+      } catch (e) {
+        console.error(`[cron-ai] user ${u.id} failed:`, e.message);
+        results.push({ userId: u.id, ok: false, error: e.message });
+      }
+    }
+    res.json({ ok: true, results });
+  } catch (e) {
+    console.error('Cron ai-report error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ===== 4. 手动触发（auth 用户专用，方便调试 / 立刻生成）======
+app.post('/api/ai-report/generate', auth, async (req, res) => {
+  try {
+    const r = await generateAIReport(req.userId);
+    res.json(r);
+  } catch (e) {
+    console.error('Manual AI report error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ===== 5. 前端读取最新报告 ===============================
+app.get('/api/ai-report/latest', auth, async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT date, summary_md, model, prompt_tokens, completion_tokens, generated_at
+       FROM ai_daily_summary
+       WHERE user_id=$1 ORDER BY date DESC LIMIT 1`,
+      [req.userId]
+    );
+    if (r.rows.length === 0) return res.json({ exists: false });
+    res.json({ exists: true, ...r.rows[0] });
+  } catch (e) {
+    console.error('AI report latest error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ===== 6. 历史日期列表（前端日期切换器用）====================
+app.get('/api/ai-report/dates', auth, async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT date FROM ai_daily_summary WHERE user_id=$1 ORDER BY date DESC LIMIT 60`,
+      [req.userId]
+    );
+    res.json({ dates: r.rows.map(x => x.date) });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ===== 7. 按指定日期取报告 ================================
+app.get('/api/ai-report/:date', auth, async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT date, summary_md, model, prompt_tokens, completion_tokens, generated_at
+       FROM ai_daily_summary WHERE user_id=$1 AND date=$2`,
+      [req.userId, req.params.date]
+    );
+    if (r.rows.length === 0) return res.status(404).json({ error: 'not found' });
+    res.json(r.rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ===== 启动 =====
 const PORT = process.env.PORT || 3000;
 
