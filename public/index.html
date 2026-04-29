@@ -1568,9 +1568,9 @@
                 margin-bottom: 18px;
             }
             .stat-grid .stat-hero { grid-column: span 1; }
-            /* Mobile reorder: YTD first, then Today, Cumulative, Budget */
-            .stat-grid .stat-ytd        { order: 1; }
-            .stat-grid .stat-today      { order: 2; }
+            /* Mobile reorder (LiuBin 2026-04-29): Today > YTD > Cumulative > Budget */
+            .stat-grid .stat-today      { order: 1; }
+            .stat-grid .stat-ytd        { order: 2; }
             .stat-grid .stat-cumulative { order: 3; }
             .stat-grid .stat-budget     { order: 4; }
             .stat-card { padding: 14px 16px; border-radius: 12px; }
@@ -2601,9 +2601,9 @@
             </div>
 
             <div class="modal" id="todayPLModal">
-                <div class="modal-content" style="position: relative; max-width: 640px;">
+                <div class="modal-content" style="position: relative; max-width: 680px;">
                     <button class="modal-close" onclick="closeModal('todayPLModal')">×</button>
-                    <div class="modal-header">📊 今日浮盈亏明细</div>
+                    <div class="modal-header" id="todayPLModalHeader">📊 今日浮盈亏</div>
                     <div id="todayPLBreakdownBody"></div>
                 </div>
             </div>
@@ -4753,26 +4753,50 @@
         container.innerHTML = html;
     }
 
-    // ===== Today P&L 详情弹窗（Phase 3.6）=====
-    // 每个地区独立的股票排序状态：true = 由高到低，false = 由低到高
-    const todayPLRegionSortDesc = { '美国': true, '中国': true, '日本': true, '其他': true };
+    // ===== Today P&L 详情弹窗（Phase 3.7：2 级 drill-down）=====
+    // L1 = 三地汇总（默认）；L2 = 进入某地区，看该地区个股表
+    const todayPLState = {
+        view: 'l1',           // 'l1' | 'l2'
+        region: null,         // L2 时当前地区
+        sortCol: 'amtToday',  // 'symbol' | 'qty' | 'pctToday' | 'amtToday' | 'pctCum' | 'amtCum'
+        sortDesc: true,
+    };
 
     function openTodayPLBreakdown() {
-        renderTodayPLBreakdown();
+        todayPLState.view = 'l1';
+        todayPLState.region = null;
+        renderTodayPL();
         openModal('todayPLModal');
     }
 
-    function toggleRegionSort(region) {
-        todayPLRegionSortDesc[region] = !todayPLRegionSortDesc[region];
-        renderTodayPLBreakdown();
+    function gotoTodayPLRegion(region) {
+        todayPLState.view = 'l2';
+        todayPLState.region = region;
+        // 默认按当日金额由高到低
+        todayPLState.sortCol = 'amtToday';
+        todayPLState.sortDesc = true;
+        renderTodayPL();
     }
 
-    function renderTodayPLBreakdown() {
-        const body = document.getElementById('todayPLBreakdownBody');
-        if (!body) return;
-        const activeHoldings = APP.holdings.filter(h => h.qty > 0);
+    function backToTodayPL() {
+        todayPLState.view = 'l1';
+        todayPLState.region = null;
+        renderTodayPL();
+    }
 
-        // 重算 latestSessionDate（与首页保持一致）
+    function setTodayPLSort(col) {
+        if (todayPLState.sortCol === col) {
+            todayPLState.sortDesc = !todayPLState.sortDesc;
+        } else {
+            todayPLState.sortCol = col;
+            todayPLState.sortDesc = true;
+        }
+        renderTodayPL();
+    }
+
+    // 按地区聚合所有股票（含 today / cumulative 双口径）
+    function _computeTodayPLData() {
+        const activeHoldings = APP.holdings.filter(h => h.qty > 0);
         let latestSessionDate = '';
         activeHoldings.forEach(h => {
             const pd = APP.prices[h.symbol];
@@ -4781,124 +4805,187 @@
             if (d > latestSessionDate) latestSessionDate = d;
         });
 
-        // 按 region 分组，每股算 delta（按本地货币 → USD）
-        const byRegion = {}; // { region: { included: [{symbol, name, delta, sessionDate}], pending: [...], totalIncluded } }
+        const byRegion = {};
         activeHoldings.forEach(h => {
             const pd = APP.prices[h.symbol];
             if (!pd || !pd.prevClose || !pd.price) return;
             const fx = APP.FX_RATES[h.currency] || 1;
-            const delta = h.qty * (pd.price - pd.prevClose) * fx;  // USD
-            const localDelta = h.qty * (pd.price - pd.prevClose);  // 本地货币
+            const dayDeltaLocal = h.qty * (pd.price - pd.prevClose);
+            const dayDeltaUSD   = dayDeltaLocal * fx;
+            const dayPct = pd.prevClose ? ((pd.price - pd.prevClose) / pd.prevClose) * 100 : 0;
+            const cumDeltaLocal = h.qty * (pd.price - (h.avg_cost || 0));
+            const cumDeltaUSD   = cumDeltaLocal * fx;
+            const cumPct = h.avg_cost > 0 ? ((pd.price - h.avg_cost) / h.avg_cost) * 100 : 0;
+            const costBasisUSD = h.qty * (h.avg_cost || 0) * fx;
+            const valuePrevUSD = h.qty * pd.prevClose * fx;
             const sessionDate = getStockSessionDate(h, pd);
             const r = h.region || '其他';
-            if (!byRegion[r]) byRegion[r] = { included: [], pending: [], totalIncluded: 0, totalPending: 0 };
-            const dayPct = pd.prevClose ? ((pd.price - pd.prevClose) / pd.prevClose) * 100 : 0;
-            const entry = { symbol: h.symbol, name: h.name || h.symbol, qty: h.qty, delta, localDelta, currency: h.currency, sessionDate, price: pd.price, prevClose: pd.prevClose, dayPct };
+            if (!byRegion[r]) {
+                byRegion[r] = {
+                    included: [], pending: [],
+                    todayUSD: 0, todayBaseUSD: 0,
+                    cumUSD: 0, cumCostUSD: 0,
+                };
+            }
+            const entry = {
+                symbol: h.symbol, name: h.name || h.symbol, qty: h.qty,
+                currency: h.currency, sessionDate,
+                price: pd.price, prevClose: pd.prevClose, avg_cost: h.avg_cost || 0,
+                pctToday: dayPct, amtToday: dayDeltaUSD, amtTodayLocal: dayDeltaLocal,
+                pctCum: cumPct, amtCum: cumDeltaUSD, amtCumLocal: cumDeltaLocal,
+            };
+            byRegion[r].cumUSD += cumDeltaUSD;
+            byRegion[r].cumCostUSD += costBasisUSD;
             if (sessionDate === latestSessionDate) {
                 byRegion[r].included.push(entry);
-                byRegion[r].totalIncluded += delta;
+                byRegion[r].todayUSD += dayDeltaUSD;
+                byRegion[r].todayBaseUSD += valuePrevUSD;
             } else {
                 byRegion[r].pending.push(entry);
-                byRegion[r].totalPending += delta;
             }
         });
+        // 计算每地区的%
+        Object.values(byRegion).forEach(info => {
+            info.todayPct = info.todayBaseUSD > 0 ? (info.todayUSD / info.todayBaseUSD) * 100 : 0;
+            info.cumPct = info.cumCostUSD > 0 ? (info.cumUSD / info.cumCostUSD) * 100 : 0;
+        });
+        return { byRegion, latestSessionDate };
+    }
 
-        // 地区排序：固定按地区 P&L 由高到低（不让用户切换，保持稳定结构）
-        const sortedRegions = Object.entries(byRegion).sort((a, b) => b[1].totalIncluded - a[1].totalIncluded);
+    function renderTodayPL() {
+        const body = document.getElementById('todayPLBreakdownBody');
+        const header = document.getElementById('todayPLModalHeader');
+        if (!body || !header) return;
+        if (todayPLState.view === 'l1') {
+            renderTodayPL_L1(body, header);
+        } else {
+            renderTodayPL_L2(body, header);
+        }
+    }
 
-        // 总计
-        const totalIncluded = sortedRegions.reduce((s, [r, info]) => s + info.totalIncluded, 0);
-        const totalPending  = sortedRegions.reduce((s, [r, info]) => s + info.totalPending, 0);
+    // ===== L1：三地汇总卡 =====
+    function renderTodayPL_L1(body, header) {
+        const { byRegion, latestSessionDate } = _computeTodayPLData();
+        header.innerHTML = `📊 今日浮盈亏 · 三地汇总`;
 
+        // 地区按今日 P&L USD 由高到低
+        const regions = Object.entries(byRegion).sort((a, b) => b[1].todayUSD - a[1].todayUSD);
         const flagOf = r => r==='美国'?'🇺🇸':r==='中国'?'🇨🇳':r==='日本'?'🇯🇵':'🌐';
-        const cs = c => c==='CNY'?'¥':c==='JPY'?'¥':c==='HKD'?'HK$':'$';
         const cls = v => v >= 0 ? 'price-positive' : 'price-negative';
         const sgn = v => v >= 0 ? '+' : '';
 
         let html = `
-            <div style="font-size:11px;color:#64748b;margin-bottom:12px;line-height:1.5;">
-                以"全市场最新会话日期 ${latestSessionDate}"为准，本地交易日早于此的进入"待开盘"。
-            </div>
-            <div style="background:rgba(15,23,42,0.5);padding:10px 14px;border-radius:8px;margin-bottom:14px;">
-                <div style="display:flex;justify-content:space-between;font-size:11px;color:#94a3b8;">
-                    <span>已计入今日</span>
-                    <span class="${cls(totalIncluded)}" style="font-weight:600;">${sgn(totalIncluded)}$${fmtNum(totalIncluded)}</span>
-                </div>
-                ${totalPending !== 0 ? `
-                <div style="display:flex;justify-content:space-between;font-size:11px;color:#475569;margin-top:4px;">
-                    <span>⏰ 待开盘（不计入）</span>
-                    <span style="opacity:0.7;">${sgn(totalPending)}$${fmtNum(totalPending)}</span>
-                </div>` : ''}
+            <div style="font-size:11px;color:#64748b;margin-bottom:14px;line-height:1.5;">
+                按"全市场最新会话日期 ${latestSessionDate}"为准。点击任一地区查看个股明细 →
             </div>
         `;
 
-        sortedRegions.forEach(([region, info]) => {
+        regions.forEach(([region, info]) => {
             if (info.included.length === 0 && info.pending.length === 0) return;
-            // 每个地区独立的排序状态（默认 true = 由高到低）
-            const regSortDesc = todayPLRegionSortDesc[region] !== false;
-            const cmp = (a, b) => regSortDesc ? (b.delta - a.delta) : (a.delta - b.delta);
-            const sortedStocks = info.included.slice().sort(cmp);
-            const arrow = regSortDesc ? '↓' : '↑';
-            const sortLabel = regSortDesc ? '由高到低' : '由低到高';
             html += `
-                <div style="margin-bottom:14px;">
-                    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:rgba(30,41,59,0.45);border-radius:8px 8px 0 0;border:1px solid var(--gold-border);border-bottom:none;gap:10px;">
-                        <span style="font-size:13px;color:#cbd5e1;font-weight:500;">${flagOf(region)} ${region} <span style="color:#64748b;font-size:11px;">(${info.included.length}只已计入)</span></span>
-                        <span style="display:flex;align-items:center;gap:8px;">
-                            <button onclick="toggleRegionSort('${region}')" title="切换股票排序" style="background:rgba(193,166,115,0.10);color:var(--gold-light);border:1px solid rgba(193,166,115,0.25);padding:2px 7px;border-radius:5px;font-size:10px;cursor:pointer;white-space:nowrap;">
-                                ${arrow} ${sortLabel}
-                            </button>
-                            <span class="${cls(info.totalIncluded)}" style="font-size:14px;font-weight:600;font-family:Montserrat;">${sgn(info.totalIncluded)}$${fmtNum(info.totalIncluded)}</span>
-                        </span>
+                <div onclick="gotoTodayPLRegion('${region}')" style="cursor:pointer;padding:14px 16px;background:rgba(30,41,59,0.45);border:1px solid var(--gold-border);border-radius:10px;margin-bottom:10px;transition:all 0.18s ease;" onmouseover="this.style.borderColor='var(--gold-light)'" onmouseout="this.style.borderColor='var(--gold-border)'">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                        <span style="font-size:14px;color:#e2e8f0;font-weight:500;">${flagOf(region)} ${region} <span style="color:#64748b;font-size:11px;">(${info.included.length}只${info.pending.length>0?` · ${info.pending.length}待开盘`:''})</span></span>
+                        <span style="color:#475569;font-size:18px;">›</span>
                     </div>
-                    <div style="border:1px solid var(--gold-border);border-radius:0 0 8px 8px;overflow:hidden;">
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                        <div style="background:rgba(15,23,42,0.4);padding:8px 10px;border-radius:6px;">
+                            <div style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:3px;">当日</div>
+                            <div class="${cls(info.todayPct)}" style="font-size:14px;font-weight:600;font-family:Montserrat;line-height:1.1;">${sgn(info.todayPct)}${fmtNum(info.todayPct,2)}%</div>
+                            <div class="${cls(info.todayUSD)}" style="font-size:12px;margin-top:2px;font-family:Montserrat;opacity:0.85;">${sgn(info.todayUSD)}$${fmtNum(info.todayUSD,0)}</div>
+                        </div>
+                        <div style="background:rgba(15,23,42,0.4);padding:8px 10px;border-radius:6px;">
+                            <div style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:3px;">累计 <span style="opacity:0.6;">(备注)</span></div>
+                            <div class="${cls(info.cumPct)}" style="font-size:14px;font-weight:600;font-family:Montserrat;line-height:1.1;">${sgn(info.cumPct)}${fmtNum(info.cumPct,2)}%</div>
+                            <div class="${cls(info.cumUSD)}" style="font-size:12px;margin-top:2px;font-family:Montserrat;opacity:0.85;">${sgn(info.cumUSD)}$${fmtNum(info.cumUSD,0)}</div>
+                        </div>
+                    </div>
+                </div>
             `;
-            // 每行 4 列信息：[代码+名+数量] [日涨跌%] [本币收益+价格变动] [USD收益]
-            const renderRow = (s, opts) => {
-                const isPending = !!opts.pending;
-                const localProfit = `${sgn(s.localDelta)}${cs(s.currency)}${fmtNum(s.localDelta, 0)}`;
-                return `
-                    <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;${opts.borderBottom ? 'border-bottom:1px solid rgba(148,163,184,0.08);' : ''}${isPending ? 'opacity:0.55;' : ''}">
-                        <div style="min-width:0;flex:1.4;">
-                            <div style="font-size:13px;color:${isPending?'#94a3b8':'#e2e8f0'};font-weight:500;font-family:Montserrat;line-height:1.2;">
-                                ${s.symbol}${isPending ? ` <span style="font-size:9px;color:#64748b;font-weight:400;">⏰${s.sessionDate}</span>`:''}
-                            </div>
-                            <div style="font-size:10px;color:#64748b;margin-top:2px;line-height:1.2;">
-                                ${s.name} · ${fmtNum(s.qty, 0)}股
-                            </div>
-                        </div>
-                        <div style="flex:1;text-align:right;min-width:0;">
-                            <div class="${cls(s.dayPct)}" style="font-size:12px;font-weight:600;font-family:Montserrat;line-height:1.2;">
-                                ${sgn(s.dayPct)}${fmtNum(s.dayPct, 2)}%
-                            </div>
-                            <div style="font-size:10px;color:#64748b;margin-top:2px;font-family:Montserrat;line-height:1.2;">
-                                ${cs(s.currency)}${fmtNum(s.prevClose,2)}→${cs(s.currency)}${fmtNum(s.price,2)}
-                            </div>
-                        </div>
-                        <div style="flex:1;text-align:right;min-width:0;">
-                            <div class="${cls(s.delta)}" style="font-size:13px;font-weight:600;font-family:Montserrat;line-height:1.2;">
-                                ${sgn(s.delta)}$${fmtNum(s.delta, 0)}
-                            </div>
-                            <div class="${cls(s.localDelta)}" style="font-size:10px;margin-top:2px;font-family:Montserrat;line-height:1.2;opacity:0.7;">
-                                ${localProfit}
-                            </div>
-                        </div>
-                    </div>
-                `;
-            };
-
-            const totalRowsInRegion = sortedStocks.length + info.pending.length;
-            sortedStocks.forEach((s, idx) => {
-                const isLast = idx === sortedStocks.length - 1 && info.pending.length === 0;
-                html += renderRow(s, { pending: false, borderBottom: !isLast });
-            });
-            info.pending.forEach((s, idx) => {
-                const isLast = idx === info.pending.length - 1;
-                html += renderRow(s, { pending: true, borderBottom: !isLast });
-            });
-            html += `</div></div>`;
         });
+        body.innerHTML = html;
+    }
 
+    // ===== L2：单地区个股明细表 =====
+    function renderTodayPL_L2(body, header) {
+        const { byRegion } = _computeTodayPLData();
+        const region = todayPLState.region;
+        const info = byRegion[region];
+        if (!info) { backToTodayPL(); return; }
+
+        const flagOf = r => r==='美国'?'🇺🇸':r==='中国'?'🇨🇳':r==='日本'?'🇯🇵':'🌐';
+        const cls = v => v >= 0 ? 'price-positive' : 'price-negative';
+        const sgn = v => v >= 0 ? '+' : '';
+
+        header.innerHTML = `
+            <span onclick="backToTodayPL()" style="cursor:pointer;color:var(--gold-light);font-size:13px;font-weight:400;margin-right:8px;">← 返回</span>
+            <span>${flagOf(region)} ${region} · 个股明细</span>
+        `;
+
+        // 排序
+        const sortKey = todayPLState.sortCol;
+        const desc = todayPLState.sortDesc;
+        const cmp = (a, b) => {
+            const va = a[sortKey], vb = b[sortKey];
+            if (typeof va === 'string') return desc ? vb.localeCompare(va) : va.localeCompare(vb);
+            return desc ? (vb - va) : (va - vb);
+        };
+        const stocks = info.included.slice().sort(cmp);
+        const pendings = info.pending.slice().sort(cmp);
+
+        // 表头辅助
+        const arrow = c => todayPLState.sortCol === c ? (desc ? '↓' : '↑') : '⇅';
+        const hcls = c => todayPLState.sortCol === c ? 'color:var(--gold-light);' : 'color:#64748b;';
+        const th = (c, label, align='right') => `
+            <th onclick="setTodayPLSort('${c}')" style="cursor:pointer;text-align:${align};padding:8px 6px;font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:0.8px;${hcls(c)}user-select:none;white-space:nowrap;">
+                ${label} <span style="font-size:9px;opacity:0.7;">${arrow(c)}</span>
+            </th>
+        `;
+
+        // 汇总条
+        let html = `
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:rgba(15,23,42,0.5);border-radius:8px;margin-bottom:12px;font-size:11px;">
+                <span style="color:#64748b;">已计入 ${info.included.length} 只 ${info.pending.length>0 ? `· 待开盘 ${info.pending.length}`:''}</span>
+                <span>
+                    <span style="color:#94a3b8;">当日</span>
+                    <span class="${cls(info.todayUSD)}" style="font-weight:600;font-family:Montserrat;margin-left:6px;">${sgn(info.todayPct)}${fmtNum(info.todayPct,2)}% / ${sgn(info.todayUSD)}$${fmtNum(info.todayUSD,0)}</span>
+                </span>
+            </div>
+            <div style="overflow-x:auto;">
+            <table style="width:100%;border-collapse:collapse;font-family:Montserrat,sans-serif;">
+                <thead><tr style="border-bottom:1px solid rgba(148,163,184,0.18);">
+                    ${th('symbol', '股票', 'left')}
+                    ${th('qty', '数量')}
+                    ${th('pctToday', '当日%')}
+                    ${th('amtToday', '当日$')}
+                    ${th('pctCum', '累计%')}
+                    ${th('amtCum', '累计$')}
+                </tr></thead>
+                <tbody>
+        `;
+
+        const renderTr = (s, isPending) => `
+            <tr style="border-bottom:1px solid rgba(148,163,184,0.06);${isPending?'opacity:0.5;':''}">
+                <td style="padding:10px 6px;text-align:left;min-width:0;">
+                    <div style="font-size:12px;color:${isPending?'#94a3b8':'#e2e8f0'};font-weight:500;line-height:1.2;">
+                        ${s.symbol}${isPending?` <span style="font-size:9px;color:#64748b;">⏰</span>`:''}
+                    </div>
+                    <div style="font-size:10px;color:#64748b;margin-top:2px;line-height:1.2;white-space:nowrap;text-overflow:ellipsis;overflow:hidden;max-width:120px;">${s.name}</div>
+                </td>
+                <td style="padding:10px 6px;text-align:right;font-size:11px;color:#94a3b8;">${fmtNum(s.qty,0)}</td>
+                <td class="${cls(s.pctToday)}" style="padding:10px 6px;text-align:right;font-size:12px;font-weight:500;">${sgn(s.pctToday)}${fmtNum(s.pctToday,2)}%</td>
+                <td class="${cls(s.amtToday)}" style="padding:10px 6px;text-align:right;font-size:12px;font-weight:500;">${sgn(s.amtToday)}$${fmtNum(s.amtToday,0)}</td>
+                <td class="${cls(s.pctCum)}" style="padding:10px 6px;text-align:right;font-size:11px;opacity:0.8;">${sgn(s.pctCum)}${fmtNum(s.pctCum,2)}%</td>
+                <td class="${cls(s.amtCum)}" style="padding:10px 6px;text-align:right;font-size:11px;opacity:0.8;">${sgn(s.amtCum)}$${fmtNum(s.amtCum,0)}</td>
+            </tr>
+        `;
+
+        stocks.forEach(s => { html += renderTr(s, false); });
+        if (pendings.length > 0) {
+            html += `<tr><td colspan="6" style="padding:10px 6px;font-size:10px;color:#64748b;border-top:1px dashed rgba(148,163,184,0.2);">⏰ 待开盘（不计入今日）</td></tr>`;
+            pendings.forEach(s => { html += renderTr(s, true); });
+        }
+        html += `</tbody></table></div>`;
         body.innerHTML = html;
     }
 
