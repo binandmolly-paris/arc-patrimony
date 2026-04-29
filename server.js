@@ -1762,10 +1762,107 @@ function hasSourceData(obj) {
 }
 
 // ============================================================
+// Phase 3.5: Eastmoney 港股 fundamentals（无需 API key，2 个 endpoint）
+// 实测过 6 只港股全部跑通（0700/1211/1810/9992/2840/9660）
+// 关键：HK 代码必须 5 位带前导 0（如 00700），node fetch 自动 follow 302
+// ============================================================
+const EASTMONEY_DC = 'https://datacenter.eastmoney.com/securities/api/data/v1/get';
+const EASTMONEY_PUSH2 = 'https://push2.eastmoney.com/api/qt/stock/get';
+
+// Yahoo .HK → Eastmoney 5位代码（0700.HK → 00700）
+function yahooToEastmoneyHKCode(symbol) {
+  const m = symbol.match(/^(\d+)\.HK$/i);
+  if (!m) return null;
+  return m[1].padStart(5, '0');
+}
+
+// 从 Eastmoney 字符串字段提取 number（"-" / null / "" → null）
+function emNum(v) {
+  if (v == null || v === '' || v === '-') return null;
+  const n = parseFloat(v);
+  return isNaN(n) ? null : n;
+}
+
+async function fetchEastmoneyHKFundamentals(symbol) {
+  const result = { symbol, source: 'eastmoney', raw_json: {} };
+  const code5 = yahooToEastmoneyHKCode(symbol);
+  if (!code5) throw new Error(`Invalid HK symbol: ${symbol}`);
+
+  // ① 实时行情（push2）→ 价 / PE / PB / 市值 / 52W / 股息率 / 行业
+  try {
+    const fields = 'f43,f58,f60,f116,f127,f164,f167,f170,f174,f175,f188';
+    const url = `${EASTMONEY_PUSH2}?invt=2&fltt=2&secid=116.${code5}&fields=${fields}`;
+    const resp = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const json = await resp.json();
+    const x = json.data;
+    if (x) {
+      result.raw_json.quote = x;
+      result.company_name   = x.f58 || null;
+      result.price          = emNum(x.f43);
+      result.day_change_pct = emNum(x.f170); // 已是 % 单位（与现有约定一致）
+      result.pe_ratio       = emNum(x.f164);
+      result.pb_ratio       = emNum(x.f167);
+      result.market_cap     = emNum(x.f116);
+      result.year_high      = emNum(x.f174);
+      result.year_low       = emNum(x.f175);
+      // f188 是百分比格式（0.39 = 0.39%），DB 约定 decimal（0.039 = 3.9%）→ ÷ 100
+      const dyPct = emNum(x.f188);
+      result.dividend_yield = dyPct != null ? dyPct / 100 : null;
+      result.sector         = x.f127 && x.f127 !== '-' ? x.f127 : null;
+      result.industry       = result.sector;
+      result.country        = '香港';
+      result.currency       = 'HKD';
+      result.exchange       = 'HKEX';
+      if (result.year_high && result.year_low) {
+        result.range_52w = `${result.year_low} - ${result.year_high}`;
+      }
+    }
+  } catch (e) { console.warn(`Eastmoney push2 failed for ${symbol}: ${e.message}`); }
+
+  // ② 财务指标（datacenter）→ EPS / ROE / 毛利率 / 净利率 / 营收增长
+  try {
+    const params = new URLSearchParams({
+      reportName: 'RPT_HKF10_FN_MAININDICATOR',
+      columns: 'HKF10_FN_MAININDICATOR',
+      pageNumber: '1',
+      pageSize: '1',
+      sortTypes: '-1',
+      sortColumns: 'STD_REPORT_DATE',
+      source: 'F10',
+      client: 'PC',
+      filter: `(SECUCODE="${code5}.HK")(DATE_TYPE_CODE="001")`,
+    });
+    const url = `${EASTMONEY_DC}?${params}`;
+    const resp = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const json = await resp.json();
+    const rows = json?.result?.data;
+    if (Array.isArray(rows) && rows.length > 0) {
+      const r = rows[0];
+      result.raw_json.financials = r;
+      // EPS：优先 EPS_TTM
+      result.eps = emNum(r.EPS_TTM) ?? emNum(r.BASIC_EPS) ?? emNum(r.DILUTED_EPS);
+      // 百分比字段：÷100 转 decimal
+      const roe = emNum(r.ROE_AVG);
+      result.roe = roe != null ? roe / 100 : null;
+      const gm = emNum(r.GROSS_PROFIT_RATIO);
+      result.gross_margin = gm != null ? gm / 100 : null;
+      const nm = emNum(r.NET_PROFIT_RATIO);
+      result.net_margin = nm != null ? nm / 100 : null;
+      // 营业利率：用 (营业利润/营收) 近似（Eastmoney 给 GROSS_PROFIT 是毛利不是营业利润，跳过）
+    }
+  } catch (e) { console.warn(`Eastmoney datacenter failed for ${symbol}: ${e.message}`); }
+
+  tagAllFieldsWithSource(result, 'eastmoney');
+  return result;
+}
+
+// ============================================================
 // Phase 3: 按市场后缀路由到最优数据源
 // US (no suffix / -, BRK-B 等) → Yahoo + FMP hybrid
 // .SS / .SZ → Tushare 主源（A 股最权威），FMP 备源
-// .HK → Tushare 提供基础+价格，FMP 补 fundamentals 缺口
+// .HK → Eastmoney 主源（Phase 3.5 新增），Tushare/FMP 兜底
 // .T → J-Quants 主源（JPX 官方），FMP 备源
 // ============================================================
 async function fetchFundamentalsByMarket(symbol) {
@@ -1795,8 +1892,15 @@ async function fetchFundamentalsByMarket(symbol) {
     return fetchFundamentalsHybrid(symbol);
   }
 
-  // HK → Tushare 提供 price/profile，FMP 补 fundamentals 缺口（融合）
+  // HK → Eastmoney 主源（Phase 3.5），Tushare/FMP 兜底
   if (upper.endsWith('.HK')) {
+    // 主：Eastmoney（无 API key 限制，覆盖 PE/PB/ROE/利润率/52W/股息率/市值）
+    try {
+      const r = await fetchEastmoneyHKFundamentals(symbol);
+      if (hasSourceData(r)) return r;
+    } catch (e) { console.warn(`[router] Eastmoney HK ${symbol}: ${e.message}`); }
+
+    // 兜底：原 Tushare + FMP 融合（保留旧逻辑应对 Eastmoney 偶发故障）
     let tushareR = {};
     if (hasTushare) {
       try { tushareR = await fetchTushareFundamentals(symbol); }
@@ -1805,7 +1909,6 @@ async function fetchFundamentalsByMarket(symbol) {
     let fmpR = {};
     try { fmpR = await fetchFMPFundamentals(symbol); }
     catch (e) { /* ignore — FMP Free 可能不覆盖 HK */ }
-    // 融合：Tushare 字段优先（来自交易所），FMP 字段补缺
     const merged = { symbol, source: 'tushare+fmp', raw_json: { tushare: tushareR.raw_json, fmp: fmpR.raw_json }, field_sources: {} };
     for (const k of Object.keys(tushareR)) {
       if (['symbol','source','raw_json','field_sources','discrepancies'].includes(k)) continue;
@@ -2070,7 +2173,7 @@ app.post("/api/fundamentals/refresh-all", auth, async (req, res) => {
     );
     const result = {
       ok: 0, failed: [], total: r.rows.length,
-      sources: { 'yahoo+fmp': 0, yahoo: 0, fmp: 0, tushare: 0, jquants: 0, 'tushare+fmp': 0 },
+      sources: { 'yahoo+fmp': 0, yahoo: 0, fmp: 0, tushare: 0, jquants: 0, eastmoney: 0, 'tushare+fmp': 0 },
       total_discrepancies: 0,
       first_error: null,  // Phase 2.3 调试：暴露首个失败的具体原因
     };
