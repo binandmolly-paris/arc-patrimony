@@ -4234,10 +4234,11 @@
         if (!src) return '';
         const disc = discrepancies && discrepancies[field];
         const SRC_META = {
-            yahoo:   { letter: 'Y', name: 'Yahoo Finance',     color: '#94a3b8' },
-            fmp:     { letter: 'F', name: 'FMP',                color: '#94a3b8' },
-            tushare: { letter: 'T', name: 'Tushare Pro (A股/港股)', color: '#f87171' },
-            jquants: { letter: 'J', name: 'J-Quants V2 (日股)',  color: '#60a5fa' },
+            yahoo:     { letter: 'Y', name: 'Yahoo Finance',           color: '#94a3b8', bg: 'rgba(148,163,184,0.10)' },
+            fmp:       { letter: 'F', name: 'FMP',                      color: '#94a3b8', bg: 'rgba(148,163,184,0.10)' },
+            tushare:   { letter: 'T', name: 'Tushare Pro (A股)',        color: '#f87171', bg: 'rgba(248,113,113,0.12)' },
+            jquants:   { letter: 'J', name: 'J-Quants V2 (日股)',        color: '#60a5fa', bg: 'rgba(96,165,250,0.12)' },
+            eastmoney: { letter: 'E', name: '东方财富 Eastmoney (港股)', color: '#fb923c', bg: 'rgba(251,146,60,0.12)' },
         };
         const meta = SRC_META[src];
         if (!meta) return '';
@@ -4246,8 +4247,7 @@
             const tooltip = `两源分歧 ${disc.diff_pct}%\nYahoo: ${disc.yahoo}\nFMP: ${disc.fmp}\n\n当前显示主源（${meta.name}）`;
             return `<span style="${baseStyle}background:rgba(251,191,36,0.18);color:#fbbf24;border:1px solid rgba(251,191,36,0.4);" title="${tooltip}">${meta.letter}⚠</span>`;
         }
-        const bg = src === 'tushare' ? 'rgba(248,113,113,0.12)' : src === 'jquants' ? 'rgba(96,165,250,0.12)' : 'rgba(148,163,184,0.10)';
-        return `<span style="${baseStyle}background:${bg};color:${meta.color};" title="数据源：${meta.name}">${meta.letter}</span>`;
+        return `<span style="${baseStyle}background:${meta.bg};color:${meta.color};" title="数据源：${meta.name}">${meta.letter}</span>`;
     }
 
     async function loadFundamentalsForModal(symbol) {
@@ -4382,17 +4382,17 @@
         // 估算耗时：港股 hk_daily 限速 31s/只 是大头
         const hkCount = APP.holdings.filter(h => h.qty > 0 && h.symbol.endsWith('.HK')).length;
         const estSec = Math.max(Math.ceil(count * 2), hkCount * 31);
-        if (!confirm(`即将按市场分源批量拉取 ${count} 只持仓的基本面：\n· 美股 → Yahoo + FMP 双源\n· A股/港股 → Tushare Pro\n· 日股 → J-Quants V2\n\n预计约 ${estSec} 秒（港股有限速等待）。\n\n继续？`)) return;
+        if (!confirm(`即将按市场分源批量拉取 ${count} 只持仓的基本面：\n· 美股 → Yahoo + FMP 双源\n· A股 → Tushare Pro\n· 港股 → 东方财富 (Phase 3.5)\n· 日股 → J-Quants V2\n\n预计约 ${estSec} 秒。\n\n继续？`)) return;
         try {
             const result = await apiCall('/fundamentals/refresh-all', 'POST');
             const failedMsg = result.failed && result.failed.length > 0
                 ? `\n\n失败 ${result.failed.length} 只：\n${result.failed.slice(0, 8).map(f => `· ${f.symbol}`).join('\n')}${result.failed.length > 8 ? `\n…还有 ${result.failed.length - 8} 只` : ''}`
                 : '';
             const srcs = result.sources || {};
-            // 按非零项展示来源分布；Phase 3 加 Tushare/J-Quants
+            // 按非零项展示来源分布；Phase 3 加 Tushare/J-Quants/Eastmoney
             const srcLabels = {
                 'yahoo+fmp': '双源 Y+F', yahoo: '仅 Yahoo', fmp: '仅 FMP',
-                tushare: 'Tushare 🇨🇳', jquants: 'J-Quants 🇯🇵', 'tushare+fmp': 'Tushare+FMP',
+                tushare: 'Tushare 🇨🇳A', jquants: 'J-Quants 🇯🇵', eastmoney: '东方财富 🇭🇰', 'tushare+fmp': 'Tushare+FMP',
             };
             const srcParts = Object.entries(srcLabels)
                 .map(([k, label]) => srcs[k] > 0 ? `${label} ${srcs[k]}` : null)
@@ -4651,7 +4651,8 @@
                     <div style="display:flex;flex-wrap:wrap;gap:10px;font-size:12px;color:#94a3b8;">
                         <span style="display:inline-flex;align-items:center;gap:6px;"><span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;background:rgba(148,163,184,0.10);color:#94a3b8;">Y</span>Yahoo · 美股</span>
                         <span style="display:inline-flex;align-items:center;gap:6px;"><span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;background:rgba(148,163,184,0.10);color:#94a3b8;">F</span>FMP · 美股</span>
-                        <span style="display:inline-flex;align-items:center;gap:6px;"><span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;background:rgba(248,113,113,0.12);color:#f87171;">T</span>Tushare · A股+港股</span>
+                        <span style="display:inline-flex;align-items:center;gap:6px;"><span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;background:rgba(248,113,113,0.12);color:#f87171;">T</span>Tushare · A股</span>
+                        <span style="display:inline-flex;align-items:center;gap:6px;"><span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;background:rgba(251,146,60,0.12);color:#fb923c;">E</span>东方财富 · 港股</span>
                         <span style="display:inline-flex;align-items:center;gap:6px;"><span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;background:rgba(96,165,250,0.12);color:#60a5fa;">J</span>J-Quants · 日股</span>
                     </div>
                 </div>
