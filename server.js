@@ -2594,7 +2594,7 @@ async function buildAIReportContext(userId) {
     [userId]
   );
   const tradesR = await pool.query(
-    `SELECT symbol, action, qty, price, currency, date
+    `SELECT symbol, type, qty, price, date
      FROM trades WHERE user_id=$1 AND date >= NOW() - INTERVAL '30 days'
      ORDER BY date DESC LIMIT 50`,
     [userId]
