@@ -2448,6 +2448,7 @@
                     <div class="tab" onclick="switchTab(4)">Analysis</div>
                     <div class="tab" onclick="switchTab(5)">Allocation</div>
                     <div class="tab" onclick="switchTab(6)">Settings</div>
+                    <div class="tab" onclick="switchTab(7)">📰 每日播报</div>
                 </div>
 
                 <div class="tab-content">
@@ -2458,6 +2459,7 @@
                     <div id="tab-4" class="hidden"></div>
                     <div id="tab-5" class="hidden"></div>
                     <div id="tab-6" class="hidden"></div>
+                    <div id="tab-7" class="hidden"></div>
                 </div>
             </div>
 
@@ -2696,7 +2698,7 @@
 
     function switchTab(index) {
         // Hide all tabs
-        for (let i = 0; i < 7; i++) {
+        for (let i = 0; i < 8; i++) {
             const tab = document.getElementById(`tab-${i}`);
             const tabBtn = document.querySelectorAll('.tab')[i];
             if (tab) tab.classList.add('hidden');
@@ -2718,6 +2720,7 @@
             case 4: renderTab4(); break;
             case 5: renderTab5Portfolio(); break;
             case 6: renderTab5(); break;
+            case 7: renderTab7AIReport(); break;
         }
     }
 
@@ -4751,6 +4754,170 @@
         `;
 
         container.innerHTML = html;
+    }
+
+    // ===== Phase 4: 📰 每日播报 Tab =====
+    let aiReportState = { currentDate: null, dates: [], generating: false };
+
+    async function renderTab7AIReport() {
+        const container = document.getElementById('tab-7');
+        if (!container) return;
+        container.innerHTML = `
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
+                <div>
+                    <div style="font-size:18px;color:#e2e8f0;font-weight:500;">📰 凯旋门今日播报</div>
+                    <div style="font-size:11px;color:#64748b;margin-top:3px;">每天 9:05 北京自动生成 · Claude Opus 4.7 · 含全球新闻 + 财报分析</div>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center;">
+                    <select id="aiReportDateSelect" onchange="onAIReportDateChange()" class="form-input" style="width:auto;font-size:12px;padding:6px 10px;"></select>
+                    <button class="btn-action primary" onclick="manualGenerateAIReport()" id="aiReportGenBtn" style="font-size:12px;">
+                        🤖 立即生成
+                    </button>
+                </div>
+            </div>
+            <div id="aiReportBody" style="background:rgba(30,41,59,0.45);border:1px solid var(--gold-border);border-radius:14px;padding:24px 28px;min-height:200px;">
+                <div style="text-align:center;color:#64748b;padding:40px;">加载中…</div>
+            </div>
+        `;
+        await loadAIReportDates();
+        await loadAIReportLatest();
+    }
+
+    async function loadAIReportDates() {
+        try {
+            const r = await apiCall('/ai-report/dates');
+            aiReportState.dates = (r.dates || []).map(d => typeof d === 'string' ? d.slice(0, 10) : new Date(d).toISOString().slice(0, 10));
+            const sel = document.getElementById('aiReportDateSelect');
+            if (sel) {
+                if (aiReportState.dates.length === 0) {
+                    sel.innerHTML = `<option>暂无报告</option>`;
+                    sel.disabled = true;
+                } else {
+                    sel.innerHTML = aiReportState.dates.map((d, i) => `<option value="${d}">${d}${i === 0 ? ' · 最新' : ''}</option>`).join('');
+                    sel.disabled = false;
+                }
+            }
+        } catch (e) { console.warn('load AI dates:', e.message); }
+    }
+
+    async function loadAIReportLatest(specificDate) {
+        const body = document.getElementById('aiReportBody');
+        if (!body) return;
+        body.innerHTML = `<div style="text-align:center;color:#64748b;padding:40px;">加载中…</div>`;
+        try {
+            const url = specificDate ? `/ai-report/${specificDate}` : '/ai-report/latest';
+            const r = await apiCall(url);
+            if (r && r.exists === false) {
+                body.innerHTML = `
+                    <div style="text-align:center;padding:40px;">
+                        <div style="font-size:42px;margin-bottom:14px;">📰</div>
+                        <div style="color:#cbd5e1;font-size:15px;font-weight:500;margin-bottom:6px;">还没有报告</div>
+                        <div style="color:#64748b;font-size:12px;line-height:1.6;">明天早上 9:05 北京会自动生成第一份。<br/>或者点上方「🤖 立即生成」马上来一份（约 60-90 秒）</div>
+                    </div>
+                `;
+                return;
+            }
+            aiReportState.currentDate = (r.date || '').slice(0, 10);
+            // 同步下拉选中
+            const sel = document.getElementById('aiReportDateSelect');
+            if (sel && aiReportState.currentDate) sel.value = aiReportState.currentDate;
+            // 渲染 Markdown → HTML（轻量自实现）
+            const html = renderMarkdownLite(r.summary_md || '');
+            const ts = r.generated_at ? new Date(r.generated_at).toLocaleString('zh-CN') : '';
+            const tokens = r.prompt_tokens && r.completion_tokens
+                ? `${r.prompt_tokens.toLocaleString()} → ${r.completion_tokens.toLocaleString()} tokens`
+                : '';
+            body.innerHTML = `
+                <div class="ai-report-md">${html}</div>
+                <div style="border-top:1px dashed rgba(148,163,184,0.18);margin-top:24px;padding-top:14px;font-size:10px;color:#475569;display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;">
+                    <span>🤖 ${r.model || 'claude-opus-4-7'} · ${tokens}</span>
+                    <span>生成于 ${ts}</span>
+                </div>
+            `;
+        } catch (e) {
+            body.innerHTML = `<div style="text-align:center;color:#f87171;padding:40px;font-size:13px;">加载失败：${e.message}</div>`;
+        }
+    }
+
+    function onAIReportDateChange() {
+        const sel = document.getElementById('aiReportDateSelect');
+        if (sel && sel.value) loadAIReportLatest(sel.value);
+    }
+
+    async function manualGenerateAIReport() {
+        if (aiReportState.generating) return;
+        if (!confirm('立即生成今日 AI 决策派日报？\n\n· 调 Claude Opus 4.7\n· 含 web 搜索（5-7 次）\n· 约耗时 60-90 秒\n· 单次约 $0.15-$0.25\n\n继续？')) return;
+        aiReportState.generating = true;
+        const btn = document.getElementById('aiReportGenBtn');
+        if (btn) { btn.disabled = true; btn.innerHTML = '⏳ 生成中…'; }
+        const body = document.getElementById('aiReportBody');
+        if (body) {
+            body.innerHTML = `
+                <div style="text-align:center;padding:60px 20px;">
+                    <div style="font-size:36px;margin-bottom:12px;animation:spin 2s linear infinite;display:inline-block;">🤖</div>
+                    <div style="color:#cbd5e1;font-size:14px;margin-bottom:6px;">Claude 正在分析…</div>
+                    <div style="color:#64748b;font-size:11px;line-height:1.6;">读你的持仓 · 搜全球新闻 · 查财报 · 写报告<br/>预计 60-90 秒，请勿关闭页面</div>
+                </div>
+                <style>@keyframes spin { 0%,100% { transform: rotate(0deg);} 50% { transform: rotate(180deg);} }</style>
+            `;
+        }
+        try {
+            await apiCall('/ai-report/generate', 'POST');
+            await loadAIReportDates();
+            await loadAIReportLatest();
+        } catch (e) {
+            alert(`❌ 生成失败：${e.message}`);
+            await loadAIReportLatest();
+        } finally {
+            aiReportState.generating = false;
+            if (btn) { btn.disabled = false; btn.innerHTML = '🤖 立即生成'; }
+        }
+    }
+
+    // 极简 Markdown → HTML（够用）
+    function renderMarkdownLite(md) {
+        if (!md) return '';
+        const escape = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        let html = '';
+        const lines = md.split('\n');
+        let inList = false;
+        const flushList = () => { if (inList) { html += '</ul>'; inList = false; } };
+        for (let line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed) { flushList(); html += ''; continue; }
+            // Headings
+            const h = trimmed.match(/^(#{1,4})\s+(.+)$/);
+            if (h) {
+                flushList();
+                const level = h[1].length;
+                const text = inlineMd(h[2]);
+                const sizes = { 1: '20px', 2: '17px', 3: '14px', 4: '13px' };
+                const colors = { 1: '#f1f5f9', 2: '#e2e8f0', 3: '#cbd5e1', 4: '#94a3b8' };
+                const margin = { 1: '20px', 2: '20px', 3: '14px', 4: '10px' };
+                html += `<div style="font-size:${sizes[level]};color:${colors[level]};font-weight:${level<=2?600:500};margin-top:${margin[level]};margin-bottom:8px;line-height:1.4;">${text}</div>`;
+                continue;
+            }
+            // Lists
+            const li = trimmed.match(/^[-*•·]\s+(.+)$/);
+            if (li) {
+                if (!inList) { html += '<ul style="margin:6px 0 10px 0;padding-left:22px;color:#cbd5e1;font-size:13px;line-height:1.7;">'; inList = true; }
+                html += `<li style="margin-bottom:4px;">${inlineMd(li[1])}</li>`;
+                continue;
+            }
+            flushList();
+            // 普通段落
+            html += `<p style="font-size:13px;color:#cbd5e1;line-height:1.7;margin:8px 0;">${inlineMd(trimmed)}</p>`;
+        }
+        flushList();
+        return html;
+    }
+    function inlineMd(s) {
+        // bold ** ** / italic * * / code ` `
+        return s
+            .replace(/\*\*([^*]+)\*\*/g, '<strong style="color:#e2e8f0;">$1</strong>')
+            .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+            .replace(/`([^`]+)`/g, '<code style="background:rgba(148,163,184,0.10);padding:1px 5px;border-radius:3px;font-size:11px;color:#fbbf24;font-family:Montserrat,monospace;">$1</code>')
+            .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener" style="color:#60a5fa;">$1</a>');
     }
 
     // ===== Today P&L 详情弹窗（Phase 3.7：2 级 drill-down）=====
