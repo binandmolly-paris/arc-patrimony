@@ -3068,16 +3068,20 @@
                     // Budget usage measured by COST (actual money invested), not market value
                     const budgetUsedPct = regionBudget > 0 ? (s.cost / regionBudget * 100) : 0;
                     const budgetRemaining = regionBudget - s.cost;
-                    // Today's P&L for this region
+                    // Today's P&L for this region — Phase 3.7.1 fix: 必须用 latestSessionDate 过滤
+                    // 否则港股若停留在 04-28 stale data 会污染当日盈亏，跟主卡不一致
                     let todayPL = 0;
+                    let todayBaseValue = 0;  // 仅统计 sessionDate == latestSessionDate 的股票
                     activeHoldings.filter(h => h.region === r).forEach(h => {
                         const pd = APP.prices[h.symbol];
-                        if (pd && pd.prevClose && pd.price) {
-                            todayPL += h.qty * (pd.price - pd.prevClose) * (APP.FX_RATES[h.currency] || 1);
-                        }
+                        if (!pd || !pd.prevClose || !pd.price) return;
+                        const sessionDate = getStockSessionDate(h, pd);
+                        if (sessionDate !== latestSessionDate) return;  // ⭐ 关键过滤
+                        const fx = APP.FX_RATES[h.currency] || 1;
+                        todayPL += h.qty * (pd.price - pd.prevClose) * fx;
+                        todayBaseValue += h.qty * pd.prevClose * fx;
                     });
-                    const todayBase = s.value - todayPL;
-                    const todayPct = todayBase > 0 ? (todayPL / todayBase * 100) : 0;
+                    const todayPct = todayBaseValue > 0 ? (todayPL / todayBaseValue * 100) : 0;
                     return `<div class="stat-card" style="position:relative;padding:14px 16px;">
                         <div style="display:flex;justify-content:space-between;align-items:flex-start;">
                             <div>
