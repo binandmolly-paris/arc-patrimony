@@ -2601,14 +2601,9 @@
             </div>
 
             <div class="modal" id="todayPLModal">
-                <div class="modal-content" style="position: relative; max-width: 600px;">
+                <div class="modal-content" style="position: relative; max-width: 640px;">
                     <button class="modal-close" onclick="closeModal('todayPLModal')">×</button>
-                    <div class="modal-header" style="display:flex;justify-content:space-between;align-items:center;">
-                        <span>📊 今日浮盈亏明细</span>
-                        <button onclick="toggleTodayPLSort()" id="todayPLSortBtn" style="background:rgba(193,166,115,0.12);color:var(--gold-light);border:1px solid rgba(193,166,115,0.3);padding:4px 10px;border-radius:6px;font-size:11px;cursor:pointer;">
-                            <span id="todayPLSortIcon">↓</span> <span id="todayPLSortLabel">由高到低</span>
-                        </button>
-                    </div>
+                    <div class="modal-header">📊 今日浮盈亏明细</div>
                     <div id="todayPLBreakdownBody"></div>
                 </div>
             </div>
@@ -4759,18 +4754,16 @@
     }
 
     // ===== Today P&L 详情弹窗（Phase 3.6）=====
-    // 排序状态：true = 由高到低（默认），false = 由低到高
-    let todayPLSortDesc = true;
+    // 每个地区独立的股票排序状态：true = 由高到低，false = 由低到高
+    const todayPLRegionSortDesc = { '美国': true, '中国': true, '日本': true, '其他': true };
 
     function openTodayPLBreakdown() {
         renderTodayPLBreakdown();
         openModal('todayPLModal');
     }
 
-    function toggleTodayPLSort() {
-        todayPLSortDesc = !todayPLSortDesc;
-        document.getElementById('todayPLSortIcon').textContent = todayPLSortDesc ? '↓' : '↑';
-        document.getElementById('todayPLSortLabel').textContent = todayPLSortDesc ? '由高到低' : '由低到高';
+    function toggleRegionSort(region) {
+        todayPLRegionSortDesc[region] = !todayPLRegionSortDesc[region];
         renderTodayPLBreakdown();
     }
 
@@ -4799,7 +4792,8 @@
             const sessionDate = getStockSessionDate(h, pd);
             const r = h.region || '其他';
             if (!byRegion[r]) byRegion[r] = { included: [], pending: [], totalIncluded: 0, totalPending: 0 };
-            const entry = { symbol: h.symbol, name: h.name || h.symbol, delta, localDelta, currency: h.currency, sessionDate, price: pd.price, prevClose: pd.prevClose };
+            const dayPct = pd.prevClose ? ((pd.price - pd.prevClose) / pd.prevClose) * 100 : 0;
+            const entry = { symbol: h.symbol, name: h.name || h.symbol, qty: h.qty, delta, localDelta, currency: h.currency, sessionDate, price: pd.price, prevClose: pd.prevClose, dayPct };
             if (sessionDate === latestSessionDate) {
                 byRegion[r].included.push(entry);
                 byRegion[r].totalIncluded += delta;
@@ -4809,12 +4803,8 @@
             }
         });
 
-        // 排序方向
-        const cmp = (a, b) => todayPLSortDesc ? (b.delta - a.delta) : (a.delta - b.delta);
-        const cmpRegion = (a, b) => todayPLSortDesc ? (b[1].totalIncluded - a[1].totalIncluded) : (a[1].totalIncluded - b[1].totalIncluded);
-
-        // 区域排序
-        const sortedRegions = Object.entries(byRegion).sort(cmpRegion);
+        // 地区排序：固定按地区 P&L 由高到低（不让用户切换，保持稳定结构）
+        const sortedRegions = Object.entries(byRegion).sort((a, b) => b[1].totalIncluded - a[1].totalIncluded);
 
         // 总计
         const totalIncluded = sortedRegions.reduce((s, [r, info]) => s + info.totalIncluded, 0);
@@ -4844,45 +4834,67 @@
 
         sortedRegions.forEach(([region, info]) => {
             if (info.included.length === 0 && info.pending.length === 0) return;
+            // 每个地区独立的排序状态（默认 true = 由高到低）
+            const regSortDesc = todayPLRegionSortDesc[region] !== false;
+            const cmp = (a, b) => regSortDesc ? (b.delta - a.delta) : (a.delta - b.delta);
             const sortedStocks = info.included.slice().sort(cmp);
+            const arrow = regSortDesc ? '↓' : '↑';
+            const sortLabel = regSortDesc ? '由高到低' : '由低到高';
             html += `
                 <div style="margin-bottom:14px;">
-                    <div style="display:flex;justify-content:space-between;align-items:baseline;padding:8px 12px;background:rgba(30,41,59,0.45);border-radius:8px 8px 0 0;border:1px solid var(--gold-border);border-bottom:none;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:rgba(30,41,59,0.45);border-radius:8px 8px 0 0;border:1px solid var(--gold-border);border-bottom:none;gap:10px;">
                         <span style="font-size:13px;color:#cbd5e1;font-weight:500;">${flagOf(region)} ${region} <span style="color:#64748b;font-size:11px;">(${info.included.length}只已计入)</span></span>
-                        <span class="${cls(info.totalIncluded)}" style="font-size:14px;font-weight:600;font-family:Montserrat;">${sgn(info.totalIncluded)}$${fmtNum(info.totalIncluded)}</span>
+                        <span style="display:flex;align-items:center;gap:8px;">
+                            <button onclick="toggleRegionSort('${region}')" title="切换股票排序" style="background:rgba(193,166,115,0.10);color:var(--gold-light);border:1px solid rgba(193,166,115,0.25);padding:2px 7px;border-radius:5px;font-size:10px;cursor:pointer;white-space:nowrap;">
+                                ${arrow} ${sortLabel}
+                            </button>
+                            <span class="${cls(info.totalIncluded)}" style="font-size:14px;font-weight:600;font-family:Montserrat;">${sgn(info.totalIncluded)}$${fmtNum(info.totalIncluded)}</span>
+                        </span>
                     </div>
                     <div style="border:1px solid var(--gold-border);border-radius:0 0 8px 8px;overflow:hidden;">
             `;
+            // 每行 4 列信息：[代码+名+数量] [日涨跌%] [本币收益+价格变动] [USD收益]
+            const renderRow = (s, opts) => {
+                const isPending = !!opts.pending;
+                const localProfit = `${sgn(s.localDelta)}${cs(s.currency)}${fmtNum(s.localDelta, 0)}`;
+                return `
+                    <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;${opts.borderBottom ? 'border-bottom:1px solid rgba(148,163,184,0.08);' : ''}${isPending ? 'opacity:0.55;' : ''}">
+                        <div style="min-width:0;flex:1.4;">
+                            <div style="font-size:13px;color:${isPending?'#94a3b8':'#e2e8f0'};font-weight:500;font-family:Montserrat;line-height:1.2;">
+                                ${s.symbol}${isPending ? ` <span style="font-size:9px;color:#64748b;font-weight:400;">⏰${s.sessionDate}</span>`:''}
+                            </div>
+                            <div style="font-size:10px;color:#64748b;margin-top:2px;line-height:1.2;">
+                                ${s.name} · ${fmtNum(s.qty, 0)}股
+                            </div>
+                        </div>
+                        <div style="flex:1;text-align:right;min-width:0;">
+                            <div class="${cls(s.dayPct)}" style="font-size:12px;font-weight:600;font-family:Montserrat;line-height:1.2;">
+                                ${sgn(s.dayPct)}${fmtNum(s.dayPct, 2)}%
+                            </div>
+                            <div style="font-size:10px;color:#64748b;margin-top:2px;font-family:Montserrat;line-height:1.2;">
+                                ${cs(s.currency)}${fmtNum(s.prevClose,2)}→${cs(s.currency)}${fmtNum(s.price,2)}
+                            </div>
+                        </div>
+                        <div style="flex:1;text-align:right;min-width:0;">
+                            <div class="${cls(s.delta)}" style="font-size:13px;font-weight:600;font-family:Montserrat;line-height:1.2;">
+                                ${sgn(s.delta)}$${fmtNum(s.delta, 0)}
+                            </div>
+                            <div class="${cls(s.localDelta)}" style="font-size:10px;margin-top:2px;font-family:Montserrat;line-height:1.2;opacity:0.7;">
+                                ${localProfit}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            };
+
+            const totalRowsInRegion = sortedStocks.length + info.pending.length;
             sortedStocks.forEach((s, idx) => {
                 const isLast = idx === sortedStocks.length - 1 && info.pending.length === 0;
-                html += `
-                    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;${!isLast ? 'border-bottom:1px solid rgba(148,163,184,0.08);' : ''}">
-                        <div style="min-width:0;flex:1;">
-                            <div style="font-size:13px;color:#e2e8f0;font-weight:500;font-family:Montserrat;">${s.symbol}</div>
-                            <div style="font-size:11px;color:#64748b;margin-top:2px;">${s.name}</div>
-                        </div>
-                        <div style="text-align:right;">
-                            <div class="${cls(s.delta)}" style="font-size:13px;font-weight:500;font-family:Montserrat;">${sgn(s.delta)}$${fmtNum(s.delta, 0)}</div>
-                            <div style="font-size:10px;color:#64748b;margin-top:2px;">${cs(s.currency)}${fmtNum(s.prevClose,2)} → ${cs(s.currency)}${fmtNum(s.price,2)}</div>
-                        </div>
-                    </div>
-                `;
+                html += renderRow(s, { pending: false, borderBottom: !isLast });
             });
-            // pending（用淡色显示）
             info.pending.forEach((s, idx) => {
                 const isLast = idx === info.pending.length - 1;
-                html += `
-                    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;opacity:0.55;${!isLast ? 'border-bottom:1px solid rgba(148,163,184,0.08);' : ''}">
-                        <div style="min-width:0;flex:1;">
-                            <div style="font-size:13px;color:#94a3b8;font-family:Montserrat;">${s.symbol} <span style="font-size:10px;color:#64748b;">⏰ ${s.sessionDate}</span></div>
-                            <div style="font-size:11px;color:#64748b;margin-top:2px;">${s.name}</div>
-                        </div>
-                        <div style="text-align:right;">
-                            <div class="${cls(s.delta)}" style="font-size:13px;font-family:Montserrat;">${sgn(s.delta)}$${fmtNum(s.delta, 0)}</div>
-                            <div style="font-size:10px;color:#64748b;margin-top:2px;">待开盘</div>
-                        </div>
-                    </div>
-                `;
+                html += renderRow(s, { pending: true, borderBottom: !isLast });
             });
             html += `</div></div>`;
         });
