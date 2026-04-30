@@ -921,8 +921,9 @@ app.get("/api/export", auth, async (req, res) => {
 });
 
 // ===== 实时汇率 =====
-const fxRates = { JPY: 0.0067, CNY: 0.138, USD: 1, HKD: 0.128 };
-const fxPairs = ['JPYUSD=X', 'CNYUSD=X', 'HKDUSD=X'];
+// fxRates[X] = USD per 1 X. _prev_X = previous trading day's close (for daily-change display).
+const fxRates = { JPY: 0.0067, CNY: 0.138, USD: 1, HKD: 0.128, CHF: 1.10, MYR: 0.21 };
+const fxPairs = ['JPYUSD=X', 'CNYUSD=X', 'HKDUSD=X', 'CHFUSD=X', 'MYRUSD=X'];
 
 async function fetchFXRates() {
   for (const pair of fxPairs) {
@@ -931,11 +932,14 @@ async function fetchFXRates() {
       const resp = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
       if (!resp.ok) continue;
       const json = await resp.json();
-      const rate = json?.chart?.result?.[0]?.meta?.regularMarketPrice;
+      const meta = json?.chart?.result?.[0]?.meta;
+      const rate = meta?.regularMarketPrice;
+      const prev = meta?.chartPreviousClose;
       if (rate && rate > 0) {
         const cur = pair.substring(0, 3);
         fxRates[cur] = rate;
-        console.log(`汇率更新: 1 ${cur} = ${rate} USD`);
+        if (prev && prev > 0) fxRates['_prev_' + cur] = prev;
+        console.log(`汇率更新: 1 ${cur} = ${rate} USD (prev ${prev || '?'})`);
       }
     } catch (e) {
       console.error("FX fetch error for", pair, e.message);
