@@ -289,6 +289,50 @@
             100% { background-position: 200% 0%; }
         }
 
+        /* FX strip — borderless raised bar with sweeping highlight */
+        .fx-strip {
+            position: relative;
+            overflow: hidden;
+            background: linear-gradient(180deg, rgba(15,23,42,0.6) 0%, rgba(11,15,18,0.78) 100%);
+            border-radius: 12px;
+            box-shadow:
+                0 6px 18px rgba(0,0,0,0.42),
+                inset 0 1px 0 rgba(193,166,115,0.12),
+                inset 0 -1px 0 rgba(0,0,0,0.45);
+            cursor: pointer;
+            user-select: none;
+            transition: box-shadow 0.3s ease;
+        }
+        .fx-strip::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 30%;
+            height: 100%;
+            background: linear-gradient(90deg,
+                transparent 0%,
+                rgba(193,166,115,0.06) 30%,
+                rgba(193,166,115,0.18) 50%,
+                rgba(193,166,115,0.06) 70%,
+                transparent 100%);
+            animation: fxStripSweep 7s ease-in-out infinite;
+            pointer-events: none;
+            will-change: transform;
+        }
+        .fx-strip.paused::before {
+            animation-play-state: paused;
+        }
+        .fx-strip.paused {
+            box-shadow:
+                0 6px 18px rgba(0,0,0,0.42),
+                inset 0 0 0 1px rgba(193,166,115,0.25);
+        }
+        @keyframes fxStripSweep {
+            0%   { transform: translateX(-100%); }
+            100% { transform: translateX(440%); }
+        }
+
         .app-header {
             background: rgba(11, 15, 18, 0.85);
             backdrop-filter: blur(20px);
@@ -4538,7 +4582,7 @@
         const chips = pairs.map(([b, q]) => {
             const p = _fxPair(b, q);
             if (!p) {
-                return `<div style="background:rgba(11,15,18,0.6);border:1px solid rgba(148,163,184,0.12);border-radius:8px;padding:6px 11px;display:flex;align-items:center;gap:8px;">
+                return `<div style="background:rgba(11,15,18,0.55);border:1px solid rgba(148,163,184,0.1);border-radius:8px;padding:7px 11px;display:flex;align-items:center;gap:8px;position:relative;z-index:1;">
                     <span style="font-size:10px;color:#475569;letter-spacing:0.5px;font-weight:600;">${b}/${q}</span>
                     <span style="font-size:11px;color:#475569;">—</span>
                 </div>`;
@@ -4546,14 +4590,14 @@
             const arrow = p.chg > 0.005 ? '↑' : p.chg < -0.005 ? '↓' : '·';
             const chgColor = p.chg > 0.005 ? '#4ade80' : p.chg < -0.005 ? '#f87171' : '#64748b';
             const chgTxt = Math.abs(p.chg) < 0.005 ? '0.00%' : `${p.chg > 0 ? '+' : ''}${p.chg.toFixed(2)}%`;
-            return `<div style="background:rgba(11,15,18,0.7);border:1px solid rgba(193,166,115,0.18);border-radius:8px;padding:6px 11px;display:flex;align-items:center;gap:8px;transition:border-color 0.2s;" onmouseover="this.style.borderColor='rgba(193,166,115,0.4)'" onmouseout="this.style.borderColor='rgba(193,166,115,0.18)'">
+            return `<div style="background:rgba(11,15,18,0.55);border:1px solid rgba(193,166,115,0.14);border-radius:8px;padding:7px 11px;display:flex;align-items:center;gap:8px;position:relative;z-index:1;transition:border-color 0.2s, transform 0.2s;" onmouseover="this.style.borderColor='rgba(193,166,115,0.4)';this.style.transform='translateY(-1px)'" onmouseout="this.style.borderColor='rgba(193,166,115,0.14)';this.style.transform='translateY(0)'">
                 <span style="font-size:10px;color:#94a3b8;letter-spacing:0.6px;font-weight:600;">${b}/${q}</span>
                 <span style="font-size:14px;color:#C1A673;font-weight:600;font-family:Montserrat,sans-serif;line-height:1;">${_fmtFXRate(p.rate)}</span>
                 <span style="font-size:10px;color:${chgColor};font-family:Montserrat,sans-serif;font-weight:500;">${arrow}${chgTxt}</span>
             </div>`;
         }).join('');
-        return `<div style="margin-top:14px;padding:10px 14px;background:rgba(15,23,42,0.45);backdrop-filter:blur(8px);border:1px solid rgba(193,166,115,0.1);border-radius:10px;display:flex;flex-wrap:wrap;align-items:center;gap:8px;">
-            <div style="display:flex;align-items:center;gap:6px;font-size:10px;color:#64748b;letter-spacing:2px;font-weight:600;padding-right:4px;border-right:1px solid rgba(193,166,115,0.1);margin-right:4px;height:28px;">💱 FX</div>
+        return `<div class="fx-strip" onclick="this.classList.toggle('paused')" title="点击切换呼吸灯效果" style="margin:14px 0;padding:11px 16px;display:flex;flex-wrap:wrap;align-items:center;gap:8px;">
+            <div style="display:flex;align-items:center;gap:6px;font-size:10px;color:#94a3b8;letter-spacing:2px;font-weight:700;padding-right:8px;border-right:1px solid rgba(193,166,115,0.15);margin-right:4px;height:28px;position:relative;z-index:1;">💱 FX</div>
             ${chips}
         </div>`;
     }
@@ -5239,12 +5283,14 @@
         body.innerHTML = html;
     }
 
-    // ===== Region drill-down: pie chart + holdings table =====
-    const regionDrilldownState = { region: null, view: 'pie' };
+    // ===== Region drill-down: donut chart + sortable holdings table =====
+    const regionDrilldownState = { region: null, view: 'pie', sortKey: 'value', sortDir: 'desc' };
 
     function openRegionDrilldown(region) {
         regionDrilldownState.region = region;
         regionDrilldownState.view = 'pie';
+        regionDrilldownState.sortKey = 'value';
+        regionDrilldownState.sortDir = 'desc';
         renderRegionDrilldown();
         openModal('regionDrilldownModal');
     }
@@ -5254,12 +5300,22 @@
         renderRegionDrilldown();
     }
 
+    function setRegionDrilldownSort(key) {
+        if (regionDrilldownState.sortKey === key) {
+            regionDrilldownState.sortDir = regionDrilldownState.sortDir === 'desc' ? 'asc' : 'desc';
+        } else {
+            regionDrilldownState.sortKey = key;
+            regionDrilldownState.sortDir = (key === 'name' || key === 'symbol') ? 'asc' : 'desc';
+        }
+        renderRegionDrilldown();
+    }
+
     function _regionFlag(r) {
         return r==='美国'?'🇺🇸':r==='中国'?'🇨🇳':r==='日本'?'🇯🇵':r==='香港'?'🇭🇰':'🌐';
     }
 
     function _regionItems(region) {
-        const list = (APP.holdings || [])
+        return (APP.holdings || [])
             .filter(h => h.qty > 0 && (h.region || '其他') === region)
             .map(h => {
                 const pd = APP.prices[h.symbol] || {};
@@ -5269,16 +5325,13 @@
                 const pl = value - cost;
                 const plPct = cost > 0 ? (pl / cost * 100) : 0;
                 return {
-                    symbol: h.symbol,
-                    name: h.name || h.symbol,
-                    currency: h.currency || 'USD',
+                    symbol: h.symbol, name: h.name || h.symbol,
                     price, qty: h.qty,
                     value, avgCost: h.avg_cost, cost, pl, plPct,
                     hasLivePrice: !!pd.price,
                 };
             })
             .sort((a, b) => b.value - a.value);
-        return list;
     }
 
     function renderRegionDrilldown() {
@@ -5293,89 +5346,195 @@
             body.innerHTML = `<div style="padding:40px 20px;text-align:center;color:#64748b;font-size:13px;">该属地暂无持仓</div>`;
             return;
         }
-        // Use the first holding's currency as region display currency (within a region they're typically uniform)
-        const cur = items[0].currency;
+        // Currency derived from REGION (deterministic): 中国→CNY, 日本→JPY, 香港→HKD, 美国→USD
+        const cur = getRegionCurrency(r);
         const curSym = getRegionCurrencySymbol(cur);
 
         if (regionDrilldownState.view === 'pie') {
             header.innerHTML = `${_regionFlag(r)} ${r} · 资产占比`;
-            body.innerHTML = _renderRegionPie(items, curSym);
+            body.innerHTML = _renderRegionPie(items, curSym, r);
         } else {
             header.innerHTML = `${_regionFlag(r)} ${r} · 持仓清单`;
             body.innerHTML = _renderRegionTable(items, curSym);
         }
     }
 
-    function _renderRegionPie(items, curSym) {
+    // ===== Donut chart: gradient slices, leader lines, glow, center label =====
+    function _renderRegionPie(items, curSym, region) {
         const total = items.reduce((s, x) => s + x.value, 0);
-        const colors = ['#C1A673','#E8B84B','#D4A574','#8B9CB6','#A78BCC','#82C9A6','#E8908F','#7DB6C9','#D9B26F','#F0C987','#94A3B8','#B8956A'];
-        const cx = 120, cy = 120, R = 105;
+        // Curated palette — gold-warm + cool accents, paired for variety against dark bg
+        const palette = [
+            '#E8B84B','#5DADE2','#82C9A6','#C18BD4','#F39C61','#7DB6C9',
+            '#D4A574','#A78BCC','#94C9A8','#E89F71','#5499C7','#F0C987',
+            '#9C8A5B','#B89968','#76D7C4','#E8908F'
+        ];
+
+        const W = 460, H = 340, cx = 230, cy = 170;
+        const R_OUT = 130, R_IN = 78;
+        const R_LBL = 152;     // leader-line label distance
+        const R_INLINE = (R_OUT + R_IN) / 2;
+
+        // Gradient defs (vertical light→dark per slice)
+        const gradDefs = palette.map((c, i) =>
+            `<linearGradient id="rdg-${i}" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="${_lighten(c, 0.18)}"/>
+                <stop offset="1" stop-color="${_darken(c, 0.18)}"/>
+            </linearGradient>`
+        ).join('');
+
         let acc = 0;
-        const slices = items.map((item, i) => {
+        const slices = [];
+        const inlineLabels = [];
+        const leaderLines = [];
+
+        items.forEach((item, i) => {
             const frac = total > 0 ? item.value / total : 0;
-            if (frac === 0) return '';
-            // single full slice → render as circle
+            if (frac === 0) return;
+            const colorIdx = i % palette.length;
+            const fillId = `url(#rdg-${colorIdx})`;
+
+            // single full slice → render as full ring
             if (items.length === 1 || frac >= 0.9999) {
-                return `<circle cx="${cx}" cy="${cy}" r="${R}" fill="${colors[i % colors.length]}" stroke="rgba(15,23,42,0.5)" stroke-width="1" />`;
+                slices.push(`<circle cx="${cx}" cy="${cy}" r="${(R_OUT+R_IN)/2}" fill="none" stroke="${palette[colorIdx]}" stroke-width="${R_OUT-R_IN}"/>`);
+                inlineLabels.push(`<text x="${cx}" y="${cy-12}" text-anchor="middle" fill="rgba(15,23,42,0.9)" font-size="13" font-weight="700" font-family="Montserrat,sans-serif">100%</text>`);
+                return;
             }
+
             const startA = acc * 2 * Math.PI - Math.PI / 2;
             const endA = (acc + frac) * 2 * Math.PI - Math.PI / 2;
+            const midA = (startA + endA) / 2;
             acc += frac;
             const large = frac > 0.5 ? 1 : 0;
-            const x1 = (cx + R * Math.cos(startA)).toFixed(2);
-            const y1 = (cy + R * Math.sin(startA)).toFixed(2);
-            const x2 = (cx + R * Math.cos(endA)).toFixed(2);
-            const y2 = (cy + R * Math.sin(endA)).toFixed(2);
-            const path = `M ${cx} ${cy} L ${x1} ${y1} A ${R} ${R} 0 ${large} 1 ${x2} ${y2} Z`;
-            return `<path d="${path}" fill="${colors[i % colors.length]}" stroke="rgba(15,23,42,0.5)" stroke-width="1" />`;
-        }).join('');
+
+            // Donut slice path
+            const ox1 = (cx + R_OUT * Math.cos(startA)).toFixed(2);
+            const oy1 = (cy + R_OUT * Math.sin(startA)).toFixed(2);
+            const ox2 = (cx + R_OUT * Math.cos(endA)).toFixed(2);
+            const oy2 = (cy + R_OUT * Math.sin(endA)).toFixed(2);
+            const ix1 = (cx + R_IN * Math.cos(startA)).toFixed(2);
+            const iy1 = (cy + R_IN * Math.sin(startA)).toFixed(2);
+            const ix2 = (cx + R_IN * Math.cos(endA)).toFixed(2);
+            const iy2 = (cy + R_IN * Math.sin(endA)).toFixed(2);
+            const path = `M ${ox1} ${oy1} A ${R_OUT} ${R_OUT} 0 ${large} 1 ${ox2} ${oy2} L ${ix2} ${iy2} A ${R_IN} ${R_IN} 0 ${large} 0 ${ix1} ${iy1} Z`;
+
+            slices.push(`<path d="${path}" fill="${fillId}" stroke="rgba(11,15,18,0.7)" stroke-width="1.5" style="transition:filter 0.2s;cursor:pointer;" onmouseover="this.style.filter='brightness(1.18) drop-shadow(0 0 8px ${palette[colorIdx]}aa)'" onmouseout="this.style.filter=''"><title>${_esc(item.name)} · ${curSym}${fmtNum(item.value)} · ${(frac*100).toFixed(1)}%</title></path>`);
+
+            // Inline % label for slices ≥ 7%
+            if (frac >= 0.07) {
+                const lx = (cx + R_INLINE * Math.cos(midA)).toFixed(2);
+                const ly = (cy + R_INLINE * Math.sin(midA)).toFixed(2);
+                inlineLabels.push(`<text x="${lx}" y="${ly}" text-anchor="middle" dominant-baseline="middle" fill="rgba(15,23,42,0.9)" font-size="12" font-weight="700" font-family="Montserrat,sans-serif" pointer-events="none">${(frac*100).toFixed(1)}%</text>`);
+            }
+
+            // Leader line for medium slices (2.5% – 7%)
+            if (frac >= 0.025 && frac < 0.07) {
+                const x1 = (cx + (R_OUT + 2) * Math.cos(midA)).toFixed(2);
+                const y1 = (cy + (R_OUT + 2) * Math.sin(midA)).toFixed(2);
+                const x2 = (cx + R_LBL * Math.cos(midA)).toFixed(2);
+                const y2 = (cy + R_LBL * Math.sin(midA)).toFixed(2);
+                const onRight = Math.cos(midA) >= 0;
+                const x3 = (parseFloat(x2) + (onRight ? 6 : -6)).toFixed(2);
+                const anchor = onRight ? 'start' : 'end';
+                leaderLines.push(`<polyline points="${x1},${y1} ${x2},${y2} ${x3},${y2}" fill="none" stroke="${palette[colorIdx]}" stroke-width="1" opacity="0.55"/>`);
+                leaderLines.push(`<text x="${parseFloat(x3) + (onRight ? 2 : -2)}" y="${y2}" text-anchor="${anchor}" dominant-baseline="middle" fill="#cbd5e1" font-size="10" font-family="Montserrat,sans-serif" pointer-events="none">${(frac*100).toFixed(1)}%</text>`);
+            }
+        });
+
+        const flag = _regionFlag(region);
+        const centerSVG = `
+            <text x="${cx}" y="${cy-22}" text-anchor="middle" font-size="22" pointer-events="none">${flag}</text>
+            <text x="${cx}" y="${cy+2}" text-anchor="middle" fill="#94a3b8" font-size="9" letter-spacing="2" font-weight="600" pointer-events="none">TOTAL</text>
+            <text x="${cx}" y="${cy+22}" text-anchor="middle" fill="#C1A673" font-size="16" font-weight="700" font-family="Montserrat,sans-serif" pointer-events="none">${curSym}${fmtNum(total, 0)}</text>
+            <text x="${cx}" y="${cy+38}" text-anchor="middle" fill="#64748b" font-size="10" font-family="Montserrat,sans-serif" pointer-events="none">${items.length} 支</text>
+        `;
 
         const legend = items.map((item, i) => {
             const pct = total > 0 ? item.value / total * 100 : 0;
-            return `<div style="display:flex;align-items:center;gap:10px;padding:7px 4px;border-bottom:1px solid rgba(193,166,115,0.06);">
-                <div style="width:11px;height:11px;border-radius:2px;background:${colors[i % colors.length]};flex-shrink:0;"></div>
+            const c = palette[i % palette.length];
+            return `<div style="display:flex;align-items:center;gap:10px;padding:7px 4px;border-bottom:1px solid rgba(193,166,115,0.05);">
+                <div style="width:10px;height:10px;border-radius:50%;background:${c};box-shadow:0 0 6px ${c}66;flex-shrink:0;"></div>
                 <div style="flex:1;min-width:0;">
-                    <div style="font-size:13px;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${item.name}</div>
-                    <div style="font-size:10px;color:#64748b;font-family:Montserrat,sans-serif;margin-top:1px;">${curSym}${fmtNum(item.value)} <span style="opacity:0.6;">· ${item.symbol}</span></div>
+                    <div style="font-size:13px;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${_esc(item.name)}</div>
+                    <div style="font-size:10px;color:#64748b;font-family:Montserrat,sans-serif;margin-top:1px;">${curSym}${fmtNum(item.value)} <span style="opacity:0.5;">· ${item.symbol}</span></div>
                 </div>
                 <div style="font-size:14px;color:#C1A673;font-weight:600;font-family:Montserrat,sans-serif;flex-shrink:0;">${pct.toFixed(1)}%</div>
             </div>`;
         }).join('');
 
         return `
-            <div style="display:flex;gap:24px;margin-top:8px;flex-wrap:wrap;align-items:flex-start;">
-                <div onclick="switchRegionDrilldownView('table')" style="cursor:pointer;flex:0 0 auto;text-align:center;padding:6px;border-radius:12px;transition:background 0.2s;" onmouseover="this.style.background='rgba(193,166,115,0.05)'" onmouseout="this.style.background='transparent'">
-                    <svg width="240" height="240" viewBox="0 0 240 240">${slices}</svg>
-                    <div style="font-size:10px;color:#94a3b8;margin-top:6px;letter-spacing:1px;">点击饼图查看明细 →</div>
+            <div style="display:flex;gap:20px;margin-top:8px;flex-wrap:wrap;align-items:center;">
+                <div onclick="switchRegionDrilldownView('table')" style="cursor:pointer;flex:0 0 auto;text-align:center;padding:4px;border-radius:14px;transition:background 0.2s;" onmouseover="this.style.background='rgba(193,166,115,0.04)'" onmouseout="this.style.background='transparent'">
+                    <svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="filter:drop-shadow(0 8px 22px rgba(0,0,0,0.5));">
+                        <defs>${gradDefs}</defs>
+                        ${slices.join('')}
+                        ${leaderLines.join('')}
+                        ${inlineLabels.join('')}
+                        ${centerSVG}
+                    </svg>
+                    <div style="font-size:10px;color:#94a3b8;margin-top:-4px;letter-spacing:1.5px;">点击饼图查看明细 →</div>
                 </div>
-                <div style="flex:1;min-width:260px;max-height:300px;overflow-y:auto;padding-right:4px;">${legend}</div>
-            </div>
-            <div style="margin-top:14px;padding-top:10px;border-top:1px solid rgba(193,166,115,0.1);display:flex;justify-content:space-between;font-size:12px;">
-                <span style="color:#64748b;">合计 ${items.length} 支</span>
-                <span style="color:#e2e8f0;font-weight:600;font-family:Montserrat,sans-serif;">${curSym}${fmtNum(total)}</span>
+                <div style="flex:1;min-width:240px;max-height:340px;overflow-y:auto;padding-right:4px;">${legend}</div>
             </div>
         `;
     }
 
+    function _lighten(hex, amt) { return _shade(hex, amt); }
+    function _darken(hex, amt)  { return _shade(hex, -amt); }
+    function _shade(hex, amt) {
+        const m = hex.match(/^#([0-9a-f]{6})$/i);
+        if (!m) return hex;
+        const n = parseInt(m[1], 16);
+        let r = (n >> 16) & 0xff, g = (n >> 8) & 0xff, b = n & 0xff;
+        const adj = v => Math.max(0, Math.min(255, Math.round(v + 255 * amt)));
+        r = adj(r); g = adj(g); b = adj(b);
+        return '#' + [r,g,b].map(v => v.toString(16).padStart(2,'0')).join('');
+    }
+    function _esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+    function _sortHeaderCell(label, key, align, currentKey, currentDir) {
+        const active = currentKey === key;
+        const upColor   = active && currentDir === 'asc'  ? '#C1A673' : '#475569';
+        const downColor = active && currentDir === 'desc' ? '#C1A673' : '#475569';
+        return `<th onclick="setRegionDrilldownSort('${key}')" style="padding:9px 10px;text-align:${align};font-weight:500;cursor:pointer;white-space:nowrap;user-select:none;color:${active?'#C1A673':'#94a3b8'};" onmouseover="this.style.background='rgba(193,166,115,0.08)'" onmouseout="this.style.background='transparent'">
+            <span>${label}</span>
+            <span style="display:inline-flex;flex-direction:column;line-height:0.6;margin-left:4px;vertical-align:middle;font-size:7px;">
+                <span style="color:${upColor};">▲</span>
+                <span style="color:${downColor};margin-top:1px;">▼</span>
+            </span>
+        </th>`;
+    }
+
     function _renderRegionTable(items, curSym) {
         const total = items.reduce((s, x) => s + x.value, 0);
-        const rows = items.map(item => {
+        const augmented = items.map(it => ({ ...it, pctOfTotal: total > 0 ? it.value / total * 100 : 0 }));
+        const { sortKey, sortDir } = regionDrilldownState;
+        augmented.sort((a, b) => {
+            let av = a[sortKey], bv = b[sortKey];
+            if (typeof av === 'string') {
+                const cmp = av.localeCompare(bv);
+                return sortDir === 'asc' ? cmp : -cmp;
+            }
+            return sortDir === 'asc' ? av - bv : bv - av;
+        });
+
+        const td = (extra='') => `padding:9px 10px;font-family:Montserrat,sans-serif;white-space:nowrap;${extra}`;
+        const rows = augmented.map(item => {
             const plClass = item.pl >= 0 ? 'price-positive' : 'price-negative';
             const sign = item.pl >= 0 ? '+' : '';
-            const pct = total > 0 ? (item.value / total * 100) : 0;
             const priceCell = item.hasLivePrice
                 ? `${curSym}${fmtNum(item.price, 2)}`
                 : `<span style="color:#64748b;" title="无实时价，按成本均价显示">${curSym}${fmtNum(item.price, 2)}</span>`;
             return `<tr style="border-bottom:1px solid rgba(193,166,115,0.05);">
-                <td style="padding:9px 10px;color:#e2e8f0;">${item.name}</td>
-                <td style="padding:9px 10px;color:#64748b;font-family:Montserrat,sans-serif;font-size:11px;">${item.symbol}</td>
-                <td style="padding:9px 10px;text-align:right;font-family:Montserrat,sans-serif;color:#cbd5e1;">${priceCell}</td>
-                <td style="padding:9px 10px;text-align:right;font-family:Montserrat,sans-serif;color:#cbd5e1;">${fmtNum(item.qty, 0)}</td>
-                <td style="padding:9px 10px;text-align:right;font-family:Montserrat,sans-serif;color:#C1A673;font-weight:600;">${curSym}${fmtNum(item.value)}<div style="font-size:10px;color:#64748b;font-weight:400;">${pct.toFixed(1)}%</div></td>
-                <td style="padding:9px 10px;text-align:right;font-family:Montserrat,sans-serif;color:#cbd5e1;">${curSym}${fmtNum(item.avgCost, 2)}</td>
-                <td style="padding:9px 10px;text-align:right;font-family:Montserrat,sans-serif;color:#cbd5e1;">${curSym}${fmtNum(item.cost)}</td>
-                <td class="${plClass}" style="padding:9px 10px;text-align:right;font-family:Montserrat,sans-serif;font-weight:600;">${sign}${curSym}${fmtNum(item.pl)}</td>
-                <td class="${plClass}" style="padding:9px 10px;text-align:right;font-family:Montserrat,sans-serif;font-weight:600;">${formatPercent(item.plPct)}</td>
+                <td style="${td('color:#e2e8f0;font-family:inherit;')}">${_esc(item.name)}</td>
+                <td style="${td('color:#64748b;font-size:11px;')}">${item.symbol}</td>
+                <td style="${td('text-align:right;color:#cbd5e1;')}">${priceCell}</td>
+                <td style="${td('text-align:right;color:#cbd5e1;')}">${fmtNum(item.qty, 0)}</td>
+                <td style="${td('text-align:right;color:#C1A673;font-weight:600;')}">${curSym}${fmtNum(item.value)}</td>
+                <td style="${td('text-align:right;color:#94a3b8;')}">${item.pctOfTotal.toFixed(2)}%</td>
+                <td style="${td('text-align:right;color:#cbd5e1;')}">${curSym}${fmtNum(item.avgCost, 2)}</td>
+                <td style="${td('text-align:right;color:#cbd5e1;')}">${curSym}${fmtNum(item.cost)}</td>
+                <td class="${plClass}" style="${td('text-align:right;font-weight:600;')}">${sign}${curSym}${fmtNum(item.pl)}</td>
+                <td class="${plClass}" style="${td('text-align:right;font-weight:600;')}">${formatPercent(item.plPct)}</td>
             </tr>`;
         }).join('');
         const totalCost = items.reduce((s, x) => s + x.cost, 0);
@@ -5383,32 +5542,36 @@
         const totalPct = totalCost > 0 ? (totalPL / totalCost * 100) : 0;
         const totalClass = totalPL >= 0 ? 'price-positive' : 'price-negative';
         const totalSign = totalPL >= 0 ? '+' : '';
+        const sk = regionDrilldownState.sortKey, sd = regionDrilldownState.sortDir;
+
         return `
             <button onclick="switchRegionDrilldownView('pie')" style="background:rgba(193,166,115,0.1);border:1px solid rgba(193,166,115,0.2);color:#C1A673;padding:6px 12px;border-radius:6px;font-size:11px;cursor:pointer;margin-bottom:12px;letter-spacing:0.5px;">← 返回饼图</button>
             <div style="overflow-x:auto;">
-            <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:760px;">
+            <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:920px;">
                 <thead>
-                    <tr style="background:rgba(15,23,42,0.5);color:#94a3b8;font-size:10px;letter-spacing:0.6px;">
-                        <th style="padding:9px 10px;text-align:left;font-weight:500;">名称</th>
-                        <th style="padding:9px 10px;text-align:left;font-weight:500;">代码</th>
-                        <th style="padding:9px 10px;text-align:right;font-weight:500;">最新价</th>
-                        <th style="padding:9px 10px;text-align:right;font-weight:500;">持股</th>
-                        <th style="padding:9px 10px;text-align:right;font-weight:500;">持仓金额</th>
-                        <th style="padding:9px 10px;text-align:right;font-weight:500;">成本均价</th>
-                        <th style="padding:9px 10px;text-align:right;font-weight:500;">成本金额</th>
-                        <th style="padding:9px 10px;text-align:right;font-weight:500;">盈亏</th>
-                        <th style="padding:9px 10px;text-align:right;font-weight:500;">盈亏%</th>
+                    <tr style="background:rgba(15,23,42,0.55);font-size:10px;letter-spacing:0.6px;">
+                        ${_sortHeaderCell('名称',     'name',       'left',  sk, sd)}
+                        ${_sortHeaderCell('代码',     'symbol',     'left',  sk, sd)}
+                        ${_sortHeaderCell('最新价',   'price',      'right', sk, sd)}
+                        ${_sortHeaderCell('持股',     'qty',        'right', sk, sd)}
+                        ${_sortHeaderCell('持仓金额', 'value',      'right', sk, sd)}
+                        ${_sortHeaderCell('占比%',    'pctOfTotal', 'right', sk, sd)}
+                        ${_sortHeaderCell('成本均价', 'avgCost',    'right', sk, sd)}
+                        ${_sortHeaderCell('成本金额', 'cost',       'right', sk, sd)}
+                        ${_sortHeaderCell('盈亏',     'pl',         'right', sk, sd)}
+                        ${_sortHeaderCell('盈亏%',    'plPct',      'right', sk, sd)}
                     </tr>
                 </thead>
                 <tbody>${rows}</tbody>
                 <tfoot>
                     <tr style="background:rgba(15,23,42,0.4);border-top:2px solid rgba(193,166,115,0.2);font-weight:600;">
-                        <td colspan="4" style="padding:10px;color:#94a3b8;font-size:11px;letter-spacing:0.5px;">合计 ${items.length} 支</td>
-                        <td style="padding:10px;text-align:right;font-family:Montserrat,sans-serif;color:#C1A673;">${curSym}${fmtNum(total)}</td>
+                        <td colspan="4" style="padding:10px;color:#94a3b8;font-size:11px;letter-spacing:0.5px;white-space:nowrap;">合计 ${items.length} 支</td>
+                        <td style="padding:10px;text-align:right;font-family:Montserrat,sans-serif;color:#C1A673;white-space:nowrap;">${curSym}${fmtNum(total)}</td>
+                        <td style="padding:10px;text-align:right;font-family:Montserrat,sans-serif;color:#94a3b8;white-space:nowrap;">100.00%</td>
                         <td></td>
-                        <td style="padding:10px;text-align:right;font-family:Montserrat,sans-serif;color:#cbd5e1;">${curSym}${fmtNum(totalCost)}</td>
-                        <td class="${totalClass}" style="padding:10px;text-align:right;font-family:Montserrat,sans-serif;">${totalSign}${curSym}${fmtNum(totalPL)}</td>
-                        <td class="${totalClass}" style="padding:10px;text-align:right;font-family:Montserrat,sans-serif;">${formatPercent(totalPct)}</td>
+                        <td style="padding:10px;text-align:right;font-family:Montserrat,sans-serif;color:#cbd5e1;white-space:nowrap;">${curSym}${fmtNum(totalCost)}</td>
+                        <td class="${totalClass}" style="padding:10px;text-align:right;font-family:Montserrat,sans-serif;white-space:nowrap;">${totalSign}${curSym}${fmtNum(totalPL)}</td>
+                        <td class="${totalClass}" style="padding:10px;text-align:right;font-family:Montserrat,sans-serif;white-space:nowrap;">${formatPercent(totalPct)}</td>
                     </tr>
                 </tfoot>
             </table>
