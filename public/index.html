@@ -289,48 +289,62 @@
             100% { background-position: 200% 0%; }
         }
 
-        /* FX strip — borderless raised bar with sweeping highlight */
+        /* FX strip — borderless raised bar with seamless looping marquee */
         .fx-strip {
             position: relative;
             overflow: hidden;
-            background: linear-gradient(180deg, rgba(15,23,42,0.6) 0%, rgba(11,15,18,0.78) 100%);
-            border-radius: 12px;
+            background: linear-gradient(180deg,
+                rgba(40,55,75,0.55) 0%,
+                rgba(20,30,45,0.85) 50%,
+                rgba(8,12,18,0.95) 100%);
+            border-radius: 10px;
             box-shadow:
-                0 6px 18px rgba(0,0,0,0.42),
-                inset 0 1px 0 rgba(193,166,115,0.12),
-                inset 0 -1px 0 rgba(0,0,0,0.45);
+                0 8px 22px rgba(0,0,0,0.55),
+                0 2px 4px rgba(0,0,0,0.45),
+                inset 0 1px 0 rgba(193,166,115,0.22),
+                inset 0 -2px 4px rgba(0,0,0,0.5);
             cursor: pointer;
             user-select: none;
-            transition: box-shadow 0.3s ease;
+            padding: 7px 0;
         }
-        .fx-strip::before {
-            content: '';
+        .fx-strip-label {
             position: absolute;
-            top: 0;
-            left: 0;
-            width: 30%;
-            height: 100%;
+            left: 0; top: 0; bottom: 0;
+            display: flex;
+            align-items: center;
+            padding: 0 12px;
+            font-size: 10px;
+            color: #C1A673;
+            letter-spacing: 2px;
+            font-weight: 700;
             background: linear-gradient(90deg,
-                transparent 0%,
-                rgba(193,166,115,0.06) 30%,
-                rgba(193,166,115,0.18) 50%,
-                rgba(193,166,115,0.06) 70%,
-                transparent 100%);
-            animation: fxStripSweep 7s ease-in-out infinite;
+                rgba(8,12,18,0.98) 0%,
+                rgba(8,12,18,0.95) 70%,
+                rgba(8,12,18,0) 100%);
+            z-index: 2;
             pointer-events: none;
+        }
+        .fx-strip-track {
+            display: flex;
+            gap: 10px;
+            width: max-content;
+            animation: fxStripMarquee 38s linear infinite;
+            padding-left: 70px; /* avoid overlap with FX label */
             will-change: transform;
         }
-        .fx-strip.paused::before {
+        .fx-strip.paused .fx-strip-track {
             animation-play-state: paused;
         }
         .fx-strip.paused {
             box-shadow:
-                0 6px 18px rgba(0,0,0,0.42),
-                inset 0 0 0 1px rgba(193,166,115,0.25);
+                0 8px 22px rgba(0,0,0,0.55),
+                0 0 0 1px rgba(193,166,115,0.4),
+                inset 0 1px 0 rgba(193,166,115,0.3);
         }
-        @keyframes fxStripSweep {
-            0%   { transform: translateX(-100%); }
-            100% { transform: translateX(440%); }
+        /* one full track = two copies of chips concatenated; -50% loops seamlessly */
+        @keyframes fxStripMarquee {
+            from { transform: translateX(0); }
+            to   { transform: translateX(-50%); }
         }
 
         .app-header {
@@ -2655,7 +2669,7 @@
             </div>
 
             <div class="modal" id="regionDrilldownModal">
-                <div class="modal-content" style="position: relative; max-width: 880px;">
+                <div class="modal-content" style="position: relative; max-width: 1200px; padding: 22px 20px;">
                     <button class="modal-close" onclick="closeModal('regionDrilldownModal')">×</button>
                     <div class="modal-header" id="regionDrilldownHeader">资产占比</div>
                     <div id="regionDrilldownBody"></div>
@@ -4579,10 +4593,10 @@
         const pairs = [
             ['USD','CNY'], ['USD','JPY'], ['USD','CHF'], ['USD','MYR'], ['CNY','HKD']
         ];
-        const chips = pairs.map(([b, q]) => {
+        const chipHTML = ([b, q]) => {
             const p = _fxPair(b, q);
             if (!p) {
-                return `<div style="background:rgba(11,15,18,0.55);border:1px solid rgba(148,163,184,0.1);border-radius:8px;padding:7px 11px;display:flex;align-items:center;gap:8px;position:relative;z-index:1;">
+                return `<div style="background:rgba(0,0,0,0.35);border:1px solid rgba(148,163,184,0.08);border-radius:7px;padding:5px 11px;display:inline-flex;align-items:center;gap:7px;flex-shrink:0;">
                     <span style="font-size:10px;color:#475569;letter-spacing:0.5px;font-weight:600;">${b}/${q}</span>
                     <span style="font-size:11px;color:#475569;">—</span>
                 </div>`;
@@ -4590,15 +4604,17 @@
             const arrow = p.chg > 0.005 ? '↑' : p.chg < -0.005 ? '↓' : '·';
             const chgColor = p.chg > 0.005 ? '#4ade80' : p.chg < -0.005 ? '#f87171' : '#64748b';
             const chgTxt = Math.abs(p.chg) < 0.005 ? '0.00%' : `${p.chg > 0 ? '+' : ''}${p.chg.toFixed(2)}%`;
-            return `<div style="background:rgba(11,15,18,0.55);border:1px solid rgba(193,166,115,0.14);border-radius:8px;padding:7px 11px;display:flex;align-items:center;gap:8px;position:relative;z-index:1;transition:border-color 0.2s, transform 0.2s;" onmouseover="this.style.borderColor='rgba(193,166,115,0.4)';this.style.transform='translateY(-1px)'" onmouseout="this.style.borderColor='rgba(193,166,115,0.14)';this.style.transform='translateY(0)'">
+            return `<div style="background:rgba(0,0,0,0.4);border:1px solid rgba(193,166,115,0.13);border-radius:7px;padding:5px 11px;display:inline-flex;align-items:center;gap:7px;flex-shrink:0;">
                 <span style="font-size:10px;color:#94a3b8;letter-spacing:0.6px;font-weight:600;">${b}/${q}</span>
-                <span style="font-size:14px;color:#C1A673;font-weight:600;font-family:Montserrat,sans-serif;line-height:1;">${_fmtFXRate(p.rate)}</span>
+                <span style="font-size:13px;color:#C1A673;font-weight:600;font-family:Montserrat,sans-serif;line-height:1;">${_fmtFXRate(p.rate)}</span>
                 <span style="font-size:10px;color:${chgColor};font-family:Montserrat,sans-serif;font-weight:500;">${arrow}${chgTxt}</span>
             </div>`;
-        }).join('');
-        return `<div class="fx-strip" onclick="this.classList.toggle('paused')" title="点击切换呼吸灯效果" style="margin:14px 0;padding:11px 16px;display:flex;flex-wrap:wrap;align-items:center;gap:8px;">
-            <div style="display:flex;align-items:center;gap:6px;font-size:10px;color:#94a3b8;letter-spacing:2px;font-weight:700;padding-right:8px;border-right:1px solid rgba(193,166,115,0.15);margin-right:4px;height:28px;position:relative;z-index:1;">💱 FX</div>
-            ${chips}
+        };
+        // Render chips TWICE for seamless marquee loop (translateX -50% jumps to start of second copy)
+        const setOne = pairs.map(chipHTML).join('');
+        return `<div class="fx-strip" onclick="this.classList.toggle('paused')" title="点击暂停/继续滚动" style="margin:6px 0;">
+            <div class="fx-strip-label">💱 FX</div>
+            <div class="fx-strip-track">${setOne}${setOne}</div>
         </div>`;
     }
     function getRegionCurrencySymbol(cur) {
@@ -5315,20 +5331,30 @@
     }
 
     function _regionItems(region) {
+        // FX-convert each holding from its native currency → region's display currency.
+        // E.g. PDD trades in USD but is region=中国 (CNY display): convert USD → CNY.
+        const regionCur = getRegionCurrency(region);
+        const regionRateUSD = APP.FX_RATES[regionCur] || 1;  // USD per 1 unit of regionCur
         return (APP.holdings || [])
             .filter(h => h.qty > 0 && (h.region || '其他') === region)
             .map(h => {
                 const pd = APP.prices[h.symbol] || {};
-                const price = pd.price || h.avg_cost;
+                const nativePrice = pd.price || h.avg_cost;
+                const stockRateUSD = APP.FX_RATES[h.currency] || 1;  // USD per 1 unit of stock's currency
+                const fx = stockRateUSD / regionRateUSD;  // multiplier to convert stockCcy → regionCcy
+                const price = nativePrice * fx;
+                const avgCost = h.avg_cost * fx;
                 const value = h.qty * price;
-                const cost = h.qty * h.avg_cost;
+                const cost = h.qty * avgCost;
                 const pl = value - cost;
                 const plPct = cost > 0 ? (pl / cost * 100) : 0;
                 return {
                     symbol: h.symbol, name: h.name || h.symbol,
+                    nativeCurrency: h.currency,
                     price, qty: h.qty,
-                    value, avgCost: h.avg_cost, cost, pl, plPct,
+                    value, avgCost, cost, pl, plPct,
                     hasLivePrice: !!pd.price,
+                    isConverted: h.currency !== regionCur,  // marker for tooltip
                 };
             })
             .sort((a, b) => b.value - a.value);
@@ -5387,16 +5413,32 @@
         const inlineLabels = [];
         const leaderLines = [];
 
+        // Truncate long Chinese/English names for inline labels
+        const _truncName = (s, maxChars) => {
+            if (!s) return '';
+            // count CJK as 2, ASCII as 1 (rough)
+            let len = 0, out = '';
+            for (const ch of String(s)) {
+                const w = /[一-鿿]/.test(ch) ? 1.6 : 1;
+                if (len + w > maxChars) { out += '…'; break; }
+                out += ch; len += w;
+            }
+            return out;
+        };
+
         items.forEach((item, i) => {
             const frac = total > 0 ? item.value / total : 0;
             if (frac === 0) return;
             const colorIdx = i % palette.length;
             const fillId = `url(#rdg-${colorIdx})`;
+            const isTopN = i < 5;
+            const pctTxt = (frac * 100).toFixed(1) + '%';
 
             // single full slice → render as full ring
             if (items.length === 1 || frac >= 0.9999) {
                 slices.push(`<circle cx="${cx}" cy="${cy}" r="${(R_OUT+R_IN)/2}" fill="none" stroke="${palette[colorIdx]}" stroke-width="${R_OUT-R_IN}"/>`);
-                inlineLabels.push(`<text x="${cx}" y="${cy-12}" text-anchor="middle" fill="rgba(15,23,42,0.9)" font-size="13" font-weight="700" font-family="Montserrat,sans-serif">100%</text>`);
+                inlineLabels.push(`<text x="${cx}" y="${cy-2}" text-anchor="middle" fill="rgba(15,23,42,0.92)" font-size="11" font-weight="600" font-family="sans-serif">${_esc(_truncName(item.name, 8))}</text>`);
+                inlineLabels.push(`<text x="${cx}" y="${cy+14}" text-anchor="middle" fill="rgba(15,23,42,0.92)" font-size="13" font-weight="700" font-family="Montserrat,sans-serif">100%</text>`);
                 return;
             }
 
@@ -5417,17 +5459,24 @@
             const iy2 = (cy + R_IN * Math.sin(endA)).toFixed(2);
             const path = `M ${ox1} ${oy1} A ${R_OUT} ${R_OUT} 0 ${large} 1 ${ox2} ${oy2} L ${ix2} ${iy2} A ${R_IN} ${R_IN} 0 ${large} 0 ${ix1} ${iy1} Z`;
 
-            slices.push(`<path d="${path}" fill="${fillId}" stroke="rgba(11,15,18,0.7)" stroke-width="1.5" style="transition:filter 0.2s;cursor:pointer;" onmouseover="this.style.filter='brightness(1.18) drop-shadow(0 0 8px ${palette[colorIdx]}aa)'" onmouseout="this.style.filter=''"><title>${_esc(item.name)} · ${curSym}${fmtNum(item.value)} · ${(frac*100).toFixed(1)}%</title></path>`);
+            slices.push(`<path d="${path}" fill="${fillId}" stroke="rgba(11,15,18,0.7)" stroke-width="1.5" style="transition:filter 0.2s;cursor:pointer;" onmouseover="this.style.filter='brightness(1.18) drop-shadow(0 0 8px ${palette[colorIdx]}aa)'" onmouseout="this.style.filter=''"><title>${_esc(item.name)} · ${curSym}${fmtNum(item.value)} · ${pctTxt}</title></path>`);
 
-            // Inline % label for slices ≥ 7%
-            if (frac >= 0.07) {
+            // Inline label for big slices (≥ 8%): top-N gets name + %, others get just %
+            if (frac >= 0.08) {
                 const lx = (cx + R_INLINE * Math.cos(midA)).toFixed(2);
                 const ly = (cy + R_INLINE * Math.sin(midA)).toFixed(2);
-                inlineLabels.push(`<text x="${lx}" y="${ly}" text-anchor="middle" dominant-baseline="middle" fill="rgba(15,23,42,0.9)" font-size="12" font-weight="700" font-family="Montserrat,sans-serif" pointer-events="none">${(frac*100).toFixed(1)}%</text>`);
+                if (isTopN) {
+                    inlineLabels.push(`<text x="${lx}" y="${parseFloat(ly)-7}" text-anchor="middle" dominant-baseline="middle" fill="rgba(15,23,42,0.95)" font-size="10.5" font-weight="600" font-family="sans-serif" pointer-events="none">${_esc(_truncName(item.name, 6))}</text>`);
+                    inlineLabels.push(`<text x="${lx}" y="${parseFloat(ly)+7}" text-anchor="middle" dominant-baseline="middle" fill="rgba(15,23,42,0.95)" font-size="12" font-weight="700" font-family="Montserrat,sans-serif" pointer-events="none">${pctTxt}</text>`);
+                } else {
+                    inlineLabels.push(`<text x="${lx}" y="${ly}" text-anchor="middle" dominant-baseline="middle" fill="rgba(15,23,42,0.9)" font-size="12" font-weight="700" font-family="Montserrat,sans-serif" pointer-events="none">${pctTxt}</text>`);
+                }
+                return;
             }
 
-            // Leader line for medium slices (2.5% – 7%)
-            if (frac >= 0.025 && frac < 0.07) {
+            // Leader line: ALL top-N slices that aren't already inline-labeled, plus medium slices (2-8%)
+            const wantsLeader = isTopN || (frac >= 0.02 && frac < 0.08);
+            if (wantsLeader) {
                 const x1 = (cx + (R_OUT + 2) * Math.cos(midA)).toFixed(2);
                 const y1 = (cy + (R_OUT + 2) * Math.sin(midA)).toFixed(2);
                 const x2 = (cx + R_LBL * Math.cos(midA)).toFixed(2);
@@ -5435,8 +5484,13 @@
                 const onRight = Math.cos(midA) >= 0;
                 const x3 = (parseFloat(x2) + (onRight ? 6 : -6)).toFixed(2);
                 const anchor = onRight ? 'start' : 'end';
-                leaderLines.push(`<polyline points="${x1},${y1} ${x2},${y2} ${x3},${y2}" fill="none" stroke="${palette[colorIdx]}" stroke-width="1" opacity="0.55"/>`);
-                leaderLines.push(`<text x="${parseFloat(x3) + (onRight ? 2 : -2)}" y="${y2}" text-anchor="${anchor}" dominant-baseline="middle" fill="#cbd5e1" font-size="10" font-family="Montserrat,sans-serif" pointer-events="none">${(frac*100).toFixed(1)}%</text>`);
+                leaderLines.push(`<polyline points="${x1},${y1} ${x2},${y2} ${x3},${y2}" fill="none" stroke="${palette[colorIdx]}" stroke-width="1" opacity="0.6"/>`);
+                if (isTopN) {
+                    leaderLines.push(`<text x="${parseFloat(x3) + (onRight ? 2 : -2)}" y="${parseFloat(y2)-5}" text-anchor="${anchor}" dominant-baseline="middle" fill="#e2e8f0" font-size="10.5" font-weight="600" font-family="sans-serif" pointer-events="none">${_esc(_truncName(item.name, 6))}</text>`);
+                    leaderLines.push(`<text x="${parseFloat(x3) + (onRight ? 2 : -2)}" y="${parseFloat(y2)+7}" text-anchor="${anchor}" dominant-baseline="middle" fill="${palette[colorIdx]}" font-size="10" font-weight="600" font-family="Montserrat,sans-serif" pointer-events="none">${pctTxt}</text>`);
+                } else {
+                    leaderLines.push(`<text x="${parseFloat(x3) + (onRight ? 2 : -2)}" y="${y2}" text-anchor="${anchor}" dominant-baseline="middle" fill="#cbd5e1" font-size="10" font-family="Montserrat,sans-serif" pointer-events="none">${pctTxt}</text>`);
+                }
             }
         });
 
@@ -5547,7 +5601,7 @@
         return `
             <button onclick="switchRegionDrilldownView('pie')" style="background:rgba(193,166,115,0.1);border:1px solid rgba(193,166,115,0.2);color:#C1A673;padding:6px 12px;border-radius:6px;font-size:11px;cursor:pointer;margin-bottom:12px;letter-spacing:0.5px;">← 返回饼图</button>
             <div style="overflow-x:auto;">
-            <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:920px;">
+            <table style="width:100%;border-collapse:collapse;font-size:12.5px;table-layout:auto;">
                 <thead>
                     <tr style="background:rgba(15,23,42,0.55);font-size:10px;letter-spacing:0.6px;">
                         ${_sortHeaderCell('名称',     'name',       'left',  sk, sd)}
