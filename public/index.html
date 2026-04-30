@@ -2610,6 +2610,14 @@
                 </div>
             </div>
 
+            <div class="modal" id="regionDrilldownModal">
+                <div class="modal-content" style="position: relative; max-width: 880px;">
+                    <button class="modal-close" onclick="closeModal('regionDrilldownModal')">×</button>
+                    <div class="modal-header" id="regionDrilldownHeader">资产占比</div>
+                    <div id="regionDrilldownBody"></div>
+                </div>
+            </div>
+
             <div class="modal" id="passwordModal">
                 <div class="modal-content" style="position: relative; max-width: 420px;">
                     <button class="modal-close" onclick="closeModal('passwordModal')">×</button>
@@ -3054,6 +3062,7 @@
                     </div>
                 </div>
             </div>
+            ${renderFXStrip()}
             <div class="stat-cards" style="margin-top:12px;">
                 ${Object.entries(regionStats).map(([r, s]) => {
                     const pl = s.value - s.cost;
@@ -3082,7 +3091,7 @@
                         todayBaseValue += h.qty * pd.prevClose * fx;
                     });
                     const todayPct = todayBaseValue > 0 ? (todayPL / todayBaseValue * 100) : 0;
-                    return `<div class="stat-card" style="position:relative;padding:14px 16px;">
+                    return `<div class="stat-card" style="position:relative;padding:14px 16px;cursor:pointer;" onclick="openRegionDrilldown('${r}')" title="点击查看资产占比与持仓清单">
                         <div style="display:flex;justify-content:space-between;align-items:flex-start;">
                             <div>
                                 <div class="stat-label" style="margin-bottom:4px;">${flag} ${r} (${s.count})</div>
@@ -3101,6 +3110,7 @@
                                     <span style="font-size:11px;color:#64748b;">${rCurSym}</span>
                                     <input type="text" value="${fmtBudgetInput(regionBudgetLocal)}" placeholder="Set budget"
                                         style="width:${rCur==='JPY'?'110':'90'}px;background:rgba(15,23,42,0.6);border:1px solid rgba(193,166,115,0.15);color:#C1A673;border-radius:4px;padding:2px 6px;font-size:11px;font-weight:600;font-family:Montserrat,sans-serif;text-align:right;outline:none;"
+                                        onclick="event.stopPropagation()"
                                         onfocus="this.style.borderColor='rgba(193,166,115,0.4)';this.value=String(${regionBudgetLocal||0}||'')"
                                         onblur="this.style.borderColor='rgba(193,166,115,0.15)';this.value=fmtBudgetInput(this.value)"
                                         onchange="saveRegionBudget('${r}',parseBudgetInput(this.value))">
@@ -4499,8 +4509,53 @@
 
     // Region → primary local currency mapping
     function getRegionCurrency(region) {
-        const map = {'中国':'CNY','日本':'JPY','美国':'USD'};
+        const map = {'中国':'CNY','日本':'JPY','美国':'USD','香港':'HKD'};
         return map[region] || 'USD';
+    }
+
+    // FX strip: USD/CNY, USD/JPY, USD/CHF, USD/MYR, CNY/HKD
+    function _fxPair(base, quote) {
+        const fx = APP.FX_RATES;
+        const baseUSD = base === 'USD' ? 1 : (fx[base] || 0);
+        const quoteUSD = quote === 'USD' ? 1 : (fx[quote] || 0);
+        if (!baseUSD || !quoteUSD) return null;
+        const rate = baseUSD / quoteUSD;
+        const baseUSDp = base === 'USD' ? 1 : (fx['_prev_' + base] || baseUSD);
+        const quoteUSDp = quote === 'USD' ? 1 : (fx['_prev_' + quote] || quoteUSD);
+        const prev = baseUSDp / quoteUSDp;
+        const chg = prev > 0 ? (rate - prev) / prev * 100 : 0;
+        return { rate, prev, chg };
+    }
+    function _fmtFXRate(r) {
+        if (r >= 100) return r.toFixed(2);
+        if (r >= 10) return r.toFixed(3);
+        return r.toFixed(4);
+    }
+    function renderFXStrip() {
+        const pairs = [
+            ['USD','CNY'], ['USD','JPY'], ['USD','CHF'], ['USD','MYR'], ['CNY','HKD']
+        ];
+        const chips = pairs.map(([b, q]) => {
+            const p = _fxPair(b, q);
+            if (!p) {
+                return `<div style="background:rgba(11,15,18,0.6);border:1px solid rgba(148,163,184,0.12);border-radius:8px;padding:6px 11px;display:flex;align-items:center;gap:8px;">
+                    <span style="font-size:10px;color:#475569;letter-spacing:0.5px;font-weight:600;">${b}/${q}</span>
+                    <span style="font-size:11px;color:#475569;">—</span>
+                </div>`;
+            }
+            const arrow = p.chg > 0.005 ? '↑' : p.chg < -0.005 ? '↓' : '·';
+            const chgColor = p.chg > 0.005 ? '#4ade80' : p.chg < -0.005 ? '#f87171' : '#64748b';
+            const chgTxt = Math.abs(p.chg) < 0.005 ? '0.00%' : `${p.chg > 0 ? '+' : ''}${p.chg.toFixed(2)}%`;
+            return `<div style="background:rgba(11,15,18,0.7);border:1px solid rgba(193,166,115,0.18);border-radius:8px;padding:6px 11px;display:flex;align-items:center;gap:8px;transition:border-color 0.2s;" onmouseover="this.style.borderColor='rgba(193,166,115,0.4)'" onmouseout="this.style.borderColor='rgba(193,166,115,0.18)'">
+                <span style="font-size:10px;color:#94a3b8;letter-spacing:0.6px;font-weight:600;">${b}/${q}</span>
+                <span style="font-size:14px;color:#C1A673;font-weight:600;font-family:Montserrat,sans-serif;line-height:1;">${_fmtFXRate(p.rate)}</span>
+                <span style="font-size:10px;color:${chgColor};font-family:Montserrat,sans-serif;font-weight:500;">${arrow}${chgTxt}</span>
+            </div>`;
+        }).join('');
+        return `<div style="margin-top:14px;padding:10px 14px;background:rgba(15,23,42,0.45);backdrop-filter:blur(8px);border:1px solid rgba(193,166,115,0.1);border-radius:10px;display:flex;flex-wrap:wrap;align-items:center;gap:8px;">
+            <div style="display:flex;align-items:center;gap:6px;font-size:10px;color:#64748b;letter-spacing:2px;font-weight:600;padding-right:4px;border-right:1px solid rgba(193,166,115,0.1);margin-right:4px;height:28px;">💱 FX</div>
+            ${chips}
+        </div>`;
     }
     function getRegionCurrencySymbol(cur) {
         return cur==='CNY'?'¥':cur==='JPY'?'¥':cur==='HKD'?'HK$':'$';
@@ -5182,6 +5237,183 @@
         }
         html += `</tbody></table></div>`;
         body.innerHTML = html;
+    }
+
+    // ===== Region drill-down: pie chart + holdings table =====
+    const regionDrilldownState = { region: null, view: 'pie' };
+
+    function openRegionDrilldown(region) {
+        regionDrilldownState.region = region;
+        regionDrilldownState.view = 'pie';
+        renderRegionDrilldown();
+        openModal('regionDrilldownModal');
+    }
+
+    function switchRegionDrilldownView(view) {
+        regionDrilldownState.view = view;
+        renderRegionDrilldown();
+    }
+
+    function _regionFlag(r) {
+        return r==='美国'?'🇺🇸':r==='中国'?'🇨🇳':r==='日本'?'🇯🇵':r==='香港'?'🇭🇰':'🌐';
+    }
+
+    function _regionItems(region) {
+        const list = (APP.holdings || [])
+            .filter(h => h.qty > 0 && (h.region || '其他') === region)
+            .map(h => {
+                const pd = APP.prices[h.symbol] || {};
+                const price = pd.price || h.avg_cost;
+                const value = h.qty * price;
+                const cost = h.qty * h.avg_cost;
+                const pl = value - cost;
+                const plPct = cost > 0 ? (pl / cost * 100) : 0;
+                return {
+                    symbol: h.symbol,
+                    name: h.name || h.symbol,
+                    currency: h.currency || 'USD',
+                    price, qty: h.qty,
+                    value, avgCost: h.avg_cost, cost, pl, plPct,
+                    hasLivePrice: !!pd.price,
+                };
+            })
+            .sort((a, b) => b.value - a.value);
+        return list;
+    }
+
+    function renderRegionDrilldown() {
+        const body = document.getElementById('regionDrilldownBody');
+        const header = document.getElementById('regionDrilldownHeader');
+        const r = regionDrilldownState.region;
+        if (!body || !header || !r) return;
+
+        const items = _regionItems(r);
+        if (items.length === 0) {
+            header.innerHTML = `${_regionFlag(r)} ${r}`;
+            body.innerHTML = `<div style="padding:40px 20px;text-align:center;color:#64748b;font-size:13px;">该属地暂无持仓</div>`;
+            return;
+        }
+        // Use the first holding's currency as region display currency (within a region they're typically uniform)
+        const cur = items[0].currency;
+        const curSym = getRegionCurrencySymbol(cur);
+
+        if (regionDrilldownState.view === 'pie') {
+            header.innerHTML = `${_regionFlag(r)} ${r} · 资产占比`;
+            body.innerHTML = _renderRegionPie(items, curSym);
+        } else {
+            header.innerHTML = `${_regionFlag(r)} ${r} · 持仓清单`;
+            body.innerHTML = _renderRegionTable(items, curSym);
+        }
+    }
+
+    function _renderRegionPie(items, curSym) {
+        const total = items.reduce((s, x) => s + x.value, 0);
+        const colors = ['#C1A673','#E8B84B','#D4A574','#8B9CB6','#A78BCC','#82C9A6','#E8908F','#7DB6C9','#D9B26F','#F0C987','#94A3B8','#B8956A'];
+        const cx = 120, cy = 120, R = 105;
+        let acc = 0;
+        const slices = items.map((item, i) => {
+            const frac = total > 0 ? item.value / total : 0;
+            if (frac === 0) return '';
+            // single full slice → render as circle
+            if (items.length === 1 || frac >= 0.9999) {
+                return `<circle cx="${cx}" cy="${cy}" r="${R}" fill="${colors[i % colors.length]}" stroke="rgba(15,23,42,0.5)" stroke-width="1" />`;
+            }
+            const startA = acc * 2 * Math.PI - Math.PI / 2;
+            const endA = (acc + frac) * 2 * Math.PI - Math.PI / 2;
+            acc += frac;
+            const large = frac > 0.5 ? 1 : 0;
+            const x1 = (cx + R * Math.cos(startA)).toFixed(2);
+            const y1 = (cy + R * Math.sin(startA)).toFixed(2);
+            const x2 = (cx + R * Math.cos(endA)).toFixed(2);
+            const y2 = (cy + R * Math.sin(endA)).toFixed(2);
+            const path = `M ${cx} ${cy} L ${x1} ${y1} A ${R} ${R} 0 ${large} 1 ${x2} ${y2} Z`;
+            return `<path d="${path}" fill="${colors[i % colors.length]}" stroke="rgba(15,23,42,0.5)" stroke-width="1" />`;
+        }).join('');
+
+        const legend = items.map((item, i) => {
+            const pct = total > 0 ? item.value / total * 100 : 0;
+            return `<div style="display:flex;align-items:center;gap:10px;padding:7px 4px;border-bottom:1px solid rgba(193,166,115,0.06);">
+                <div style="width:11px;height:11px;border-radius:2px;background:${colors[i % colors.length]};flex-shrink:0;"></div>
+                <div style="flex:1;min-width:0;">
+                    <div style="font-size:13px;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${item.name}</div>
+                    <div style="font-size:10px;color:#64748b;font-family:Montserrat,sans-serif;margin-top:1px;">${curSym}${fmtNum(item.value)} <span style="opacity:0.6;">· ${item.symbol}</span></div>
+                </div>
+                <div style="font-size:14px;color:#C1A673;font-weight:600;font-family:Montserrat,sans-serif;flex-shrink:0;">${pct.toFixed(1)}%</div>
+            </div>`;
+        }).join('');
+
+        return `
+            <div style="display:flex;gap:24px;margin-top:8px;flex-wrap:wrap;align-items:flex-start;">
+                <div onclick="switchRegionDrilldownView('table')" style="cursor:pointer;flex:0 0 auto;text-align:center;padding:6px;border-radius:12px;transition:background 0.2s;" onmouseover="this.style.background='rgba(193,166,115,0.05)'" onmouseout="this.style.background='transparent'">
+                    <svg width="240" height="240" viewBox="0 0 240 240">${slices}</svg>
+                    <div style="font-size:10px;color:#94a3b8;margin-top:6px;letter-spacing:1px;">点击饼图查看明细 →</div>
+                </div>
+                <div style="flex:1;min-width:260px;max-height:300px;overflow-y:auto;padding-right:4px;">${legend}</div>
+            </div>
+            <div style="margin-top:14px;padding-top:10px;border-top:1px solid rgba(193,166,115,0.1);display:flex;justify-content:space-between;font-size:12px;">
+                <span style="color:#64748b;">合计 ${items.length} 支</span>
+                <span style="color:#e2e8f0;font-weight:600;font-family:Montserrat,sans-serif;">${curSym}${fmtNum(total)}</span>
+            </div>
+        `;
+    }
+
+    function _renderRegionTable(items, curSym) {
+        const total = items.reduce((s, x) => s + x.value, 0);
+        const rows = items.map(item => {
+            const plClass = item.pl >= 0 ? 'price-positive' : 'price-negative';
+            const sign = item.pl >= 0 ? '+' : '';
+            const pct = total > 0 ? (item.value / total * 100) : 0;
+            const priceCell = item.hasLivePrice
+                ? `${curSym}${fmtNum(item.price, 2)}`
+                : `<span style="color:#64748b;" title="无实时价，按成本均价显示">${curSym}${fmtNum(item.price, 2)}</span>`;
+            return `<tr style="border-bottom:1px solid rgba(193,166,115,0.05);">
+                <td style="padding:9px 10px;color:#e2e8f0;">${item.name}</td>
+                <td style="padding:9px 10px;color:#64748b;font-family:Montserrat,sans-serif;font-size:11px;">${item.symbol}</td>
+                <td style="padding:9px 10px;text-align:right;font-family:Montserrat,sans-serif;color:#cbd5e1;">${priceCell}</td>
+                <td style="padding:9px 10px;text-align:right;font-family:Montserrat,sans-serif;color:#cbd5e1;">${fmtNum(item.qty, 0)}</td>
+                <td style="padding:9px 10px;text-align:right;font-family:Montserrat,sans-serif;color:#C1A673;font-weight:600;">${curSym}${fmtNum(item.value)}<div style="font-size:10px;color:#64748b;font-weight:400;">${pct.toFixed(1)}%</div></td>
+                <td style="padding:9px 10px;text-align:right;font-family:Montserrat,sans-serif;color:#cbd5e1;">${curSym}${fmtNum(item.avgCost, 2)}</td>
+                <td style="padding:9px 10px;text-align:right;font-family:Montserrat,sans-serif;color:#cbd5e1;">${curSym}${fmtNum(item.cost)}</td>
+                <td class="${plClass}" style="padding:9px 10px;text-align:right;font-family:Montserrat,sans-serif;font-weight:600;">${sign}${curSym}${fmtNum(item.pl)}</td>
+                <td class="${plClass}" style="padding:9px 10px;text-align:right;font-family:Montserrat,sans-serif;font-weight:600;">${formatPercent(item.plPct)}</td>
+            </tr>`;
+        }).join('');
+        const totalCost = items.reduce((s, x) => s + x.cost, 0);
+        const totalPL = total - totalCost;
+        const totalPct = totalCost > 0 ? (totalPL / totalCost * 100) : 0;
+        const totalClass = totalPL >= 0 ? 'price-positive' : 'price-negative';
+        const totalSign = totalPL >= 0 ? '+' : '';
+        return `
+            <button onclick="switchRegionDrilldownView('pie')" style="background:rgba(193,166,115,0.1);border:1px solid rgba(193,166,115,0.2);color:#C1A673;padding:6px 12px;border-radius:6px;font-size:11px;cursor:pointer;margin-bottom:12px;letter-spacing:0.5px;">← 返回饼图</button>
+            <div style="overflow-x:auto;">
+            <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:760px;">
+                <thead>
+                    <tr style="background:rgba(15,23,42,0.5);color:#94a3b8;font-size:10px;letter-spacing:0.6px;">
+                        <th style="padding:9px 10px;text-align:left;font-weight:500;">名称</th>
+                        <th style="padding:9px 10px;text-align:left;font-weight:500;">代码</th>
+                        <th style="padding:9px 10px;text-align:right;font-weight:500;">最新价</th>
+                        <th style="padding:9px 10px;text-align:right;font-weight:500;">持股</th>
+                        <th style="padding:9px 10px;text-align:right;font-weight:500;">持仓金额</th>
+                        <th style="padding:9px 10px;text-align:right;font-weight:500;">成本均价</th>
+                        <th style="padding:9px 10px;text-align:right;font-weight:500;">成本金额</th>
+                        <th style="padding:9px 10px;text-align:right;font-weight:500;">盈亏</th>
+                        <th style="padding:9px 10px;text-align:right;font-weight:500;">盈亏%</th>
+                    </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+                <tfoot>
+                    <tr style="background:rgba(15,23,42,0.4);border-top:2px solid rgba(193,166,115,0.2);font-weight:600;">
+                        <td colspan="4" style="padding:10px;color:#94a3b8;font-size:11px;letter-spacing:0.5px;">合计 ${items.length} 支</td>
+                        <td style="padding:10px;text-align:right;font-family:Montserrat,sans-serif;color:#C1A673;">${curSym}${fmtNum(total)}</td>
+                        <td></td>
+                        <td style="padding:10px;text-align:right;font-family:Montserrat,sans-serif;color:#cbd5e1;">${curSym}${fmtNum(totalCost)}</td>
+                        <td class="${totalClass}" style="padding:10px;text-align:right;font-family:Montserrat,sans-serif;">${totalSign}${curSym}${fmtNum(totalPL)}</td>
+                        <td class="${totalClass}" style="padding:10px;text-align:right;font-family:Montserrat,sans-serif;">${formatPercent(totalPct)}</td>
+                    </tr>
+                </tfoot>
+            </table>
+            </div>
+        `;
     }
 
     async function changePassword() {
