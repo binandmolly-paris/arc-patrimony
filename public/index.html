@@ -5680,27 +5680,27 @@
             <text x="${cx}" y="${cy+38}" text-anchor="middle" fill="#64748b" font-size="10" font-family="Montserrat,sans-serif" pointer-events="none">${items.length} 支</text>
         `;
 
-        // Legend rows: 色块 · 占比 · [名称 代码] · 持仓金额 · 持仓数量
-        // 名称 + 代码 合并到一个块里紧贴显示
-        const legendHeader = `<div style="display:flex;align-items:center;gap:10px;padding:6px 4px 8px;font-size:9px;color:#64748b;letter-spacing:1px;font-weight:600;border-bottom:1px solid rgba(193,166,115,0.12);">
-            <span style="width:9px;flex-shrink:0;"></span>
-            <span style="width:48px;text-align:right;flex-shrink:0;">占比</span>
-            <span style="flex:1 1 auto;min-width:0;">名称 / 代码</span>
-            <span style="text-align:right;flex-shrink:0;min-width:84px;">持仓金额</span>
-            <span style="text-align:right;flex-shrink:0;min-width:54px;">数量</span>
+        // Legend: CSS Grid 14px (色块) + 4 列等宽 (占比 / 名称代码 / 持仓金额 / 数量)
+        const grid = 'display:grid;grid-template-columns:14px 1fr 1fr 1fr 1fr;gap:10px;align-items:center;';
+        const legendHeader = `<div style="${grid}padding:6px 4px 8px;font-size:9px;color:#64748b;letter-spacing:1px;font-weight:600;border-bottom:1px solid rgba(193,166,115,0.12);">
+            <span></span>
+            <span style="text-align:right;">占比</span>
+            <span>名称 / 代码</span>
+            <span style="text-align:right;">持仓金额</span>
+            <span style="text-align:right;">数量</span>
         </div>`;
         const legend = legendHeader + items.map((item, i) => {
             const pct = total > 0 ? item.value / total * 100 : 0;
             const c = palette[i % palette.length];
-            return `<div style="display:flex;align-items:center;gap:10px;padding:7px 4px;border-bottom:1px solid rgba(193,166,115,0.05);font-size:12px;">
-                <div style="width:9px;height:9px;border-radius:50%;background:${c};box-shadow:0 0 6px ${c}66;flex-shrink:0;"></div>
-                <span style="width:48px;text-align:right;color:#C1A673;font-weight:600;font-family:Montserrat,sans-serif;flex-shrink:0;">${pct.toFixed(1)}%</span>
-                <div style="flex:1 1 auto;min-width:0;display:flex;align-items:baseline;gap:7px;overflow:hidden;">
+            return `<div style="${grid}padding:7px 4px;border-bottom:1px solid rgba(193,166,115,0.05);font-size:12px;">
+                <div style="width:9px;height:9px;border-radius:50%;background:${c};box-shadow:0 0 6px ${c}66;"></div>
+                <span style="text-align:right;color:#C1A673;font-weight:600;font-family:Montserrat,sans-serif;">${pct.toFixed(1)}%</span>
+                <div style="min-width:0;display:flex;align-items:baseline;gap:7px;overflow:hidden;">
                     <span style="color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${_esc(item.name)}</span>
                     <span style="color:#64748b;font-family:Montserrat,sans-serif;font-size:10px;flex-shrink:0;">${item.symbol}</span>
                 </div>
-                <span style="color:#cbd5e1;font-family:Montserrat,sans-serif;font-weight:500;text-align:right;flex-shrink:0;min-width:84px;white-space:nowrap;">${curSym}${fmtNum(item.value)}</span>
-                <span style="color:#94a3b8;font-family:Montserrat,sans-serif;text-align:right;flex-shrink:0;min-width:54px;white-space:nowrap;">${fmtNum(item.qty, 0)}</span>
+                <span style="color:#cbd5e1;font-family:Montserrat,sans-serif;font-weight:500;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${curSym}${fmtNum(item.value)}</span>
+                <span style="color:#94a3b8;font-family:Montserrat,sans-serif;text-align:right;white-space:nowrap;">${fmtNum(item.qty, 0)}</span>
             </div>`;
         }).join('');
 
