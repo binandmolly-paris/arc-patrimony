@@ -347,6 +347,93 @@
             to   { transform: translateX(-50%); }
         }
 
+        /* Apple-style minimalist pill + dropdown */
+        .apple-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            padding: 6px 11px 6px 12px;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.09);
+            border-radius: 8px;
+            cursor: pointer;
+            user-select: none;
+            color: #e2e8f0;
+            font-size: 12px;
+            font-weight: 500;
+            transition: background 0.15s, border-color 0.15s;
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            white-space: nowrap;
+        }
+        .apple-pill:hover {
+            background: rgba(255,255,255,0.08);
+            border-color: rgba(193,166,115,0.3);
+        }
+        .apple-pill.active {
+            background: rgba(193,166,115,0.12);
+            border-color: rgba(193,166,115,0.45);
+        }
+        .apple-pill .chevron {
+            font-size: 9px;
+            color: #94a3b8;
+            transition: transform 0.2s ease;
+            margin-left: 1px;
+        }
+        .apple-pill.active .chevron {
+            transform: rotate(180deg);
+            color: #C1A673;
+        }
+        .apple-dropdown {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            margin-top: 6px;
+            background: rgba(22, 30, 42, 0.97);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 10px;
+            padding: 4px;
+            box-shadow: 0 10px 32px rgba(0,0,0,0.6), 0 2px 8px rgba(0,0,0,0.4);
+            min-width: 200px;
+            z-index: 100;
+            animation: appleDropFade 0.15s ease-out;
+        }
+        @keyframes appleDropFade {
+            from { opacity: 0; transform: translateY(-6px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        .apple-dropdown-item {
+            padding: 8px 12px;
+            border-radius: 6px;
+            color: #cbd5e1;
+            font-size: 12.5px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: background 0.1s;
+            white-space: nowrap;
+        }
+        .apple-dropdown-item:hover:not(.disabled) {
+            background: rgba(255,255,255,0.06);
+        }
+        .apple-dropdown-item.selected {
+            color: #C1A673;
+            background: rgba(193,166,115,0.08);
+        }
+        .apple-dropdown-item.disabled {
+            color: #475569;
+            cursor: default;
+            font-style: italic;
+        }
+        .apple-dropdown-item .check {
+            margin-left: auto;
+            color: #C1A673;
+            font-size: 11px;
+        }
+
         .app-header {
             background: rgba(11, 15, 18, 0.85);
             backdrop-filter: blur(20px);
@@ -5308,22 +5395,45 @@
         regionDrilldownState.sortKey = 'pctOfTotal';
         regionDrilldownState.sortDir = 'desc';
         regionDrilldownState.date = 'today';
+        regionDrilldownState.openPicker = null;
+        _ensureDrilldownOutsideClick();
         renderRegionDrilldown();
         openModal('regionDrilldownModal');
     }
 
+    // close any open picker when user clicks outside the pill / dropdown
+    let _drilldownOutsideClickAttached = false;
+    function _ensureDrilldownOutsideClick() {
+        if (_drilldownOutsideClickAttached) return;
+        _drilldownOutsideClickAttached = true;
+        document.addEventListener('click', (e) => {
+            if (!regionDrilldownState.openPicker) return;
+            if (e.target.closest && (e.target.closest('.apple-pill') || e.target.closest('.apple-dropdown'))) return;
+            regionDrilldownState.openPicker = null;
+            renderRegionDrilldown();
+        });
+    }
+
+    function _togglePicker(which) {
+        regionDrilldownState.openPicker = regionDrilldownState.openPicker === which ? null : which;
+        renderRegionDrilldown();
+    }
+
     function switchRegionDrilldownView(view) {
         regionDrilldownState.view = view;
+        regionDrilldownState.openPicker = null;
         renderRegionDrilldown();
     }
 
     function setRegionDrilldownRegion(r) {
         regionDrilldownState.region = r;
+        regionDrilldownState.openPicker = null;
         renderRegionDrilldown();
     }
 
     function setRegionDrilldownDate(d) {
         regionDrilldownState.date = d;
+        regionDrilldownState.openPicker = null;
         renderRegionDrilldown();
     }
 
@@ -5341,24 +5451,53 @@
         const regions = [...new Set((APP.holdings || []).filter(h => h.qty > 0).map(h => h.region || '其他'))];
         const priority = { '美国':0, '中国':1, '日本':2, '香港':3 };
         regions.sort((a,b) => (priority[a]??99) - (priority[b]??99) || a.localeCompare(b));
-        const regionOpts = regions.map(r => `<option value="${r}" ${r===currentRegion?'selected':''}>${_regionFlag(r)} ${r}</option>`).join('');
         const today = new Date();
         const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
-        const selStyle = "background:rgba(11,15,18,0.75);border:1px solid rgba(193,166,115,0.22);color:#e2e8f0;padding:5px 28px 5px 10px;border-radius:6px;font-size:12px;font-family:'Montserrat',sans-serif;cursor:pointer;outline:none;appearance:none;-webkit-appearance:none;background-image:url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M0 0l5 6 5-6z' fill='%23C1A673'/></svg>\");background-repeat:no-repeat;background-position:right 8px center;";
-        return `
-            <div style="display:flex;gap:18px;align-items:center;flex-wrap:wrap;padding:0 0 12px;border-bottom:1px solid rgba(193,166,115,0.08);margin-bottom:14px;">
-                <div style="display:flex;align-items:center;gap:8px;">
-                    <span style="font-size:10px;color:#94a3b8;letter-spacing:1.5px;font-weight:600;">📅 日期</span>
-                    <select onchange="setRegionDrilldownDate(this.value)" style="${selStyle}">
-                        <option value="today">今日 ${todayStr}</option>
-                    </select>
-                    <span style="font-size:11px;color:#475569;cursor:help;" title="历史日期数据需启用每日个股快照（后续开发）">ⓘ</span>
+        const open = regionDrilldownState.openPicker;
+
+        const dateDropdown = open === 'date' ? `
+            <div class="apple-dropdown" onclick="event.stopPropagation()">
+                <div class="apple-dropdown-item selected" onclick="setRegionDrilldownDate('today')">
+                    <span>📅</span>
+                    <span>今日 ${todayStr}</span>
+                    <span class="check">✓</span>
                 </div>
-                <div style="display:flex;align-items:center;gap:8px;">
-                    <span style="font-size:10px;color:#94a3b8;letter-spacing:1.5px;font-weight:600;">🌐 属地</span>
-                    <select onchange="setRegionDrilldownRegion(this.value)" style="${selStyle}">
-                        ${regionOpts}
-                    </select>
+                <div style="height:1px;background:rgba(255,255,255,0.06);margin:4px 6px;"></div>
+                <div class="apple-dropdown-item disabled" title="历史日期数据需启用每日个股快照（后续开发）">
+                    <span>🗓</span>
+                    <span>历史日期 · 即将推出</span>
+                </div>
+            </div>` : '';
+
+        const regionItems = regions.map(r => {
+            const sel = r === currentRegion ? 'selected' : '';
+            const check = r === currentRegion ? '<span class="check">✓</span>' : '';
+            return `<div class="apple-dropdown-item ${sel}" onclick="setRegionDrilldownRegion('${r}')">
+                <span>${_regionFlag(r)}</span>
+                <span>${r}</span>
+                ${check}
+            </div>`;
+        }).join('');
+        const regionDropdown = open === 'region' ? `
+            <div class="apple-dropdown" onclick="event.stopPropagation()">${regionItems}</div>` : '';
+
+        return `
+            <div style="display:flex;justify-content:flex-end;gap:10px;margin-bottom:14px;">
+                <div style="position:relative;">
+                    <div class="apple-pill ${open==='date'?'active':''}" onclick="event.stopPropagation();_togglePicker('date')">
+                        <span style="font-size:13px;">📅</span>
+                        <span style="font-family:'Montserrat',sans-serif;">${todayStr}</span>
+                        <span class="chevron">▾</span>
+                    </div>
+                    ${dateDropdown}
+                </div>
+                <div style="position:relative;">
+                    <div class="apple-pill ${open==='region'?'active':''}" onclick="event.stopPropagation();_togglePicker('region')">
+                        <span style="font-size:13px;">${_regionFlag(currentRegion)}</span>
+                        <span>${currentRegion}</span>
+                        <span class="chevron">▾</span>
+                    </div>
+                    ${regionDropdown}
                 </div>
             </div>
         `;
@@ -5541,25 +5680,27 @@
             <text x="${cx}" y="${cy+38}" text-anchor="middle" fill="#64748b" font-size="10" font-family="Montserrat,sans-serif" pointer-events="none">${items.length} 支</text>
         `;
 
-        // Legend rows in order: 色块 · 占比 · 名称 · 代码 · 持仓金额 · 持仓数量
-        const legendHeader = `<div style="display:flex;align-items:center;gap:8px;padding:6px 4px 8px;font-size:9px;color:#64748b;letter-spacing:1px;font-weight:600;border-bottom:1px solid rgba(193,166,115,0.12);">
+        // Legend rows: 色块 · 占比 · [名称 代码] · 持仓金额 · 持仓数量
+        // 名称 + 代码 合并到一个块里紧贴显示
+        const legendHeader = `<div style="display:flex;align-items:center;gap:10px;padding:6px 4px 8px;font-size:9px;color:#64748b;letter-spacing:1px;font-weight:600;border-bottom:1px solid rgba(193,166,115,0.12);">
             <span style="width:9px;flex-shrink:0;"></span>
             <span style="width:48px;text-align:right;flex-shrink:0;">占比</span>
-            <span style="flex:1 1 auto;min-width:0;">名称</span>
-            <span style="width:60px;flex-shrink:0;">代码</span>
-            <span style="text-align:right;flex-shrink:0;min-width:80px;">持仓金额</span>
-            <span style="text-align:right;flex-shrink:0;min-width:50px;">数量</span>
+            <span style="flex:1 1 auto;min-width:0;">名称 / 代码</span>
+            <span style="text-align:right;flex-shrink:0;min-width:84px;">持仓金额</span>
+            <span style="text-align:right;flex-shrink:0;min-width:54px;">数量</span>
         </div>`;
         const legend = legendHeader + items.map((item, i) => {
             const pct = total > 0 ? item.value / total * 100 : 0;
             const c = palette[i % palette.length];
-            return `<div style="display:flex;align-items:center;gap:8px;padding:7px 4px;border-bottom:1px solid rgba(193,166,115,0.05);font-size:12px;">
+            return `<div style="display:flex;align-items:center;gap:10px;padding:7px 4px;border-bottom:1px solid rgba(193,166,115,0.05);font-size:12px;">
                 <div style="width:9px;height:9px;border-radius:50%;background:${c};box-shadow:0 0 6px ${c}66;flex-shrink:0;"></div>
                 <span style="width:48px;text-align:right;color:#C1A673;font-weight:600;font-family:Montserrat,sans-serif;flex-shrink:0;">${pct.toFixed(1)}%</span>
-                <span style="flex:1 1 auto;min-width:0;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${_esc(item.name)}</span>
-                <span style="color:#64748b;font-family:Montserrat,sans-serif;font-size:10px;flex-shrink:0;width:60px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${item.symbol}</span>
-                <span style="color:#cbd5e1;font-family:Montserrat,sans-serif;font-weight:500;text-align:right;flex-shrink:0;min-width:80px;white-space:nowrap;">${curSym}${fmtNum(item.value)}</span>
-                <span style="color:#94a3b8;font-family:Montserrat,sans-serif;text-align:right;flex-shrink:0;min-width:50px;white-space:nowrap;">${fmtNum(item.qty, 0)}</span>
+                <div style="flex:1 1 auto;min-width:0;display:flex;align-items:baseline;gap:7px;overflow:hidden;">
+                    <span style="color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${_esc(item.name)}</span>
+                    <span style="color:#64748b;font-family:Montserrat,sans-serif;font-size:10px;flex-shrink:0;">${item.symbol}</span>
+                </div>
+                <span style="color:#cbd5e1;font-family:Montserrat,sans-serif;font-weight:500;text-align:right;flex-shrink:0;min-width:84px;white-space:nowrap;">${curSym}${fmtNum(item.value)}</span>
+                <span style="color:#94a3b8;font-family:Montserrat,sans-serif;text-align:right;flex-shrink:0;min-width:54px;white-space:nowrap;">${fmtNum(item.qty, 0)}</span>
             </div>`;
         }).join('');
 
