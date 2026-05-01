@@ -5305,14 +5305,25 @@
     function openRegionDrilldown(region) {
         regionDrilldownState.region = region;
         regionDrilldownState.view = 'pie';
-        regionDrilldownState.sortKey = 'value';
+        regionDrilldownState.sortKey = 'pctOfTotal';
         regionDrilldownState.sortDir = 'desc';
+        regionDrilldownState.date = 'today';
         renderRegionDrilldown();
         openModal('regionDrilldownModal');
     }
 
     function switchRegionDrilldownView(view) {
         regionDrilldownState.view = view;
+        renderRegionDrilldown();
+    }
+
+    function setRegionDrilldownRegion(r) {
+        regionDrilldownState.region = r;
+        renderRegionDrilldown();
+    }
+
+    function setRegionDrilldownDate(d) {
+        regionDrilldownState.date = d;
         renderRegionDrilldown();
     }
 
@@ -5324,6 +5335,33 @@
             regionDrilldownState.sortDir = (key === 'name' || key === 'symbol') ? 'asc' : 'desc';
         }
         renderRegionDrilldown();
+    }
+
+    function _renderDrilldownSelectors(currentRegion) {
+        const regions = [...new Set((APP.holdings || []).filter(h => h.qty > 0).map(h => h.region || '其他'))];
+        const priority = { '美国':0, '中国':1, '日本':2, '香港':3 };
+        regions.sort((a,b) => (priority[a]??99) - (priority[b]??99) || a.localeCompare(b));
+        const regionOpts = regions.map(r => `<option value="${r}" ${r===currentRegion?'selected':''}>${_regionFlag(r)} ${r}</option>`).join('');
+        const today = new Date();
+        const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+        const selStyle = "background:rgba(11,15,18,0.75);border:1px solid rgba(193,166,115,0.22);color:#e2e8f0;padding:5px 28px 5px 10px;border-radius:6px;font-size:12px;font-family:'Montserrat',sans-serif;cursor:pointer;outline:none;appearance:none;-webkit-appearance:none;background-image:url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M0 0l5 6 5-6z' fill='%23C1A673'/></svg>\");background-repeat:no-repeat;background-position:right 8px center;";
+        return `
+            <div style="display:flex;gap:18px;align-items:center;flex-wrap:wrap;padding:0 0 12px;border-bottom:1px solid rgba(193,166,115,0.08);margin-bottom:14px;">
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <span style="font-size:10px;color:#94a3b8;letter-spacing:1.5px;font-weight:600;">📅 日期</span>
+                    <select onchange="setRegionDrilldownDate(this.value)" style="${selStyle}">
+                        <option value="today">今日 ${todayStr}</option>
+                    </select>
+                    <span style="font-size:11px;color:#475569;cursor:help;" title="历史日期数据需启用每日个股快照（后续开发）">ⓘ</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <span style="font-size:10px;color:#94a3b8;letter-spacing:1.5px;font-weight:600;">🌐 属地</span>
+                    <select onchange="setRegionDrilldownRegion(this.value)" style="${selStyle}">
+                        ${regionOpts}
+                    </select>
+                </div>
+            </div>
+        `;
     }
 
     function _regionFlag(r) {
@@ -5366,10 +5404,11 @@
         const r = regionDrilldownState.region;
         if (!body || !header || !r) return;
 
+        const selectorsHTML = _renderDrilldownSelectors(r);
         const items = _regionItems(r);
         if (items.length === 0) {
             header.innerHTML = `${_regionFlag(r)} ${r}`;
-            body.innerHTML = `<div style="padding:40px 20px;text-align:center;color:#64748b;font-size:13px;">该属地暂无持仓</div>`;
+            body.innerHTML = selectorsHTML + `<div style="padding:40px 20px;text-align:center;color:#64748b;font-size:13px;">该属地暂无持仓</div>`;
             return;
         }
         // Currency derived from REGION (deterministic): 中国→CNY, 日本→JPY, 香港→HKD, 美国→USD
@@ -5378,10 +5417,10 @@
 
         if (regionDrilldownState.view === 'pie') {
             header.innerHTML = `${_regionFlag(r)} ${r} · 资产占比`;
-            body.innerHTML = _renderRegionPie(items, curSym, r);
+            body.innerHTML = selectorsHTML + _renderRegionPie(items, curSym, r);
         } else {
             header.innerHTML = `${_regionFlag(r)} ${r} · 持仓清单`;
-            body.innerHTML = _renderRegionTable(items, curSym);
+            body.innerHTML = selectorsHTML + _renderRegionTable(items, curSym);
         }
     }
 
@@ -5502,16 +5541,25 @@
             <text x="${cx}" y="${cy+38}" text-anchor="middle" fill="#64748b" font-size="10" font-family="Montserrat,sans-serif" pointer-events="none">${items.length} 支</text>
         `;
 
-        const legend = items.map((item, i) => {
+        // Legend rows in order: 色块 · 占比 · 名称 · 代码 · 持仓金额 · 持仓数量
+        const legendHeader = `<div style="display:flex;align-items:center;gap:8px;padding:6px 4px 8px;font-size:9px;color:#64748b;letter-spacing:1px;font-weight:600;border-bottom:1px solid rgba(193,166,115,0.12);">
+            <span style="width:9px;flex-shrink:0;"></span>
+            <span style="width:48px;text-align:right;flex-shrink:0;">占比</span>
+            <span style="flex:1 1 auto;min-width:0;">名称</span>
+            <span style="width:60px;flex-shrink:0;">代码</span>
+            <span style="text-align:right;flex-shrink:0;min-width:80px;">持仓金额</span>
+            <span style="text-align:right;flex-shrink:0;min-width:50px;">数量</span>
+        </div>`;
+        const legend = legendHeader + items.map((item, i) => {
             const pct = total > 0 ? item.value / total * 100 : 0;
             const c = palette[i % palette.length];
-            return `<div style="display:flex;align-items:center;gap:10px;padding:7px 4px;border-bottom:1px solid rgba(193,166,115,0.05);">
-                <div style="width:10px;height:10px;border-radius:50%;background:${c};box-shadow:0 0 6px ${c}66;flex-shrink:0;"></div>
-                <div style="flex:1;min-width:0;">
-                    <div style="font-size:13px;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${_esc(item.name)}</div>
-                    <div style="font-size:10px;color:#64748b;font-family:Montserrat,sans-serif;margin-top:1px;">${curSym}${fmtNum(item.value)} <span style="opacity:0.5;">· ${item.symbol}</span></div>
-                </div>
-                <div style="font-size:14px;color:#C1A673;font-weight:600;font-family:Montserrat,sans-serif;flex-shrink:0;">${pct.toFixed(1)}%</div>
+            return `<div style="display:flex;align-items:center;gap:8px;padding:7px 4px;border-bottom:1px solid rgba(193,166,115,0.05);font-size:12px;">
+                <div style="width:9px;height:9px;border-radius:50%;background:${c};box-shadow:0 0 6px ${c}66;flex-shrink:0;"></div>
+                <span style="width:48px;text-align:right;color:#C1A673;font-weight:600;font-family:Montserrat,sans-serif;flex-shrink:0;">${pct.toFixed(1)}%</span>
+                <span style="flex:1 1 auto;min-width:0;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${_esc(item.name)}</span>
+                <span style="color:#64748b;font-family:Montserrat,sans-serif;font-size:10px;flex-shrink:0;width:60px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${item.symbol}</span>
+                <span style="color:#cbd5e1;font-family:Montserrat,sans-serif;font-weight:500;text-align:right;flex-shrink:0;min-width:80px;white-space:nowrap;">${curSym}${fmtNum(item.value)}</span>
+                <span style="color:#94a3b8;font-family:Montserrat,sans-serif;text-align:right;flex-shrink:0;min-width:50px;white-space:nowrap;">${fmtNum(item.qty, 0)}</span>
             </div>`;
         }).join('');
 
@@ -5579,14 +5627,13 @@
                 ? `${curSym}${fmtNum(item.price, 2)}`
                 : `<span style="color:#64748b;" title="无实时价，按成本均价显示">${curSym}${fmtNum(item.price, 2)}</span>`;
             return `<tr style="border-bottom:1px solid rgba(193,166,115,0.05);">
+                <td style="${td('text-align:right;color:#C1A673;font-weight:700;')}">${item.pctOfTotal.toFixed(2)}%</td>
                 <td style="${td('color:#e2e8f0;font-family:inherit;')}">${_esc(item.name)}</td>
                 <td style="${td('color:#64748b;font-size:11px;')}">${item.symbol}</td>
-                <td style="${td('text-align:right;color:#cbd5e1;')}">${priceCell}</td>
-                <td style="${td('text-align:right;color:#cbd5e1;')}">${fmtNum(item.qty, 0)}</td>
                 <td style="${td('text-align:right;color:#C1A673;font-weight:600;')}">${curSym}${fmtNum(item.value)}</td>
-                <td style="${td('text-align:right;color:#94a3b8;')}">${item.pctOfTotal.toFixed(2)}%</td>
+                <td style="${td('text-align:right;color:#cbd5e1;')}">${fmtNum(item.qty, 0)}</td>
                 <td style="${td('text-align:right;color:#cbd5e1;')}">${curSym}${fmtNum(item.avgCost, 2)}</td>
-                <td style="${td('text-align:right;color:#cbd5e1;')}">${curSym}${fmtNum(item.cost)}</td>
+                <td style="${td('text-align:right;color:#cbd5e1;')}">${priceCell}</td>
                 <td class="${plClass}" style="${td('text-align:right;font-weight:600;')}">${sign}${curSym}${fmtNum(item.pl)}</td>
                 <td class="${plClass}" style="${td('text-align:right;font-weight:600;')}">${formatPercent(item.plPct)}</td>
             </tr>`;
@@ -5604,26 +5651,27 @@
             <table style="width:100%;border-collapse:collapse;font-size:12.5px;table-layout:auto;">
                 <thead>
                     <tr style="background:rgba(15,23,42,0.55);font-size:10px;letter-spacing:0.6px;">
-                        ${_sortHeaderCell('名称',     'name',       'left',  sk, sd)}
-                        ${_sortHeaderCell('代码',     'symbol',     'left',  sk, sd)}
-                        ${_sortHeaderCell('最新价',   'price',      'right', sk, sd)}
-                        ${_sortHeaderCell('持股',     'qty',        'right', sk, sd)}
-                        ${_sortHeaderCell('持仓金额', 'value',      'right', sk, sd)}
-                        ${_sortHeaderCell('占比%',    'pctOfTotal', 'right', sk, sd)}
-                        ${_sortHeaderCell('成本均价', 'avgCost',    'right', sk, sd)}
-                        ${_sortHeaderCell('成本金额', 'cost',       'right', sk, sd)}
-                        ${_sortHeaderCell('盈亏',     'pl',         'right', sk, sd)}
-                        ${_sortHeaderCell('盈亏%',    'plPct',      'right', sk, sd)}
+                        ${_sortHeaderCell('占比%',      'pctOfTotal', 'right', sk, sd)}
+                        ${_sortHeaderCell('名称',       'name',       'left',  sk, sd)}
+                        ${_sortHeaderCell('代码',       'symbol',     'left',  sk, sd)}
+                        ${_sortHeaderCell('持仓金额',   'value',      'right', sk, sd)}
+                        ${_sortHeaderCell('数量',       'qty',        'right', sk, sd)}
+                        ${_sortHeaderCell('平均成本',   'avgCost',    'right', sk, sd)}
+                        ${_sortHeaderCell('当前价格',   'price',      'right', sk, sd)}
+                        ${_sortHeaderCell('浮盈亏金额', 'pl',         'right', sk, sd)}
+                        ${_sortHeaderCell('率',         'plPct',      'right', sk, sd)}
                     </tr>
                 </thead>
                 <tbody>${rows}</tbody>
                 <tfoot>
                     <tr style="background:rgba(15,23,42,0.4);border-top:2px solid rgba(193,166,115,0.2);font-weight:600;">
-                        <td colspan="4" style="padding:10px;color:#94a3b8;font-size:11px;letter-spacing:0.5px;white-space:nowrap;">合计 ${items.length} 支</td>
-                        <td style="padding:10px;text-align:right;font-family:Montserrat,sans-serif;color:#C1A673;white-space:nowrap;">${curSym}${fmtNum(total)}</td>
-                        <td style="padding:10px;text-align:right;font-family:Montserrat,sans-serif;color:#94a3b8;white-space:nowrap;">100.00%</td>
+                        <td style="padding:10px;text-align:right;font-family:Montserrat,sans-serif;color:#C1A673;white-space:nowrap;">100.00%</td>
+                        <td style="padding:10px;color:#94a3b8;font-size:11px;letter-spacing:0.5px;white-space:nowrap;">合计 ${items.length} 支</td>
                         <td></td>
-                        <td style="padding:10px;text-align:right;font-family:Montserrat,sans-serif;color:#cbd5e1;white-space:nowrap;">${curSym}${fmtNum(totalCost)}</td>
+                        <td style="padding:10px;text-align:right;font-family:Montserrat,sans-serif;color:#C1A673;white-space:nowrap;">${curSym}${fmtNum(total)}</td>
+                        <td></td>
+                        <td></td>
+                        <td></td>
                         <td class="${totalClass}" style="padding:10px;text-align:right;font-family:Montserrat,sans-serif;white-space:nowrap;">${totalSign}${curSym}${fmtNum(totalPL)}</td>
                         <td class="${totalClass}" style="padding:10px;text-align:right;font-family:Montserrat,sans-serif;white-space:nowrap;">${formatPercent(totalPct)}</td>
                     </tr>
