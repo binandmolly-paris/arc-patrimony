@@ -2956,10 +2956,12 @@
         ]);
 
         let ytdUnrealized = 0, ytdRealized = 0, ytdDividends = 0, ytdInvested = 0;
+        const ytdByRegion = {};  // 按区域累加 YTD 总盈亏 (USD)，用于卡片国旗细分
 
         ytdSymbols.forEach(sym => {
             const h = APP.holdings.find(x => x.symbol === sym);
             if (!h) return;
+            const r = h.region || '其他';
             const fx = APP.FX_RATES[h.currency] || 1;
             const anchor = anchorPrices[sym];
             const buy = ytdBuyBySymbol[sym] || { qty: 0, amount: 0 };
@@ -2972,7 +2974,11 @@
             ytdInvested += buy.amount * fx;
 
             // 分红总是计入
-            ytdDividends += div * fx;
+            const divUSD = div * fx;
+            ytdDividends += divUSD;
+
+            // 单只股票本年浮盈亏 / 已实现 (USD)，用于按 region 累加
+            let stockYtdUnrealUSD = 0, stockYtdRealUSD = 0;
 
             if (anchor && anchor.close_price > 0) {
                 // ✅ 精确模式：用锚定价
@@ -2986,21 +2992,26 @@
                 // 拆分浮盈亏 vs 已实现：浮盈亏 = (current - anchor) * 当前持仓
                 const unrealLocal = currentQty > 0 ? (currentPrice - anchor.close_price) * currentQty : 0;
                 const realLocal = ytdLocal - unrealLocal;
-                ytdUnrealized += unrealLocal * fx;
-                ytdRealized += realLocal * fx;
+                stockYtdUnrealUSD = unrealLocal * fx;
+                stockYtdRealUSD   = realLocal   * fx;
             } else {
                 // ⚠️ Fallback：没锚定价 → 本年新开仓位算全额浮盈亏；老仓位浮盈亏算 0
                 const firstBuy = firstBuyDateBySymbol[sym];
                 if (firstBuy && firstBuy >= yearStart) {
                     if (currentQty > 0) {
-                        ytdUnrealized += (currentPrice - h.avg_cost) * currentQty * fx;
+                        stockYtdUnrealUSD = (currentPrice - h.avg_cost) * currentQty * fx;
                     }
                 }
                 // 本年卖出，已实现按 avg_cost 算
                 if (sell.qty > 0) {
-                    ytdRealized += (sell.amount - h.avg_cost * sell.qty) * fx;
+                    stockYtdRealUSD = (sell.amount - h.avg_cost * sell.qty) * fx;
                 }
             }
+
+            ytdUnrealized += stockYtdUnrealUSD;
+            ytdRealized   += stockYtdRealUSD;
+            // 该股 YTD 总盈亏 = 浮 + 实 + 分红，按 region 累加
+            ytdByRegion[r] = (ytdByRegion[r] || 0) + stockYtdUnrealUSD + stockYtdRealUSD + divUSD;
         });
 
         const ytdTotalPL = ytdUnrealized + ytdRealized + ytdDividends;
@@ -3110,6 +3121,11 @@
             regionStats[r].dividends += (h.dividend_total || 0) * rate;
             regionStats[r].realCost  += (h.realized_cost  || 0) * rate;
         });
+        // 区域累计盈亏 (USD)，用于顶部 Cumulative 卡片国旗细分
+        const cumByRegion = {};
+        Object.entries(regionStats).forEach(([r, s]) => {
+            cumByRegion[r] = (s.value - s.cost) + (s.realized || 0) + (s.dividends || 0);
+        });
 
         // Update badge (active holdings only)
         const badge = document.getElementById('holdingsBadge');
@@ -3200,6 +3216,15 @@
                     </div>
                     <div class="stat-sub" style="display:block;font-size:11px;line-height:1.5;color:#64748b;">
                         <div>浮 ${ytdUnrealized>=0?'+':''}$${fmtNum(ytdUnrealized,0)} · 实 ${ytdRealized>=0?'+':''}$${fmtNum(ytdRealized,0)} · 红 +$${fmtNum(ytdDividends,0)}</div>
+                        ${Object.keys(ytdByRegion).length > 0 ? `
+                        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:2px;">
+                            ${['美国','中国','日本'].filter(r => ytdByRegion[r] !== undefined).map(r => {
+                                const v = ytdByRegion[r] || 0;
+                                const flag = r==='美国'?'🇺🇸':r==='中国'?'🇨🇳':'🇯🇵';
+                                const cls = v >= 0 ? 'price-positive' : 'price-negative';
+                                return `<span style="white-space:nowrap;">${flag}<span class="${cls}">${v>=0?'+':''}$${fmtNum(v,0)}</span></span>`;
+                            }).join('<span style="color:#334155;">·</span>')}
+                        </div>` : ''}
                         ${!hasAnchorMode ? '<div style="color:#fbbf24;font-size:10px;">⚠️ 未启用锚定价，YTD 不准。Settings → 锚定价回填</div>' : `<div style="color:#475569;font-size:10px;">⚓ ${ytdAnchorCoverage} 只股已锚定 ${new Date().getFullYear()-1} 年末</div>`}
                     </div>
                 </div>
@@ -3216,6 +3241,15 @@
                     </div>
                     <div class="stat-sub" style="display:block;font-size:11px;line-height:1.5;color:#64748b;">
                         <div>浮 ${unrealizedPL>=0?'+':''}$${fmtNum(unrealizedPL,0)} · 实 ${realizedPL_USD>=0?'+':''}$${fmtNum(realizedPL_USD,0)} · 红 +$${fmtNum(dividends_USD,0)}</div>
+                        ${Object.keys(cumByRegion).length > 0 ? `
+                        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:2px;">
+                            ${['美国','中国','日本'].filter(r => cumByRegion[r] !== undefined).map(r => {
+                                const v = cumByRegion[r] || 0;
+                                const flag = r==='美国'?'🇺🇸':r==='中国'?'🇨🇳':'🇯🇵';
+                                const cls = v >= 0 ? 'price-positive' : 'price-negative';
+                                return `<span style="white-space:nowrap;">${flag}<span class="${cls}">${v>=0?'+':''}$${fmtNum(v,0)}</span></span>`;
+                            }).join('<span style="color:#334155;">·</span>')}
+                        </div>` : ''}
                         <div style="color:#475569;font-size:10px;">on $${fmtNum(totalInvestedEver,0)} invested</div>
                     </div>
                 </div>
@@ -3270,7 +3304,7 @@
                             <div style="text-align:right;">
                                 <div class="${regionCumPct>=0?'price-positive':'price-negative'}" style="font-size:26px;font-weight:bold;line-height:1;font-family:Montserrat,sans-serif;">${formatPercent(regionCumPct)}</div>
                                 <div style="font-size:9px;color:#64748b;letter-spacing:1.5px;margin-top:3px;">CUM RETURN</div>
-                                <div class="${regionCumPL_USD>=0?'price-positive':'price-negative'}" style="font-size:11px;margin-top:2px;opacity:0.7;">${regionCumPL_Local>=0?'+':''}${rCurSym}${fmtNum(regionCumPL_Local,localDecimals)}</div>
+                                <div class="${regionCumPL_USD>=0?'price-positive':'price-negative'}" style="font-size:11px;margin-top:2px;opacity:0.7;">${regionCumPL_USD>=0?'+':''}$${fmtNum(regionCumPL_USD,0)}</div>
                             </div>
                         </div>
                         <div style="margin-top:8px;padding:6px 8px;background:rgba(193,166,115,0.06);border-radius:6px;border:1px solid rgba(193,166,115,0.08);">
@@ -3303,16 +3337,22 @@
                                 <span style="font-size:10px;color:#64748b;">No budget set</span>
                             </div>`}
                         </div>
-                        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;padding-top:6px;border-top:1px solid rgba(193,166,115,0.06);">
+                        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-top:8px;padding-top:6px;border-top:1px solid rgba(193,166,115,0.06);">
                             <div style="text-align:left;">
                                 <div style="font-size:9px;color:#64748b;letter-spacing:0.5px;margin-bottom:2px;">Today</div>
-                                <span class="${todayPL_USD>=0?'price-positive':'price-negative'}" style="font-size:11px;font-weight:600;">${todayPL_Local>=0?'+':''}${rCurSym}${fmtNum(todayPL_Local,localDecimals)}</span>
-                                <span class="${todayPL_USD>=0?'price-positive':'price-negative'}" style="font-size:10px;opacity:0.7;"> ${formatPercent(todayPct)}</span>
+                                <div>
+                                    <span class="${todayPL_USD>=0?'price-positive':'price-negative'}" style="font-size:11px;font-weight:600;">${todayPL_USD>=0?'+':''}$${fmtNum(todayPL_USD,0)}</span>
+                                    <span class="${todayPL_USD>=0?'price-positive':'price-negative'}" style="font-size:10px;opacity:0.7;"> ${formatPercent(todayPct)}</span>
+                                </div>
+                                ${rCur !== 'USD' ? `<div style="font-size:9px;color:#64748b;opacity:0.6;margin-top:1px;">≈${rCurSym}${fmtNum(todayPL_Local,localDecimals)}</div>` : ''}
                             </div>
                             <div style="text-align:right;">
                                 <div style="font-size:9px;color:#64748b;letter-spacing:0.5px;margin-bottom:2px;">Cumulative</div>
-                                <span class="${regionCumPL_USD>=0?'price-positive':'price-negative'}" style="font-size:11px;font-weight:600;">${regionCumPL_Local>=0?'+':''}${rCurSym}${fmtNum(regionCumPL_Local,localDecimals)}</span>
-                                <span class="${regionCumPL_USD>=0?'price-positive':'price-negative'}" style="font-size:10px;opacity:0.7;"> ${formatPercent(regionCumPct)}</span>
+                                <div>
+                                    <span class="${regionCumPL_USD>=0?'price-positive':'price-negative'}" style="font-size:11px;font-weight:600;">${regionCumPL_USD>=0?'+':''}$${fmtNum(regionCumPL_USD,0)}</span>
+                                    <span class="${regionCumPL_USD>=0?'price-positive':'price-negative'}" style="font-size:10px;opacity:0.7;"> ${formatPercent(regionCumPct)}</span>
+                                </div>
+                                ${rCur !== 'USD' ? `<div style="font-size:9px;color:#64748b;opacity:0.6;margin-top:1px;">≈${rCurSym}${fmtNum(regionCumPL_Local,localDecimals)}</div>` : ''}
                             </div>
                         </div>
                     </div>`;
