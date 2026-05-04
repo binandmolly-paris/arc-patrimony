@@ -761,14 +761,16 @@
 
         .budget-bar-wrap {
             background: rgba(15,23,42,0.7);
+            border: 1px solid rgba(193,166,115,0.30);  /* 线框：让"未使用预算"轨道清晰可见 */
             border-radius: 4px;
-            height: 6px;
+            height: 8px;
             overflow: hidden;
             margin: 8px 0 6px;
+            box-shadow: inset 0 1px 2px rgba(0,0,0,0.4);
         }
         .budget-bar-fill {
             height: 100%;
-            border-radius: 4px;
+            border-radius: 3px;
             transition: width 0.5s ease;
         }
 
@@ -3086,16 +3088,27 @@
         const top3Best = sortedByChange.slice(0, 3);
         const top3Worst = sortedByChange.slice(-3).reverse();
 
-        // Regional breakdowns (active only)
+        // Regional breakdowns
+        // value/cost/count: 仅活跃仓位
+        // realized/dividends/realCost: 含已清仓的老仓位（与顶部 cumulativePL 口径一致）
         const regionStats = {};
         activeHoldings.forEach(h => {
             const r = h.region || '其他';
-            if (!regionStats[r]) regionStats[r] = { value: 0, cost: 0, count: 0 };
+            if (!regionStats[r]) regionStats[r] = { value: 0, cost: 0, count: 0, realized: 0, dividends: 0, realCost: 0 };
             const p = APP.prices[h.symbol]?.price || h.avg_cost;
             const rate = APP.FX_RATES[h.currency] || 1;
             regionStats[r].value += h.qty * p * rate;
             regionStats[r].cost += h.qty * h.avg_cost * rate;
             regionStats[r].count++;
+        });
+        // 把已实现盈利+分红+已实现成本按 region 累加（含 qty=0 的清仓仓位）
+        allHoldings.forEach(h => {
+            const r = h.region || '其他';
+            if (!regionStats[r]) regionStats[r] = { value: 0, cost: 0, count: 0, realized: 0, dividends: 0, realCost: 0 };
+            const rate = APP.FX_RATES[h.currency] || 1;
+            regionStats[r].realized  += (h.realized_pl    || 0) * rate;
+            regionStats[r].dividends += (h.dividend_total || 0) * rate;
+            regionStats[r].realCost  += (h.realized_cost  || 0) * rate;
         });
 
         // Update badge (active holdings only)
@@ -3210,42 +3223,54 @@
             ${renderFXStrip()}
             <div class="stat-cards" style="margin-top:12px;">
                 ${Object.entries(regionStats).map(([r, s]) => {
-                    const pl = s.value - s.cost;
-                    const pct = s.cost > 0 ? (pl / s.cost * 100) : 0;
+                    // === 区域 P&L: 浮 + 实 + 红 (与顶部 cumulativePL 口径一致) ===
+                    const regionUnrealizedUSD = s.value - s.cost;
+                    const regionCumPL_USD     = regionUnrealizedUSD + (s.realized||0) + (s.dividends||0);
+                    const regionInvestedEver  = s.cost + (s.realCost||0);
+                    const regionCumPct        = regionInvestedEver > 0 ? (regionCumPL_USD / regionInvestedEver * 100) : 0;
                     const flag = r==='美国'?'🇺🇸':r==='中国'?'🇨🇳':r==='日本'?'🇯🇵':'🌐';
                     const barColor = r==='美国'?'#C1A673':r==='中国'?'#E8B84B':r==='日本'?'#D4A574':'#8B9CB6';
-                    // Region budget (stored in local currency, convert to USD for comparison)
-                    const regionBudgetLocal = parseFloat(APP.regionBudgets[r]) || 0;
-                    const rCur = getRegionCurrency(r);
+                    // === 本地货币换算 (rFx = USD per 1 local unit；usd2local 用于把 USD 总值换回本地币显示) ===
+                    const rCur    = getRegionCurrency(r);
                     const rCurSym = getRegionCurrencySymbol(rCur);
-                    const regionBudget = regionBudgetLocal * (APP.FX_RATES[rCur] || 1); // USD
-                    // Budget usage measured by COST (actual money invested), not market value
-                    const budgetUsedPct = regionBudget > 0 ? (s.cost / regionBudget * 100) : 0;
-                    const budgetRemaining = regionBudget - s.cost;
-                    // Today's P&L for this region — Phase 3.7.1 fix: 必须用 latestSessionDate 过滤
-                    // 否则港股若停留在 04-28 stale data 会污染当日盈亏，跟主卡不一致
-                    let todayPL = 0;
-                    let todayBaseValue = 0;  // 仅统计 sessionDate == latestSessionDate 的股票
+                    const rFx     = APP.FX_RATES[rCur] || 1;
+                    const usd2local = (usd) => rFx > 0 ? (usd / rFx) : 0;
+                    // === 预算 (本地货币存储；预算条进度按 USD 成本比) ===
+                    const regionBudgetLocal = parseFloat(APP.regionBudgets[r]) || 0;
+                    const regionBudgetUSD   = regionBudgetLocal * rFx;
+                    const budgetUsedPct     = regionBudgetUSD > 0 ? (s.cost / regionBudgetUSD * 100) : 0;
+                    const budgetUsedLocal   = usd2local(s.cost);
+                    const budgetRemainLocal = regionBudgetLocal - budgetUsedLocal;
+                    // === 区域市值 / 累计盈亏 显示用本地币 ===
+                    const regionValueLocal  = usd2local(s.value);
+                    const regionCumPL_Local = usd2local(regionCumPL_USD);
+                    // === Today P&L: 仅 sessionDate == latestSessionDate 的股票（Phase 3.7.1）===
+                    let todayPL_USD = 0;
+                    let todayBaseValue = 0;
                     activeHoldings.filter(h => h.region === r).forEach(h => {
                         const pd = APP.prices[h.symbol];
                         if (!pd || !pd.prevClose || !pd.price) return;
                         const sessionDate = getStockSessionDate(h, pd);
-                        if (sessionDate !== latestSessionDate) return;  // ⭐ 关键过滤
+                        if (sessionDate !== latestSessionDate) return;
                         const fx = APP.FX_RATES[h.currency] || 1;
-                        todayPL += h.qty * (pd.price - pd.prevClose) * fx;
+                        todayPL_USD += h.qty * (pd.price - pd.prevClose) * fx;
                         todayBaseValue += h.qty * pd.prevClose * fx;
                     });
-                    const todayPct = todayBaseValue > 0 ? (todayPL / todayBaseValue * 100) : 0;
+                    const todayPct = todayBaseValue > 0 ? (todayPL_USD / todayBaseValue * 100) : 0;
+                    const todayPL_Local = usd2local(todayPL_USD);
+                    // JPY 数量级大，整数即可；CNY/USD 保留 2 位
+                    const localDecimals = (rCur === 'JPY') ? 0 : 2;
                     return `<div class="stat-card" style="position:relative;padding:14px 16px;cursor:pointer;" onclick="openRegionDrilldown('${r}')" title="点击查看资产占比与持仓清单">
                         <div style="display:flex;justify-content:space-between;align-items:flex-start;">
                             <div>
                                 <div class="stat-label" style="margin-bottom:4px;">${flag} ${r} (${s.count})</div>
-                                <div style="font-size:15px;color:#e2e8f0;font-weight:600;font-family:Montserrat,sans-serif;">$${fmtNum(s.value)}</div>
+                                <div style="font-size:15px;color:#e2e8f0;font-weight:600;font-family:Montserrat,sans-serif;">${rCurSym}${fmtNum(regionValueLocal,localDecimals)}</div>
+                                ${rCur !== 'USD' ? `<div style="font-size:10px;color:#64748b;margin-top:2px;">≈$${fmtNum(s.value,0)}</div>` : ''}
                             </div>
                             <div style="text-align:right;">
-                                <div class="${pct>=0?'price-positive':'price-negative'}" style="font-size:26px;font-weight:bold;line-height:1;font-family:Montserrat,sans-serif;">${formatPercent(pct)}</div>
-                                <div style="font-size:9px;color:#64748b;letter-spacing:1.5px;margin-top:3px;">YTD RETURN</div>
-                                <div class="${pl>=0?'price-positive':'price-negative'}" style="font-size:11px;margin-top:2px;opacity:0.7;">${pl>=0?'+':''}$${fmtNum(pl)}</div>
+                                <div class="${regionCumPct>=0?'price-positive':'price-negative'}" style="font-size:26px;font-weight:bold;line-height:1;font-family:Montserrat,sans-serif;">${formatPercent(regionCumPct)}</div>
+                                <div style="font-size:9px;color:#64748b;letter-spacing:1.5px;margin-top:3px;">CUM RETURN</div>
+                                <div class="${regionCumPL_USD>=0?'price-positive':'price-negative'}" style="font-size:11px;margin-top:2px;opacity:0.7;">${regionCumPL_Local>=0?'+':''}${rCurSym}${fmtNum(regionCumPL_Local,localDecimals)}</div>
                             </div>
                         </div>
                         <div style="margin-top:8px;padding:6px 8px;background:rgba(193,166,115,0.06);border-radius:6px;border:1px solid rgba(193,166,115,0.08);">
@@ -3259,16 +3284,16 @@
                                         onfocus="this.style.borderColor='rgba(193,166,115,0.4)';this.value=String(${regionBudgetLocal||0}||'')"
                                         onblur="this.style.borderColor='rgba(193,166,115,0.15)';this.value=fmtBudgetInput(this.value)"
                                         onchange="saveRegionBudget('${r}',parseBudgetInput(this.value))">
-                                    ${rCur !== 'USD' ? `<span style="font-size:9px;color:#94a3b8;margin-left:2px;">≈$${fmtNum(regionBudget)}</span>` : ''}
+                                    ${rCur !== 'USD' ? `<span style="font-size:9px;color:#94a3b8;margin-left:2px;">≈$${fmtNum(regionBudgetUSD,0)}</span>` : ''}
                                 </div>
                             </div>
-                            ${regionBudget > 0 ? `
-                            <div style="background:rgba(30,41,59,0.8);border-radius:3px;height:4px;overflow:hidden;">
+                            ${regionBudgetLocal > 0 ? `
+                            <div style="background:rgba(30,41,59,0.8);border:1px solid rgba(193,166,115,0.18);border-radius:3px;height:6px;overflow:hidden;">
                                 <div style="width:${Math.min(100, budgetUsedPct)}%;height:100%;background:${budgetUsedPct>100?'#f87171':budgetUsedPct>80?'#fbbf24':barColor};border-radius:3px;transition:width 0.3s;"></div>
                             </div>
                             <div style="display:flex;justify-content:space-between;margin-top:3px;">
                                 <span style="font-size:10px;color:${budgetUsedPct>100?'#f87171':budgetUsedPct>80?'#fbbf24':'#94a3b8'};">${fmtNum(budgetUsedPct,1)}% invested</span>
-                                <span style="font-size:10px;color:${budgetRemaining>=0?'#4ade80':'#f87171'};">${budgetRemaining>=0?'Remaining':'Over'}: $${fmtNum(Math.abs(budgetRemaining))}</span>
+                                <span style="font-size:10px;color:${budgetRemainLocal>=0?'#4ade80':'#f87171'};">${budgetRemainLocal>=0?'Remaining':'Over'}: ${rCurSym}${fmtNum(Math.abs(budgetRemainLocal),localDecimals)}</span>
                             </div>` : `
                             <div style="background:rgba(30,41,59,0.6);border-radius:3px;height:4px;overflow:hidden;">
                                 <div style="width:${Math.min(100, s.value/totalValue*100)}%;height:100%;background:${barColor};border-radius:3px;box-shadow:0 0 8px ${barColor}40;"></div>
@@ -3281,13 +3306,13 @@
                         <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;padding-top:6px;border-top:1px solid rgba(193,166,115,0.06);">
                             <div style="text-align:left;">
                                 <div style="font-size:9px;color:#64748b;letter-spacing:0.5px;margin-bottom:2px;">Today</div>
-                                <span class="${todayPL>=0?'price-positive':'price-negative'}" style="font-size:11px;font-weight:600;">${todayPL>=0?'+':''}$${fmtNum(todayPL)}</span>
-                                <span class="${todayPL>=0?'price-positive':'price-negative'}" style="font-size:10px;opacity:0.7;"> ${formatPercent(todayPct)}</span>
+                                <span class="${todayPL_USD>=0?'price-positive':'price-negative'}" style="font-size:11px;font-weight:600;">${todayPL_Local>=0?'+':''}${rCurSym}${fmtNum(todayPL_Local,localDecimals)}</span>
+                                <span class="${todayPL_USD>=0?'price-positive':'price-negative'}" style="font-size:10px;opacity:0.7;"> ${formatPercent(todayPct)}</span>
                             </div>
                             <div style="text-align:right;">
                                 <div style="font-size:9px;color:#64748b;letter-spacing:0.5px;margin-bottom:2px;">Cumulative</div>
-                                <span class="${pl>=0?'price-positive':'price-negative'}" style="font-size:11px;font-weight:600;">${pl>=0?'+':''}$${fmtNum(pl)}</span>
-                                <span class="${pl>=0?'price-positive':'price-negative'}" style="font-size:10px;opacity:0.7;"> ${formatPercent(pct)}</span>
+                                <span class="${regionCumPL_USD>=0?'price-positive':'price-negative'}" style="font-size:11px;font-weight:600;">${regionCumPL_Local>=0?'+':''}${rCurSym}${fmtNum(regionCumPL_Local,localDecimals)}</span>
+                                <span class="${regionCumPL_USD>=0?'price-positive':'price-negative'}" style="font-size:10px;opacity:0.7;"> ${formatPercent(regionCumPct)}</span>
                             </div>
                         </div>
                     </div>`;
