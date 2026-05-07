@@ -540,22 +540,33 @@
             animation: breatheActive 3s ease-in-out infinite;
         }
 
-        /* 强制刷新按钮：与 tab 同尺寸，用青绿色与金色 tabs 区分 */
+        /* 强制刷新按钮：与 tab 同尺寸，但去掉边框，仅靠青绿色背景与金色 tabs 区分 */
         .tab.tab-refresh {
             color: #4ade80;
-            background: rgba(74,222,128,0.08);
-            border-color: rgba(74,222,128,0.30);
-            animation: none;  /* 不参与 breathe 呼吸动画，避免误以为是普通 tab */
+            background: rgba(74,222,128,0.10);
+            border-color: transparent;
+            animation: none;  /* 不参与 breathe 呼吸动画 */
         }
         .tab.tab-refresh:hover {
             color: #86efac;
-            background: rgba(74,222,128,0.16);
-            border-color: rgba(74,222,128,0.55);
+            background: rgba(74,222,128,0.18);
+            border-color: transparent;
         }
         .tab.tab-refresh.is-loading {
             opacity: 0.55;
             pointer-events: none;
             color: #64748b;
+            background: rgba(100,116,139,0.10);
+        }
+        /* 行情时间戳备注：紧跟刷新按钮，小字淡灰 */
+        .prices-updated-note {
+            display: inline-flex;
+            align-items: center;
+            font-size: 10px;
+            color: #475569;
+            padding: 0 4px;
+            white-space: nowrap;
+            user-select: none;
         }
 
         .tab-badge {
@@ -2674,6 +2685,7 @@
                     <div class="tab" onclick="switchTab(5)">Allocation</div>
                     <div class="tab" onclick="switchTab(6)">Settings</div>
                     <div class="tab tab-refresh" id="forceRefreshBtn" onclick="forceRefreshPrices()" title="跳过缓存，立刻向 Yahoo 重新拉所有持仓的实时价格">🔄 强制刷新</div>
+                    <span class="prices-updated-note" title="数据来源 Yahoo Finance；亚洲市场免费档约延迟 15 分钟">🕒 行情更新于 <span id="pricesUpdatedLabel">${fmtUpdatedAgo()}</span></span>
                     <div class="tab" onclick="switchTab(7)" style="margin-left:auto">Briefing</div>
                 </div>
 
@@ -3340,9 +3352,6 @@
                 </div>
             </div>
             ${renderFXStrip()}
-            <div style="display:flex;justify-content:flex-end;align-items:center;gap:8px;font-size:11px;color:#64748b;margin:4px 2px 8px;">
-                <span title="数据来源 Yahoo Finance；亚洲市场免费档约延迟 15 分钟">🕒 行情更新于 <span id="pricesUpdatedLabel">${fmtUpdatedAgo()}</span></span>
-            </div>
             <div class="stat-cards" style="margin-top:12px;">
                 ${Object.entries(regionStats).map(([r, s]) => {
                     // === 区域 P&L: 浮 + 实 + 红 (与顶部 cumulativePL 口径一致) ===
