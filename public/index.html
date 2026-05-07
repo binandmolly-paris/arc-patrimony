@@ -540,20 +540,32 @@
             animation: breatheActive 3s ease-in-out infinite;
         }
 
-        /* 强制刷新按钮：与 Settings 等普通 tab 一样朴素，仅文字色带一点青绿做区分 */
+        /* "Update" 按钮：与 Settings 同字体同尺寸，仅由前面的小绿图标做区分 */
         .tab.tab-refresh {
-            color: #6ea989;            /* 比默认 #64748b 略带青绿 */
-            animation: none;            /* 不参与 breathe 呼吸动画 */
+            animation: none;                /* 不参与 breathe 呼吸动画 */
         }
         .tab.tab-refresh:hover {
-            color: #86efac;
-            background: rgba(74,222,128,0.06);
-            border-color: rgba(74,222,128,0.25);
+            color: var(--gold-light);
+            background: rgba(74,222,128,0.05);
+            border-color: rgba(74,222,128,0.28);
         }
         .tab.tab-refresh.is-loading {
             opacity: 0.55;
             pointer-events: none;
-            color: #64748b;
+        }
+        .tab-refresh-icon {
+            width: 0.7em;                   /* 比文字小 30% */
+            height: 0.7em;
+            vertical-align: -0.05em;
+            margin-right: 5px;
+            display: inline-block;
+        }
+        .tab.tab-refresh.is-loading .tab-refresh-icon {
+            animation: spin 0.9s linear infinite;
+        }
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to   { transform: rotate(360deg); }
         }
         /* 行情时间戳备注：紧跟刷新按钮，小字淡灰 */
         .prices-updated-note {
@@ -888,6 +900,22 @@
         .symbol-cell {
             font-weight: 600;
             color: var(--gold);
+        }
+
+        /* 名字列水平滚动时锁定在最左侧（手机/PAD 横向滚动看右侧数据时仍能看到是哪只股） */
+        .holdings-table .sticky-name-col {
+            position: sticky;
+            left: 0;
+            z-index: 4;
+            background: #0e1419;                  /* 实色，避免后面列透出来叠在 Name 上 */
+            box-shadow: 6px 0 8px -6px rgba(0,0,0,0.65);   /* 右侧投影提示该列被钉住 */
+        }
+        .holdings-table thead .sticky-name-col {
+            z-index: 11;                            /* 高于 thead 默认 z-index 10 */
+            background: rgba(6, 11, 24, 1);         /* thead 实色版本 */
+        }
+        .holdings-table tbody tr:hover .sticky-name-col {
+            background: #181f2b;                    /* 跟随 hover 高亮 */
         }
 
         .region-badge {
@@ -2042,6 +2070,18 @@
         return dateInTZ(new Date(), userTZ);
     }
 
+    // 把一只股票分到具体的"子市场"（A股/港股/中概/日股/美股），用于 pending 区精细标识
+    // 因为 region='中国' 同时包含 A股、港股、中概，全标 🇨🇳 会让人困惑
+    function getMarketFlag(h) {
+        const sym = (h.symbol || '').toUpperCase();
+        const cur = h.currency;
+        if (cur === 'HKD' || sym.endsWith('.HK'))                           return { key: '香港',   flag: '🇭🇰', label: '港股' };
+        if (cur === 'JPY' || sym.endsWith('.T'))                            return { key: '日本',   flag: '🇯🇵', label: '日股' };
+        if (cur === 'CNY' || sym.endsWith('.SS') || sym.endsWith('.SZ'))    return { key: '中国A股',flag: '🇨🇳', label: 'A股' };
+        if (h.region === '中国' && cur === 'USD')                            return { key: '中概',   flag: '🇨🇳', label: '中概' };
+        return { key: '美国', flag: '🇺🇸', label: '美股' };
+    }
+
     // 该股票现在是否处于"今日常规交易时段"内（基于 Yahoo currentTradingPeriod.regular）
     // true = 今日市场已开盘且未收盘，可能 Yahoo 的 regularMarketTime 还没更新，但市场是 live 的
     function isMarketOpenNow(priceData) {
@@ -2439,10 +2479,14 @@
         }
     }
 
+    // "Update" 按钮内容（SVG 图标 + 文字），用于 loading 前后切换时保留图标
+    const REFRESH_BTN_HTML = '<svg class="tab-refresh-icon" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>Update';
+    const REFRESH_BTN_LOADING_HTML = '<svg class="tab-refresh-icon" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>Updating…';
+
     // 手动强制刷新：跳过服务器缓存，立即向 Yahoo 拉新数据
     async function forceRefreshPrices() {
         const btn = document.getElementById('forceRefreshBtn');
-        if (btn) { btn.classList.add('is-loading'); btn.textContent = '⏳ 拉取中…'; }
+        if (btn) { btn.classList.add('is-loading'); btn.innerHTML = REFRESH_BTN_LOADING_HTML; }
         try {
             await updatePrices({ fresh: true });
             await updateFXRates();
@@ -2457,7 +2501,7 @@
                 try { renderRegionDrilldown && renderRegionDrilldown(); } catch(e) {}
             }
         } finally {
-            if (btn) { btn.classList.remove('is-loading'); btn.textContent = '🔄 强制刷新'; }
+            if (btn) { btn.classList.remove('is-loading'); btn.innerHTML = REFRESH_BTN_HTML; }
         }
     }
 
@@ -2681,7 +2725,7 @@
                     <div class="tab" onclick="switchTab(4)">Analysis</div>
                     <div class="tab" onclick="switchTab(5)">Allocation</div>
                     <div class="tab" onclick="switchTab(6)">Settings</div>
-                    <div class="tab tab-refresh" id="forceRefreshBtn" onclick="forceRefreshPrices()" title="跳过缓存，立刻向 Yahoo 重新拉所有持仓的实时价格">🔄 强制刷新</div>
+                    <div class="tab tab-refresh" id="forceRefreshBtn" onclick="forceRefreshPrices()" title="跳过缓存，立刻向 Yahoo 重新拉所有持仓的实时价格"><svg class="tab-refresh-icon" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>Update</div>
                     <span class="prices-updated-note" title="数据来源 Yahoo Finance；亚洲市场免费档约延迟 15 分钟">🕒 行情更新于 <span id="pricesUpdatedLabel">${fmtUpdatedAgo()}</span></span>
                     <div class="tab" onclick="switchTab(7)" style="margin-left:auto">Briefing</div>
                 </div>
@@ -3127,8 +3171,8 @@
         });
 
         let todayPL = 0;
-        const todayByRegion = {};      // 已计入: { 中国: {amount, date}, ... }
-        const pendingByRegion = {};    // 未计入: { 美国: {amount, lastDate}, ... }
+        const todayByRegion = {};      // 已计入: { 中国: {amount, date}, ... }（顶部还按 region 显示）
+        const pendingByMarket = {};    // 未计入: { 香港: {flag, label, amount, lastDate, marketOpenNow}, ... }（细分）
 
         activeHoldings.forEach(h => {
             const pd = APP.prices[h.symbol];
@@ -3143,12 +3187,12 @@
                 if (!todayByRegion[r]) todayByRegion[r] = { amount: 0, date: sessionDate };
                 todayByRegion[r].amount += delta;
             } else {
-                // ⏰ 数据更老（如 US 在周一 Beijing 早晨还在显示上周五数据）→ 不计入
-                if (!pendingByRegion[r]) pendingByRegion[r] = { amount: 0, lastDate: sessionDate, marketOpenNow: false };
-                pendingByRegion[r].amount += delta;
-                if (sessionDate > pendingByRegion[r].lastDate) pendingByRegion[r].lastDate = sessionDate;
-                // 该区域只要有一只股票当下处于交易时段内（Yahoo currentTradingPeriod），就标记为"已开盘等成交"
-                if (isMarketOpenNow(pd)) pendingByRegion[r].marketOpenNow = true;
+                // ⏰ 数据更老 → 不计入；按子市场分组（A股/港股/中概/日股/美股）让用户看清楚
+                const mk = getMarketFlag(h);
+                if (!pendingByMarket[mk.key]) pendingByMarket[mk.key] = { flag: mk.flag, label: mk.label, amount: 0, lastDate: sessionDate, marketOpenNow: false };
+                pendingByMarket[mk.key].amount += delta;
+                if (sessionDate > pendingByMarket[mk.key].lastDate) pendingByMarket[mk.key].lastDate = sessionDate;
+                if (isMarketOpenNow(pd)) pendingByMarket[mk.key].marketOpenNow = true;
             }
         });
         // 分母用"已计入"的股票市值
@@ -3249,6 +3293,24 @@
                             <span style="color:${budgetTextColor};">Used (cost) $${fmtNum(budgetUsedByCost)}</span>
                             <span style="color:${budgetRemaining>=0?'#4ade80':'#f87171'};">${budgetRemaining>=0?'Rem':'Over'} $${fmtNum(Math.abs(budgetRemaining))}</span>
                         </div>
+                        ${(() => {
+                            // 各国预算使用率小字行：仅显示已设预算的区域
+                            const items = ['美国','中国','日本'].map(r => {
+                                const stats = regionStats[r];
+                                if (!stats) return '';
+                                const budgetLocal = parseFloat(APP.regionBudgets[r]) || 0;
+                                const cur = getRegionCurrency(r);
+                                const budgetUSD = budgetLocal * (APP.FX_RATES[cur] || 1);
+                                if (budgetUSD <= 0) return '';
+                                const pct = (stats.cost / budgetUSD) * 100;
+                                const flag = r==='美国'?'🇺🇸':r==='中国'?'🇨🇳':'🇯🇵';
+                                const color = pct > 100 ? '#f87171' : pct > 80 ? '#fbbf24' : '#94a3b8';
+                                return `<span style="white-space:nowrap;">${flag}<span style="color:${color};margin-left:3px;">${fmtNum(pct,1)}%</span></span>`;
+                            }).filter(Boolean);
+                            return items.length > 0
+                                ? `<div style="display:flex;flex-wrap:wrap;gap:6px;font-size:10px;color:#64748b;margin-top:4px;">${items.join('<span style="color:#334155;">·</span>')}</div>`
+                                : '';
+                        })()}
                     ` : `
                         <div class="stat-value-lg" style="color:#64748b;">—</div>
                         <div class="stat-sub" style="color:#64748b;">Set region budgets in Allocation tab</div>
@@ -3277,24 +3339,23 @@
                             }).join('<span style="color:#334155;">·</span>')}
                         </div>
                         ` : ''}
-                        ${Object.keys(pendingByRegion).length > 0 ? `
+                        ${Object.keys(pendingByMarket).length > 0 ? `
                         <div style="color:#475569;font-size:10px;margin-top:3px;display:flex;flex-wrap:wrap;gap:4px;align-items:center;">
                             <span style="color:#64748b;">⏰ 待开盘 / 等成交:</span>
-                            ${['美国','中国','日本'].filter(r => pendingByRegion[r]).map(r => {
-                                const info = pendingByRegion[r];
+                            ${['美国','中国A股','香港','中概','日本'].filter(k => pendingByMarket[k]).map(k => {
+                                const info = pendingByMarket[k];
                                 const v = info.amount || 0;
-                                const flag = r==='美国'?'🇺🇸':r==='中国'?'🇨🇳':'🇯🇵';
                                 const cls = v >= 0 ? 'price-positive' : 'price-negative';
                                 const md = (info.lastDate || '').slice(5);
-                                // 已开盘但还没收到 tick → 显示绿点 + "已开盘"，不再显示陈旧的金额（避免误导）
                                 if (info.marketOpenNow) {
-                                    return `<span style="white-space:nowrap;opacity:0.85;">${flag}<span style="color:#4ade80;font-weight:600;"> 🟢 已开盘</span><span style="color:#475569;font-size:9px;"> 等今日首笔成交</span></span>`;
+                                    // 已开盘但 Yahoo 还没推 tick → 不显示陈旧金额，仅标 "已开盘 等成交"
+                                    return `<span style="white-space:nowrap;opacity:0.85;">${info.flag} <span style="color:#94a3b8;">${info.label}</span><span style="color:#4ade80;font-weight:600;"> 🟢 已开盘</span><span style="color:#475569;font-size:9px;"> 等今日首笔成交</span></span>`;
                                 }
-                                return `<span style="white-space:nowrap;opacity:0.7;">${flag}<span class="${cls}" style="opacity:0.6;">${v>=0?'+':''}$${fmtNum(v,0)}</span> <span style="color:#475569;">(${md})</span></span>`;
+                                return `<span style="white-space:nowrap;opacity:0.7;">${info.flag} <span style="color:#94a3b8;">${info.label}</span> <span class="${cls}" style="opacity:0.6;">${v>=0?'+':''}$${fmtNum(v,0)}</span> <span style="color:#475569;">(${md})</span></span>`;
                             }).join('<span style="color:#334155;">·</span>')}
                         </div>
                         ` : ''}
-                        ${Object.keys(todayByRegion).length === 0 && Object.keys(pendingByRegion).length === 0 ? '<div style="color:#64748b;">无可用报价数据</div>' : '<div style="color:#475569;font-size:10px;margin-top:2px;">仅含市场本地"今日"已成交</div>'}
+                        ${Object.keys(todayByRegion).length === 0 && Object.keys(pendingByMarket).length === 0 ? '<div style="color:#64748b;">无可用报价数据</div>' : '<div style="color:#475569;font-size:10px;margin-top:2px;">仅含市场本地"今日"已成交</div>'}
                     </div>
                 </div>
 
@@ -3582,8 +3643,8 @@
                     <div style="overflow:auto;max-height:70vh;">
                     <table class="holdings-table" style="font-size:13px;table-layout:fixed;width:100%;">
                         <colgroup>
-                            <col style="width:80px;">
                             <col style="width:160px;">
+                            <col style="width:80px;">
                             <col style="width:58px;">
                             <col style="width:52px;">
                             <col style="width:52px;">
@@ -3600,8 +3661,8 @@
                         </colgroup>
                         <thead>
                             <tr>
+                                <th class="sticky-name-col">Name</th>
                                 <th>Symbol</th>
-                                <th>Name</th>
                                 <th>Region</th>
                                 <th>Ccy</th>
                                 <th>Type</th>
@@ -3637,8 +3698,8 @@
 
                 html += `
                     <tr style="cursor:pointer;" onclick="showStockDetail('${d.symbol}')">
+                        <td class="sticky-name-col" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${d.name}">${d.name}</td>
                         <td class="symbol-cell">${d.symbol}</td>
-                        <td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${d.name}">${d.name}</td>
                         <td><span class="region-badge">${d.region}</span></td>
                         <td>${d.currency}</td>
                         <td>${d.attribute || '-'}</td>
@@ -3702,14 +3763,14 @@
                 <div class="chart-title" style="color:#f97316;">Closed Positions (${soldList.length} stocks) — Realized P&L: <span class="${soldTotalPL>=0?'price-positive':'price-negative'}">${soldTotalPL>=0?'+':''}$${fmtNum(soldTotalPL)}</span></div>
                 <table class="holdings-table" style="font-size:13px;background:#1a1520;">
                     <thead><tr>
-                        <th>Symbol</th><th>Name</th><th>Region</th><th>Currency</th><th>Type</th>
+                        <th class="sticky-name-col">Name</th><th>Symbol</th><th>Region</th><th>Currency</th><th>Type</th>
                         <th>Shares</th><th>Avg Cost</th><th>Realized P&L</th><th>P&L%</th>
                     </tr></thead><tbody>
                     ${soldList.map(d => {
                         const curSym = curSym0fn(d.currency);
                         return `<tr style="cursor:pointer;opacity:0.85;" onclick="showStockDetail('${d.symbol}')">
+                            <td class="sticky-name-col">${d.name}</td>
                             <td class="symbol-cell" style="color:#f97316;">${d.symbol}</td>
-                            <td>${d.name}</td>
                             <td><span class="region-badge">${d.region}</span></td>
                             <td>${d.currency}</td>
                             <td>${d.attribute||'-'}</td>
