@@ -2016,15 +2016,24 @@
         return dateInTZ(new Date(), userTZ);
     }
 
+    // 该股票现在是否处于"今日常规交易时段"内（基于 Yahoo currentTradingPeriod.regular）
+    // true = 今日市场已开盘且未收盘，可能 Yahoo 的 regularMarketTime 还没更新，但市场是 live 的
+    function isMarketOpenNow(priceData) {
+        const start = priceData?.todaySessionStart || 0;
+        const end   = priceData?.todaySessionEnd   || 0;
+        if (!start || !end) return false;
+        const nowSec = Math.floor(Date.now() / 1000);
+        return nowSec >= start && nowSec <= end;
+    }
+
     // 一只股票最近交易会话所属的本地日期（市场时区）
+    // 注意：只用真实的 regularMarketTime，不要伪造"今天"，否则会把上一交易日的涨跌错误归到今天。
     function getStockSessionDate(holding, priceData) {
         const tz = getStockTimezone(holding, priceData);
         const ts = priceData?.regularMarketTime;
         if (ts && ts > 0) {
-            // Yahoo 给的是该股最后一次有效报价的时间
             return dateInTZ(new Date(ts * 1000), tz);
         }
-        // 没拿到时间戳 fallback 用当前市场日期
         return dateInTZ(new Date(), tz);
     }
 
@@ -3056,9 +3065,11 @@
                 todayByRegion[r].amount += delta;
             } else {
                 // ⏰ 数据更老（如 US 在周一 Beijing 早晨还在显示上周五数据）→ 不计入
-                if (!pendingByRegion[r]) pendingByRegion[r] = { amount: 0, lastDate: sessionDate };
+                if (!pendingByRegion[r]) pendingByRegion[r] = { amount: 0, lastDate: sessionDate, marketOpenNow: false };
                 pendingByRegion[r].amount += delta;
                 if (sessionDate > pendingByRegion[r].lastDate) pendingByRegion[r].lastDate = sessionDate;
+                // 该区域只要有一只股票当下处于交易时段内（Yahoo currentTradingPeriod），就标记为"已开盘等成交"
+                if (isMarketOpenNow(pd)) pendingByRegion[r].marketOpenNow = true;
             }
         });
         // 分母用"已计入"的股票市值
@@ -3189,13 +3200,17 @@
                         ` : ''}
                         ${Object.keys(pendingByRegion).length > 0 ? `
                         <div style="color:#475569;font-size:10px;margin-top:3px;display:flex;flex-wrap:wrap;gap:4px;align-items:center;">
-                            <span style="color:#64748b;">⏰ 待开盘:</span>
+                            <span style="color:#64748b;">⏰ 待开盘 / 等成交:</span>
                             ${['美国','中国','日本'].filter(r => pendingByRegion[r]).map(r => {
                                 const info = pendingByRegion[r];
                                 const v = info.amount || 0;
                                 const flag = r==='美国'?'🇺🇸':r==='中国'?'🇨🇳':'🇯🇵';
                                 const cls = v >= 0 ? 'price-positive' : 'price-negative';
                                 const md = (info.lastDate || '').slice(5);
+                                // 已开盘但还没收到 tick → 显示绿点 + "已开盘"，不再显示陈旧的金额（避免误导）
+                                if (info.marketOpenNow) {
+                                    return `<span style="white-space:nowrap;opacity:0.85;">${flag}<span style="color:#4ade80;font-weight:600;"> 🟢 已开盘</span><span style="color:#475569;font-size:9px;"> 等今日首笔成交</span></span>`;
+                                }
                                 return `<span style="white-space:nowrap;opacity:0.7;">${flag}<span class="${cls}" style="opacity:0.6;">${v>=0?'+':''}$${fmtNum(v,0)}</span> <span style="color:#475569;">(${md})</span></span>`;
                             }).join('<span style="color:#334155;">·</span>')}
                         </div>
