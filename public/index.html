@@ -540,6 +540,24 @@
             animation: breatheActive 3s ease-in-out infinite;
         }
 
+        /* 强制刷新按钮：与 tab 同尺寸，用青绿色与金色 tabs 区分 */
+        .tab.tab-refresh {
+            color: #4ade80;
+            background: rgba(74,222,128,0.08);
+            border-color: rgba(74,222,128,0.30);
+            animation: none;  /* 不参与 breathe 呼吸动画，避免误以为是普通 tab */
+        }
+        .tab.tab-refresh:hover {
+            color: #86efac;
+            background: rgba(74,222,128,0.16);
+            border-color: rgba(74,222,128,0.55);
+        }
+        .tab.tab-refresh.is-loading {
+            opacity: 0.55;
+            pointer-events: none;
+            color: #64748b;
+        }
+
         .tab-badge {
             display: inline-block;
             background: linear-gradient(135deg, var(--gold), var(--gold-dark));
@@ -2416,13 +2434,22 @@
     // 手动强制刷新：跳过服务器缓存，立即向 Yahoo 拉新数据
     async function forceRefreshPrices() {
         const btn = document.getElementById('forceRefreshBtn');
-        if (btn) { btn.disabled = true; btn.textContent = '⏳ 拉取中…'; }
+        if (btn) { btn.classList.add('is-loading'); btn.textContent = '⏳ 拉取中…'; }
         try {
             await updatePrices({ fresh: true });
             await updateFXRates();
             renderTab0();
+            // 弹窗若打开也跟新
+            const todayModal = document.getElementById('todayPLModal');
+            if (todayModal && todayModal.classList.contains('show')) {
+                try { renderTodayPL(); } catch(e) {}
+            }
+            const regionModal = document.getElementById('regionDrilldownModal');
+            if (regionModal && regionModal.classList.contains('show')) {
+                try { renderRegionDrilldown && renderRegionDrilldown(); } catch(e) {}
+            }
         } finally {
-            if (btn) { btn.disabled = false; btn.textContent = '🔄 强制刷新'; }
+            if (btn) { btn.classList.remove('is-loading'); btn.textContent = '🔄 强制刷新'; }
         }
     }
 
@@ -2646,6 +2673,7 @@
                     <div class="tab" onclick="switchTab(4)">Analysis</div>
                     <div class="tab" onclick="switchTab(5)">Allocation</div>
                     <div class="tab" onclick="switchTab(6)">Settings</div>
+                    <div class="tab tab-refresh" id="forceRefreshBtn" onclick="forceRefreshPrices()" title="跳过缓存，立刻向 Yahoo 重新拉所有持仓的实时价格">🔄 强制刷新</div>
                     <div class="tab" onclick="switchTab(7)" style="margin-left:auto">Briefing</div>
                 </div>
 
@@ -3312,9 +3340,8 @@
                 </div>
             </div>
             ${renderFXStrip()}
-            <div style="display:flex;justify-content:flex-end;align-items:center;gap:10px;font-size:11px;color:#64748b;margin:4px 2px 8px;">
+            <div style="display:flex;justify-content:flex-end;align-items:center;gap:8px;font-size:11px;color:#64748b;margin:4px 2px 8px;">
                 <span title="数据来源 Yahoo Finance；亚洲市场免费档约延迟 15 分钟">🕒 行情更新于 <span id="pricesUpdatedLabel">${fmtUpdatedAgo()}</span></span>
-                <button id="forceRefreshBtn" onclick="forceRefreshPrices()" style="background:rgba(193,166,115,0.10);border:1px solid rgba(193,166,115,0.35);color:#C1A673;padding:3px 10px;border-radius:5px;font-size:11px;cursor:pointer;font-family:inherit;">🔄 强制刷新</button>
             </div>
             <div class="stat-cards" style="margin-top:12px;">
                 ${Object.entries(regionStats).map(([r, s]) => {
