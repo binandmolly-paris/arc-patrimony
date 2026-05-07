@@ -540,23 +540,20 @@
             animation: breatheActive 3s ease-in-out infinite;
         }
 
-        /* 强制刷新按钮：与 tab 同尺寸，但去掉边框，仅靠青绿色背景与金色 tabs 区分 */
+        /* 强制刷新按钮：与 Settings 等普通 tab 一样朴素，仅文字色带一点青绿做区分 */
         .tab.tab-refresh {
-            color: #4ade80;
-            background: rgba(74,222,128,0.10);
-            border-color: transparent;
-            animation: none;  /* 不参与 breathe 呼吸动画 */
+            color: #6ea989;            /* 比默认 #64748b 略带青绿 */
+            animation: none;            /* 不参与 breathe 呼吸动画 */
         }
         .tab.tab-refresh:hover {
             color: #86efac;
-            background: rgba(74,222,128,0.18);
-            border-color: transparent;
+            background: rgba(74,222,128,0.06);
+            border-color: rgba(74,222,128,0.25);
         }
         .tab.tab-refresh.is-loading {
             opacity: 0.55;
             pointer-events: none;
             color: #64748b;
-            background: rgba(100,116,139,0.10);
         }
         /* 行情时间戳备注：紧跟刷新按钮，小字淡灰 */
         .prices-updated-note {
