@@ -780,6 +780,7 @@ async function fetchYahooQuotes(symbols) {
       const json = await resp.json();
       const meta = json?.chart?.result?.[0]?.meta;
       if (meta) {
+        const tradingPeriod = meta.currentTradingPeriod?.regular || {};
         results[sym] = {
           price: meta.regularMarketPrice || 0,
           prevClose: meta.chartPreviousClose || meta.previousClose || 0,
@@ -791,6 +792,10 @@ async function fetchYahooQuotes(symbols) {
           regularMarketTime: meta.regularMarketTime || 0,  // unix seconds of last regular price
           exchangeTimezoneName: meta.exchangeTimezoneName || "",  // e.g. "America/New_York", "Asia/Shanghai"
           gmtoffset: meta.gmtoffset || 0,  // seconds
+          // ★ 今日交易时段窗口 (Yahoo 提供，比 regularMarketTime 更可靠地判断"市场是否正在交易")
+          // 用于识别 "市场已开但还没收到 tick" 的过渡状态 (常见于 JP 假期后第一天等)
+          todaySessionStart: tradingPeriod.start || 0,
+          todaySessionEnd: tradingPeriod.end || 0,
         };
       }
     } catch (e) {
