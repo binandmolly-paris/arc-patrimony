@@ -2399,16 +2399,40 @@
         }
     }
 
-    async function updatePrices() {
+    async function updatePrices(opts = {}) {
         if (APP.holdings.length === 0) return;
-
+        const { fresh = false } = opts;
         const symbols = APP.holdings.map(h => h.symbol).join(',');
         try {
-            const data = await apiCall(`/prices?symbols=${symbols}`);
+            const url = `/prices?symbols=${symbols}${fresh ? '&fresh=1' : ''}`;
+            const data = await apiCall(url);
             APP.prices = data;
+            APP._pricesLastUpdated = Date.now();
         } catch (error) {
             console.error('Failed to update prices:', error);
         }
+    }
+
+    // 手动强制刷新：跳过服务器缓存，立即向 Yahoo 拉新数据
+    async function forceRefreshPrices() {
+        const btn = document.getElementById('forceRefreshBtn');
+        if (btn) { btn.disabled = true; btn.textContent = '⏳ 拉取中…'; }
+        try {
+            await updatePrices({ fresh: true });
+            await updateFXRates();
+            renderTab0();
+        } finally {
+            if (btn) { btn.disabled = false; btn.textContent = '🔄 强制刷新'; }
+        }
+    }
+
+    function fmtUpdatedAgo() {
+        const t = APP._pricesLastUpdated;
+        if (!t) return '尚未更新';
+        const sec = Math.max(0, Math.floor((Date.now() - t) / 1000));
+        if (sec < 60) return `${sec} 秒前`;
+        const mn = Math.floor(sec / 60);
+        return `${mn} 分钟前`;
     }
 
     async function updateFXRates() {
@@ -2497,7 +2521,25 @@
                 else if (idx === 1) renderTab1();
                 else if (idx === 4) renderTab4();
             }
+            // 如果弹窗当前是打开的（如"今日浮盈亏个股明细"），也一并刷新内部数据
+            const todayModal = document.getElementById('todayPLModal');
+            if (todayModal && todayModal.classList.contains('show')) {
+                try { renderTodayPL(); } catch(e) {}
+            }
+            const regionModal = document.getElementById('regionDrilldownModal');
+            if (regionModal && regionModal.classList.contains('show')) {
+                try { renderRegionDrilldown && renderRegionDrilldown(); } catch(e) {}
+            }
+            // 顶部"行情更新于"标签自动跟新
+            const lbl = document.getElementById('pricesUpdatedLabel');
+            if (lbl) lbl.textContent = fmtUpdatedAgo();
         }, 30000);
+        // 每 10 秒只更新"X 秒前"标签（不重新拉数据）
+        if (APP._updatedAgoInterval) clearInterval(APP._updatedAgoInterval);
+        APP._updatedAgoInterval = setInterval(() => {
+            const lbl = document.getElementById('pricesUpdatedLabel');
+            if (lbl) lbl.textContent = fmtUpdatedAgo();
+        }, 10000);
 
         // Update FX rates every 10 minutes
         if (APP._fxInterval) clearInterval(APP._fxInterval);
@@ -3270,6 +3312,10 @@
                 </div>
             </div>
             ${renderFXStrip()}
+            <div style="display:flex;justify-content:flex-end;align-items:center;gap:10px;font-size:11px;color:#64748b;margin:4px 2px 8px;">
+                <span title="数据来源 Yahoo Finance；亚洲市场免费档约延迟 15 分钟">🕒 行情更新于 <span id="pricesUpdatedLabel">${fmtUpdatedAgo()}</span></span>
+                <button id="forceRefreshBtn" onclick="forceRefreshPrices()" style="background:rgba(193,166,115,0.10);border:1px solid rgba(193,166,115,0.35);color:#C1A673;padding:3px 10px;border-radius:5px;font-size:11px;cursor:pointer;font-family:inherit;">🔄 强制刷新</button>
+            </div>
             <div class="stat-cards" style="margin-top:12px;">
                 ${Object.entries(regionStats).map(([r, s]) => {
                     // === 区域 P&L: 浮 + 实 + 红 (与顶部 cumulativePL 口径一致) ===
@@ -5310,6 +5356,8 @@
                 price: pd.price, prevClose: pd.prevClose, avg_cost: h.avg_cost || 0,
                 pctToday: dayPct, amtToday: dayDeltaUSD, amtTodayLocal: dayDeltaLocal,
                 pctCum: cumPct, amtCum: cumDeltaUSD, amtCumLocal: cumDeltaLocal,
+                // 该股市场当下是否在交易时段内：用于区分"陈旧但市场已开 = 等成交"和"市场未开 = 待开盘"
+                marketOpenNow: isMarketOpenNow(pd),
             };
             byRegion[r].cumUSD += cumDeltaUSD;
             byRegion[r].cumCostUSD += costBasisUSD;
@@ -5441,21 +5489,33 @@
                 <tbody>
         `;
 
-        const renderTr = (s, isPending) => `
+        const renderTr = (s, isPending) => {
+            // 市场已开但 Yahoo 还没推送今日 tick → 当日列显示"等成交"，避免拿上一交易日的涨跌误导
+            const showStaleAsPlaceholder = isPending && s.marketOpenNow;
+            const todayPctCell = showStaleAsPlaceholder
+                ? `<span style="color:#4ade80;font-size:10px;">🟢 等成交</span>`
+                : `<span class="${cls(s.pctToday)}" style="font-size:12px;font-weight:500;">${sgn(s.pctToday)}${fmtNum(s.pctToday,2)}%</span>`;
+            const todayAmtCell = showStaleAsPlaceholder
+                ? `<span style="color:#475569;font-size:11px;">—</span>`
+                : `<span class="${cls(s.amtToday)}" style="font-size:12px;font-weight:500;">${sgn(s.amtToday)}$${fmtNum(s.amtToday,0)}</span>`;
+            const tagIcon = isPending
+                ? (s.marketOpenNow ? '🟢' : '⏰')
+                : '';
+            return `
             <tr style="border-bottom:1px solid rgba(148,163,184,0.06);${isPending?'opacity:0.5;':''}">
                 <td style="padding:10px 6px;text-align:left;min-width:0;">
                     <div style="font-size:12px;color:${isPending?'#94a3b8':'#e2e8f0'};font-weight:500;line-height:1.2;">
-                        ${s.symbol}${isPending?` <span style="font-size:9px;color:#64748b;">⏰</span>`:''}
+                        ${s.symbol}${tagIcon?` <span style="font-size:9px;color:#64748b;">${tagIcon}</span>`:''}
                     </div>
                     <div style="font-size:10px;color:#64748b;margin-top:2px;line-height:1.2;white-space:nowrap;text-overflow:ellipsis;overflow:hidden;max-width:120px;">${s.name}</div>
                 </td>
                 <td style="padding:10px 6px;text-align:right;font-size:11px;color:#94a3b8;">${fmtNum(s.qty,0)}</td>
-                <td class="${cls(s.pctToday)}" style="padding:10px 6px;text-align:right;font-size:12px;font-weight:500;">${sgn(s.pctToday)}${fmtNum(s.pctToday,2)}%</td>
-                <td class="${cls(s.amtToday)}" style="padding:10px 6px;text-align:right;font-size:12px;font-weight:500;">${sgn(s.amtToday)}$${fmtNum(s.amtToday,0)}</td>
+                <td style="padding:10px 6px;text-align:right;">${todayPctCell}</td>
+                <td style="padding:10px 6px;text-align:right;">${todayAmtCell}</td>
                 <td class="${cls(s.pctCum)}" style="padding:10px 6px;text-align:right;font-size:11px;opacity:0.8;">${sgn(s.pctCum)}${fmtNum(s.pctCum,2)}%</td>
                 <td class="${cls(s.amtCum)}" style="padding:10px 6px;text-align:right;font-size:11px;opacity:0.8;">${sgn(s.amtCum)}$${fmtNum(s.amtCum,0)}</td>
-            </tr>
-        `;
+            </tr>`;
+        };
 
         stocks.forEach(s => { html += renderTr(s, false); });
         if (pendings.length > 0) {
