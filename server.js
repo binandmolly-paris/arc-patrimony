@@ -808,12 +808,14 @@ async function fetchYahooQuotes(symbols) {
 app.get("/api/prices", async (req, res) => {
   const symbols = (req.query.symbols || "").split(",").filter(Boolean);
   if (!symbols.length) return res.json({});
+  // ?fresh=1 → 跳过缓存，强制向 Yahoo 重新拉。前端"强制刷新"按钮使用。
+  const bypassCache = req.query.fresh === '1' || req.query.fresh === 'true';
 
   const results = {};
   const toFetch = [];
 
   symbols.forEach(s => {
-    if (priceCache[s] && Date.now() - priceCache[s].ts < CACHE_TTL) {
+    if (!bypassCache && priceCache[s] && Date.now() - priceCache[s].ts < CACHE_TTL) {
       results[s] = priceCache[s].data;
     } else {
       toFetch.push(s);
