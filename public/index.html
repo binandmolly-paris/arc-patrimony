@@ -909,6 +909,8 @@
             z-index: 4;
             background: #0e1419;                  /* 实色，避免后面列透出来叠在 Name 上 */
             box-shadow: 6px 0 8px -6px rgba(0,0,0,0.65);   /* 右侧投影提示该列被钉住 */
+            padding-left: 12px;                    /* 缩窄左右内边距以多容下 1~2 个中文字 */
+            padding-right: 6px;
         }
         .holdings-table thead .sticky-name-col {
             z-index: 11;                            /* 高于 thead 默认 z-index 10 */
@@ -3643,7 +3645,7 @@
                     <div style="overflow:auto;max-height:70vh;">
                     <table class="holdings-table" style="font-size:13px;table-layout:fixed;width:100%;">
                         <colgroup>
-                            <col style="width:160px;">
+                            <col style="width:88px;">
                             <col style="width:80px;">
                             <col style="width:58px;">
                             <col style="width:52px;">
