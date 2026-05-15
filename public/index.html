@@ -5623,7 +5623,13 @@
     }
 
     // ===== Region drill-down: donut chart + sortable holdings table =====
-    const regionDrilldownState = { region: null, view: 'pie', sortKey: 'value', sortDir: 'desc' };
+    const regionDrilldownState = {
+        region: null, view: 'pie', sortKey: 'value', sortDir: 'desc',
+        date: 'today',          // 'today' 或 YYYY-MM-DD
+        asof: null,             // 历史快照: { date, holdings: [...], fx_rates: {...}, failures: [...] }
+        asofLoading: false,     // 拉取历史快照中
+        asofError: null,        // 拉取失败的错误信息
+    };
 
     function openRegionDrilldown(region) {
         regionDrilldownState.region = region;
@@ -5631,10 +5637,38 @@
         regionDrilldownState.sortKey = 'pctOfTotal';
         regionDrilldownState.sortDir = 'desc';
         regionDrilldownState.date = 'today';
+        regionDrilldownState.asof = null;
+        regionDrilldownState.asofLoading = false;
+        regionDrilldownState.asofError = null;
         regionDrilldownState.openPicker = null;
         _ensureDrilldownOutsideClick();
         renderRegionDrilldown();
         openModal('regionDrilldownModal');
+    }
+
+    // 切换到历史日期：拉后端 /api/portfolio-asof 然后重渲染
+    async function loadAsofData(dateStr) {
+        regionDrilldownState.date = dateStr;
+        regionDrilldownState.asofLoading = true;
+        regionDrilldownState.asofError = null;
+        regionDrilldownState.asof = null;
+        renderRegionDrilldown();
+        try {
+            const data = await apiCall(`/portfolio-asof?date=${encodeURIComponent(dateStr)}`);
+            regionDrilldownState.asof = data;
+        } catch(e) {
+            regionDrilldownState.asofError = e.message || '加载失败';
+        } finally {
+            regionDrilldownState.asofLoading = false;
+            renderRegionDrilldown();
+        }
+    }
+    function resetAsofToToday() {
+        regionDrilldownState.date = 'today';
+        regionDrilldownState.asof = null;
+        regionDrilldownState.asofError = null;
+        regionDrilldownState.asofLoading = false;
+        renderRegionDrilldown();
     }
 
     // close any open picker when user clicks outside the pill / dropdown
@@ -5690,18 +5724,28 @@
         const today = new Date();
         const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
         const open = regionDrilldownState.openPicker;
+        const isToday = regionDrilldownState.date === 'today';
+        const dateLabel = isToday ? `今日 ${todayStr}` : regionDrilldownState.date;
+        const inputVal = isToday ? todayStr : regionDrilldownState.date;
 
         const dateDropdown = open === 'date' ? `
-            <div class="apple-dropdown" onclick="event.stopPropagation()">
-                <div class="apple-dropdown-item selected" onclick="setRegionDrilldownDate('today')">
+            <div class="apple-dropdown" onclick="event.stopPropagation()" style="min-width:220px;">
+                <div class="apple-dropdown-item ${isToday?'selected':''}" onclick="resetAsofToToday();regionDrilldownState.openPicker=null;renderRegionDrilldown()">
                     <span>📅</span>
                     <span>今日 ${todayStr}</span>
-                    <span class="check">✓</span>
+                    ${isToday?'<span class="check">✓</span>':''}
                 </div>
                 <div style="height:1px;background:rgba(255,255,255,0.06);margin:4px 6px;"></div>
-                <div class="apple-dropdown-item disabled" title="历史日期数据需启用每日个股快照（后续开发）">
-                    <span>🗓</span>
-                    <span>历史日期 · 即将推出</span>
+                <div style="padding:8px 10px;">
+                    <div style="font-size:11px;color:#94a3b8;margin-bottom:6px;">🗓 选择历史日期</div>
+                    <input type="date" id="asofDateInput" value="${inputVal}" min="2024-01-01" max="${todayStr}"
+                           onclick="event.stopPropagation()"
+                           onchange="regionDrilldownState.openPicker=null;loadAsofData(this.value)"
+                           style="background:rgba(15,23,42,0.6);border:1px solid rgba(193,166,115,0.25);color:#e2e8f0;border-radius:6px;padding:6px 8px;font-size:12px;font-family:Montserrat,sans-serif;width:100%;outline:none;color-scheme:dark;">
+                    <div style="font-size:10px;color:#64748b;margin-top:5px;line-height:1.4;">
+                        历史价 = 该日收盘价（Yahoo 缓存）<br>
+                        非交易日自动用最近交易日
+                    </div>
                 </div>
             </div>` : '';
 
@@ -5717,23 +5761,38 @@
         const regionDropdown = open === 'region' ? `
             <div class="apple-dropdown" onclick="event.stopPropagation()">${regionItems}</div>` : '';
 
+        // 历史日期模式下的状态提示
+        const asofStatus = !isToday ? (() => {
+            if (regionDrilldownState.asofLoading) return `<span style="font-size:10px;color:#94a3b8;">⏳ 加载历史数据…</span>`;
+            if (regionDrilldownState.asofError)   return `<span style="font-size:10px;color:#f87171;">❌ ${regionDrilldownState.asofError}</span>`;
+            if (regionDrilldownState.asof) {
+                const fails = regionDrilldownState.asof.failures || [];
+                if (fails.length > 0) return `<span style="font-size:10px;color:#fbbf24;" title="${fails.map(f=>f.symbol).join(', ')}">⚠️ ${fails.length} 只股价缺失，用成本价代替</span>`;
+                return `<span style="font-size:10px;color:#4ade80;">✓ ${regionDrilldownState.asof.date} 历史快照</span>`;
+            }
+            return '';
+        })() : '';
+
         return `
-            <div style="display:flex;justify-content:flex-end;gap:10px;margin-bottom:14px;">
-                <div style="position:relative;">
-                    <div class="apple-pill ${open==='date'?'active':''}" onclick="event.stopPropagation();_togglePicker('date')">
-                        <span style="font-size:13px;">📅</span>
-                        <span style="font-family:'Montserrat',sans-serif;">${todayStr}</span>
-                        <span class="chevron">▾</span>
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;">
+                <div>${asofStatus}</div>
+                <div style="display:flex;gap:10px;">
+                    <div style="position:relative;">
+                        <div class="apple-pill ${open==='date'?'active':''}" onclick="event.stopPropagation();_togglePicker('date')">
+                            <span style="font-size:13px;">📅</span>
+                            <span style="font-family:'Montserrat',sans-serif;">${dateLabel}</span>
+                            <span class="chevron">▾</span>
+                        </div>
+                        ${dateDropdown}
                     </div>
-                    ${dateDropdown}
-                </div>
-                <div style="position:relative;">
-                    <div class="apple-pill ${open==='region'?'active':''}" onclick="event.stopPropagation();_togglePicker('region')">
-                        <span style="font-size:13px;">${_regionFlag(currentRegion)}</span>
-                        <span>${currentRegion}</span>
-                        <span class="chevron">▾</span>
+                    <div style="position:relative;">
+                        <div class="apple-pill ${open==='region'?'active':''}" onclick="event.stopPropagation();_togglePicker('region')">
+                            <span style="font-size:13px;">${_regionFlag(currentRegion)}</span>
+                            <span>${currentRegion}</span>
+                            <span class="chevron">▾</span>
+                        </div>
+                        ${regionDropdown}
                     </div>
-                    ${regionDropdown}
                 </div>
             </div>
         `;
@@ -5747,16 +5806,49 @@
         // FX-convert each holding from its native currency → region's display currency.
         // E.g. PDD trades in USD but is region=中国 (CNY display): convert USD → CNY.
         const regionCur = getRegionCurrency(region);
-        const regionRateUSD = APP.FX_RATES[regionCur] || 1;  // USD per 1 unit of regionCur
+
+        // 历史模式（已加载到 asof 数据） vs 今日实时模式
+        const isAsof = regionDrilldownState.date !== 'today' && regionDrilldownState.asof;
+        if (isAsof) {
+            const snap = regionDrilldownState.asof;
+            const fx = snap.fx_rates || APP.FX_RATES;
+            const regionRateUSD = fx[regionCur] || 1;
+            return (snap.holdings || [])
+                .filter(h => h.qty > 0 && (h.region || '其他') === region)
+                .map(h => {
+                    const nativePrice = h.price || h.avg_cost;
+                    const stockRateUSD = fx[h.currency] || 1;
+                    const conv = stockRateUSD / regionRateUSD;
+                    const price = nativePrice * conv;
+                    const avgCost = h.avg_cost * conv;
+                    const value = h.qty * price;
+                    const cost = h.qty * avgCost;
+                    const pl = value - cost;
+                    const plPct = cost > 0 ? (pl / cost * 100) : 0;
+                    return {
+                        symbol: h.symbol, name: h.name || h.symbol,
+                        nativeCurrency: h.currency,
+                        price, qty: h.qty,
+                        value, avgCost, cost, pl, plPct,
+                        hasLivePrice: h.price_source !== 'fallback_avgcost',
+                        isConverted: h.currency !== regionCur,
+                        priceSource: h.price_source,
+                    };
+                })
+                .sort((a, b) => b.value - a.value);
+        }
+
+        // 今日实时模式
+        const regionRateUSD = APP.FX_RATES[regionCur] || 1;
         return (APP.holdings || [])
             .filter(h => h.qty > 0 && (h.region || '其他') === region)
             .map(h => {
                 const pd = APP.prices[h.symbol] || {};
                 const nativePrice = pd.price || h.avg_cost;
-                const stockRateUSD = APP.FX_RATES[h.currency] || 1;  // USD per 1 unit of stock's currency
-                const fx = stockRateUSD / regionRateUSD;  // multiplier to convert stockCcy → regionCcy
-                const price = nativePrice * fx;
-                const avgCost = h.avg_cost * fx;
+                const stockRateUSD = APP.FX_RATES[h.currency] || 1;
+                const conv = stockRateUSD / regionRateUSD;
+                const price = nativePrice * conv;
+                const avgCost = h.avg_cost * conv;
                 const value = h.qty * price;
                 const cost = h.qty * avgCost;
                 const pl = value - cost;
@@ -5767,7 +5859,7 @@
                     price, qty: h.qty,
                     value, avgCost, cost, pl, plPct,
                     hasLivePrice: !!pd.price,
-                    isConverted: h.currency !== regionCur,  // marker for tooltip
+                    isConverted: h.currency !== regionCur,
                 };
             })
             .sort((a, b) => b.value - a.value);
