@@ -2312,6 +2312,143 @@ app.post("/api/anchor/backfill", auth, async (req, res) => {
   }
 });
 
+// ============ Portfolio As-Of (Historical Snapshot) ============
+// 给定一个历史日期，重建那天的持仓 + 那天的收盘价 → 用于"资产占比"模态框选择历史日期
+
+// 回放交易记录算出某日的 qty 和 avg_cost（每个 symbol 一行）
+async function getHoldingsAsOf(userId, dateStr) {
+  // 取该用户所有交易（在该日及之前），按时间顺序回放
+  const tRes = await pool.query(
+    `SELECT t.symbol, t.type, t.qty, t.price, t.date,
+            h.name, h.region, h.currency, h.attribute, h.sector
+       FROM trades t
+       LEFT JOIN holdings h ON h.user_id = t.user_id AND h.symbol = t.symbol
+      WHERE t.user_id = $1 AND t.date <= $2
+      ORDER BY t.date ASC, t.created_at ASC`,
+    [userId, dateStr]
+  );
+
+  const acc = {}; // { symbol: { qty, totalCost, name, region, currency, attribute, sector } }
+  for (const t of tRes.rows) {
+    const sym = t.symbol;
+    if (!acc[sym]) acc[sym] = {
+      symbol: sym, qty: 0, totalCost: 0,
+      name: t.name || sym, region: t.region || '',
+      currency: t.currency || 'USD',
+      attribute: t.attribute || '', sector: t.sector || '',
+    };
+    const a = acc[sym];
+    const isBuy = t.type === '买入' || t.type === 'BUY';
+    const isDiv = t.type === '分红' || t.type === 'DIVIDEND';
+    if (isBuy) {
+      a.qty += +t.qty;
+      a.totalCost += +t.qty * +t.price;
+    } else if (!isDiv) {
+      // 卖出：减仓位但 avg_cost 不变（基于剩余持仓的单位成本）
+      const remainingRatio = a.qty > 0 ? Math.max(0, (a.qty - +t.qty)) / a.qty : 0;
+      a.totalCost = a.totalCost * remainingRatio;
+      a.qty = Math.max(0, a.qty - +t.qty);
+    }
+  }
+  return Object.values(acc).map(a => ({
+    ...a,
+    avg_cost: a.qty > 0 ? a.totalCost / a.qty : 0,
+  }));
+}
+
+// 取一只股票在某日的收盘价（命中缓存优先，否则向 Yahoo 拉一段时间窗口并缓存）
+async function getCachedHistoricalPrice(symbol, dateStr) {
+  // 1) 命中缓存
+  const cached = await pool.query(
+    `SELECT close_price, currency, market_tz FROM anchor_prices
+      WHERE symbol = $1 AND anchor_date = $2 LIMIT 1`,
+    [symbol, dateStr]
+  );
+  if (cached.rows.length > 0) {
+    return { ...cached.rows[0], source: 'cache' };
+  }
+  // 2) 拉 Yahoo：覆盖 dateStr 前后各 10 天，落到的所有交易日全部入库
+  const targetUnix = Math.floor(new Date(`${dateStr}T12:00:00Z`).getTime() / 1000);
+  const startUnix = targetUnix - 10 * 86400;
+  const endUnix   = targetUnix + 10 * 86400;
+  const { meta, timestamps, closes } = await fetchYahooHistorical(symbol, startUnix, endUnix);
+  const tz = meta.exchangeTimezoneName || 'America/New_York';
+  const cur = meta.currency || 'USD';
+
+  // 一次性写入所有拿到的交易日（多日缓存命中率提升）
+  for (let i = 0; i < timestamps.length; i++) {
+    if (closes[i] == null) continue;
+    const d = dateInTZ(timestamps[i], tz);
+    await pool.query(
+      `INSERT INTO anchor_prices (symbol, anchor_date, close_price, currency, market_tz, source, fetched_at)
+       VALUES ($1, $2, $3, $4, $5, 'Yahoo', NOW())
+       ON CONFLICT (symbol, anchor_date) DO NOTHING`,
+      [symbol, d, closes[i], cur, tz]
+    );
+  }
+  // 3) 找 dateStr 本身或最近一个早于 dateStr 的交易日
+  let bestIdx = -1, bestDate = '';
+  for (let i = 0; i < timestamps.length; i++) {
+    if (closes[i] == null) continue;
+    const d = dateInTZ(timestamps[i], tz);
+    if (d <= dateStr && d > bestDate) { bestDate = d; bestIdx = i; }
+  }
+  if (bestIdx < 0) return null;
+  return { close_price: closes[bestIdx], currency: cur, market_tz: tz, source: 'yahoo', actual_date: bestDate };
+}
+
+// 取某日的 FX rates（优先从 daily_snapshot 拿，没有就用当前内存里的）
+async function getFxRatesAsOf(userId, dateStr) {
+  const r = await pool.query(
+    `SELECT fx_rates FROM daily_snapshot WHERE user_id = $1 AND date = $2 LIMIT 1`,
+    [userId, dateStr]
+  );
+  if (r.rows.length > 0 && r.rows[0].fx_rates) return r.rows[0].fx_rates;
+  return fxRates; // 退到当前实时
+}
+
+// GET /api/portfolio-asof?date=YYYY-MM-DD — 重建某日组合
+app.get("/api/portfolio-asof", auth, async (req, res) => {
+  try {
+    const date = String(req.query.date || '').slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return res.status(400).json({ error: "date must be YYYY-MM-DD" });
+    }
+    // 上限：今天；下限：放宽到 2024-01-01（再往前 Yahoo 数据不一定有）
+    const today = new Date().toISOString().slice(0, 10);
+    if (date > today) return res.status(400).json({ error: "date cannot be in the future" });
+    if (date < '2024-01-01') return res.status(400).json({ error: "date too far in the past (>2024-01-01)" });
+
+    const holdings = await getHoldingsAsOf(req.userId, date);
+    const active = holdings.filter(h => h.qty > 0);
+    const fx_rates = await getFxRatesAsOf(req.userId, date);
+
+    // 并发拉历史价（每只 200ms 间隔，避免 Yahoo 限流）
+    const results = [];
+    const failures = [];
+    for (const h of active) {
+      try {
+        const p = await getCachedHistoricalPrice(h.symbol, date);
+        if (p && p.close_price > 0) {
+          results.push({ ...h, price: p.close_price, price_currency: p.currency, price_source: p.source, price_actual_date: p.actual_date || date });
+        } else {
+          failures.push({ symbol: h.symbol, reason: 'no_close' });
+          results.push({ ...h, price: h.avg_cost, price_source: 'fallback_avgcost' });
+        }
+      } catch (e) {
+        failures.push({ symbol: h.symbol, reason: e.message });
+        results.push({ ...h, price: h.avg_cost, price_source: 'fallback_avgcost' });
+      }
+      await new Promise(r => setTimeout(r, 150));
+    }
+
+    res.json({ date, holdings: results, fx_rates, failures });
+  } catch (e) {
+    console.error("/api/portfolio-asof error:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // GET /api/anchor-prices?year=2025 — 拉取指定年份所有锚定价
 app.get("/api/anchor-prices", auth, async (req, res) => {
   try {
