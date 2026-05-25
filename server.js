@@ -2602,6 +2602,40 @@ app.post("/api/cron/snapshot", async (req, res) => {
   }
 });
 
+// ===== Read-only holdings export (凯旋门大师论道分析用) =====
+// Auth: header "x-cron-token" 或 query "?token=" 必须等于 CRON_SECRET。
+// 只读、不可写;给 Claude 大师论道自动拉当前持仓用。token 可随时在 Render 改。
+app.get("/api/cron/holdings", async (req, res) => {
+  const token = req.headers["x-cron-token"] || req.query.token;
+  if (!process.env.CRON_SECRET) {
+    return res.status(500).json({ error: "CRON_SECRET not configured on server" });
+  }
+  if (!token || token !== process.env.CRON_SECRET) {
+    return res.status(401).json({ error: "Invalid token" });
+  }
+  try {
+    // 单用户 App(LiuBin)——取主用户
+    const u = await pool.query("SELECT id FROM users ORDER BY id LIMIT 1");
+    if (u.rows.length === 0) return res.json({ generated_at: new Date().toISOString(), holdings_active: [], holdings_sold: [] });
+    const userId = u.rows[0].id;
+    const r = await pool.query(
+      "SELECT symbol,name,qty,avg_cost,currency,market,region,attribute,sector,target_weight FROM holdings WHERE user_id=$1 ORDER BY id",
+      [userId]
+    );
+    const rows = r.rows.map(h => ({ ...h, is_sold: !(h.qty > 0) }));
+    res.json({
+      generated_at: new Date().toISOString(),
+      user_id: userId,
+      count_active: rows.filter(h => !h.is_sold).length,
+      holdings_active: rows.filter(h => !h.is_sold),
+      holdings_sold: rows.filter(h => h.is_sold).map(h => h.symbol)
+    });
+  } catch (e) {
+    console.error("Holdings export error:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ===== Snapshot history endpoint (for future YTD chart UI) =====
 app.get("/api/snapshots", auth, async (req, res) => {
   try {
