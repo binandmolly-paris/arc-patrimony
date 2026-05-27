@@ -2933,7 +2933,13 @@
                         </div>
 
                         <!-- Calculated total preview -->
-                        <div id="tradeTotalPreview" style="display:none;margin:6px 0 14px;padding:10px 14px;background:rgba(15,23,42,0.6);border:1px dashed rgba(193,166,115,0.2);border-radius:8px;font-size:12px;color:#94a3b8;"></div>
+                        <div id="tradeTotalPreview" style="display:none;margin:6px 0 10px;padding:10px 14px;background:rgba(15,23,42,0.6);border:1px dashed rgba(193,166,115,0.2);border-radius:8px;font-size:12px;color:#94a3b8;"></div>
+
+                        <!-- 现金联动：默认开，记一笔交易自动加减对应币种现金 -->
+                        <label id="tradeSyncCashRow" style="display:flex;align-items:center;gap:8px;margin:0 0 14px;cursor:pointer;font-size:12px;color:#94a3b8;user-select:none;">
+                            <input type="checkbox" id="tradeSyncCash" checked style="width:15px;height:15px;accent-color:#C1A673;cursor:pointer;">
+                            <span>同步现金 <span id="tradeSyncCashHint" style="color:#64748b;"></span></span>
+                        </label>
 
                         <!-- Buy-only: full metadata -->
                         <div data-show-for="买入" id="tradeBuyExtraFields">
@@ -4297,8 +4303,9 @@
         if (!confirm(msg)) return;
         try {
             await apiCall(`/trade/${tradeId}`, 'DELETE');
-            await Promise.all([loadHoldings(), loadTrades()]);
+            await Promise.all([loadHoldings(), loadTrades(), loadCash()]);
             await updatePrices();
+            updateCashTabBtn();
             renderTab0();
             renderTab2();
             renderTab4();
@@ -6458,6 +6465,18 @@
         } else {
             preview.style.display = 'none';
         }
+        // 现金联动提示
+        const syncHint = document.getElementById('tradeSyncCashHint');
+        if (syncHint) {
+            if (qty > 0 && price > 0) {
+                const gross = qty * price;
+                const net = action === '买入' ? gross + fee : gross - fee;
+                const dir = action === '买入' ? '扣减' : '增加';
+                syncHint.textContent = `（${dir} ${cur} ${sym}${fmtNum(net)}）`;
+            } else {
+                syncHint.textContent = `（自动加减 ${cur} 现金）`;
+            }
+        }
     }
 
     // Step 1: user clicked an action card
@@ -6668,14 +6687,17 @@
             }
         }
 
+        const syncCash = document.getElementById('tradeSyncCash')?.checked !== false;
+
         try {
             await apiCall('/trade', 'POST', {
-                symbol, name, type, qty, price, fee, date, currency, market, region, attribute, sector
+                symbol, name, type, qty, price, fee, date, currency, market, region, attribute, sector, syncCash
             });
 
             // Reload data and re-render
-            await Promise.all([loadHoldings(), loadTrades(), updateFXRates()]);
+            await Promise.all([loadHoldings(), loadTrades(), loadCash(), updateFXRates()]);
             await updatePrices();
+            updateCashTabBtn();
 
             closeModal('tradeModal');
 
