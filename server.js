@@ -1713,8 +1713,25 @@ async function fetchJQuantsFundamentals(symbol) {
     if (stmts.data && stmts.data.length > 0) {
       // 按披露日期降序
       const sorted = stmts.data.sort((a, b) => (b.DiscDate || '').localeCompare(a.DiscDate || ''));
-      const latest = sorted[0];
+      // ⭐ Bug fix(2026-05-27):快照取最新【年报 FY】,不取 sorted[0]
+      //（最新披露可能是季报/累计数,会把部分年数据当全年 → PE/利润率算错;无 FY 才退回 sorted[0]）
+      const fyRecords = sorted.filter(r => r.CurPerType === 'FY');
+      const latest = fyRecords[0] || sorted[0];
       result.raw_json.statements_latest = latest;
+
+      // ⭐ 5年历史(2026-05-27):把 J-Quants 全部 FY 年报序列带出去,存进 fundamentals 历史表
+      //（之前只存最新一期,白白浪费 J-Quants 给的多年深度;历史表早建好只是没喂数据）
+      result.fy_history = fyRecords.map(r => ({
+        period_end: r.CurFYEn || r.CurPerEn || null,
+        period_type: 'FY',
+        currency: 'JPY',
+        revenue: parseFloat(r.Sales) || null,
+        operating_income: parseFloat(r.OP) || null,
+        net_income: parseFloat(r.NP) || null,
+        eps: parseFloat(r.EPS) || null,
+        total_assets: parseFloat(r.TA) || null,
+        total_equity: parseFloat(r.Eq) || null,
+      })).filter(x => x.period_end);
 
       // V2 财务字段映射（短字段名）
       result.eps = parseFloat(latest.EPS) || null;
@@ -2081,6 +2098,38 @@ async function saveFundamentalsToDB(d) {
     JSON.stringify(d.discrepancies || {}),
     d.source, JSON.stringify(d.raw_json || {})
   ]);
+
+  // ⭐ 5年历史(2026-05-27):J-Quants 返回的 FY 年报序列存进 fundamentals 历史表
+  //（仅 J-Quants 设 fy_history;其他源不设此字段 → 不受影响。每行 try/catch 隔离,失败不影响主存储）
+  if (Array.isArray(d.fy_history) && d.fy_history.length) {
+    for (const fy of d.fy_history) {
+      try {
+        await pool.query(`
+          INSERT INTO fundamentals (
+            symbol, period_end, period_type, currency,
+            revenue, operating_income, net_income, eps,
+            total_assets, total_equity, source, fetched_at
+          ) VALUES ($1,$2,'FY',$3,$4,$5,$6,$7,$8,$9,$10,NOW())
+          ON CONFLICT (symbol, period_end, period_type) DO UPDATE SET
+            currency         = EXCLUDED.currency,
+            revenue          = COALESCE(EXCLUDED.revenue,          fundamentals.revenue),
+            operating_income = COALESCE(EXCLUDED.operating_income, fundamentals.operating_income),
+            net_income       = COALESCE(EXCLUDED.net_income,       fundamentals.net_income),
+            eps              = COALESCE(EXCLUDED.eps,              fundamentals.eps),
+            total_assets     = COALESCE(EXCLUDED.total_assets,     fundamentals.total_assets),
+            total_equity     = COALESCE(EXCLUDED.total_equity,     fundamentals.total_equity),
+            source           = EXCLUDED.source,
+            fetched_at       = NOW()
+        `, [
+          d.symbol, fy.period_end, fy.currency || d.currency,
+          fy.revenue, fy.operating_income, fy.net_income, fy.eps,
+          fy.total_assets, fy.total_equity, d.source || 'jquants'
+        ]);
+      } catch (e) {
+        console.warn(`[fund-history] ${d.symbol} ${fy.period_end}: ${e.message}`);
+      }
+    }
+  }
 }
 
 // Phase 2.3 调试 endpoint：单独测试 Yahoo / FMP 单源（公开访问，仅供诊断用）
