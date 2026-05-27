@@ -238,6 +238,14 @@ async function initDB() {
     );
   `);
 
+  // 交易↔现金联动：记录每笔交易自动调整了哪笔现金、调了多少（删除时按此退回）
+  await pool.query(`
+    ALTER TABLE trades
+      ADD COLUMN IF NOT EXISTS cash_ccy TEXT,
+      ADD COLUMN IF NOT EXISTS cash_region TEXT,
+      ADD COLUMN IF NOT EXISTS cash_delta NUMERIC(20,2)
+  `);
+
   console.log("✅ 数据库表已就绪（Phase 2.3：含双源交叉检查字段）");
 }
 
@@ -591,15 +599,64 @@ app.get("/api/trades", auth, async (req, res) => {
   }
 });
 
+// 交易→现金：按币种调整一笔现金（买入扣、卖出/分红加）。返回实际命中的 {currency, region}。
+// 匹配优先级：同币种+同地区 → 同币种任意(最早一笔) → 都没有则新建一笔。
+async function adjustCashForTrade(userId, currency, region, delta) {
+  if (!currency || !delta) return null;
+  let row = null;
+  const exact = await pool.query(
+    "SELECT id, region FROM cash_positions WHERE user_id=$1 AND currency=$2 AND region IS NOT DISTINCT FROM $3 LIMIT 1",
+    [userId, currency, region || null]
+  );
+  if (exact.rows.length) row = exact.rows[0];
+  if (!row) {
+    const any = await pool.query(
+      "SELECT id, region FROM cash_positions WHERE user_id=$1 AND currency=$2 ORDER BY id LIMIT 1",
+      [userId, currency]
+    );
+    if (any.rows.length) row = any.rows[0];
+  }
+  if (row) {
+    await pool.query("UPDATE cash_positions SET amount = amount + $1, updated_at=NOW() WHERE id=$2", [delta, row.id]);
+    return { currency, region: row.region };
+  }
+  // 没有该币种现金 → 新建一笔（金额可为负，提醒用户去登记真实现金）
+  await pool.query(
+    "INSERT INTO cash_positions (user_id, currency, region, amount, note, updated_at) VALUES ($1,$2,$3,$4,$5,NOW())",
+    [userId, currency, region || null, delta, '交易自动建立']
+  );
+  return { currency, region: region || null };
+}
+
 app.post("/api/trade", auth, async (req, res) => {
   try {
-    const { symbol, name, type, qty, price, fee, date, currency, market, region, attribute, sector } = req.body;
+    const { symbol, name, type, qty, price, fee, date, currency, market, region, attribute, sector, syncCash } = req.body;
     if (!symbol || !qty || !price || !type || !date) return res.status(400).json({ error: "请填写完整信息" });
 
-    await pool.query(
-      "INSERT INTO trades (user_id,symbol,name,type,qty,price,fee,date) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
+    const ins = await pool.query(
+      "INSERT INTO trades (user_id,symbol,name,type,qty,price,fee,date) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id",
       [req.userId, symbol, name || "", type, qty, price, fee || 0, date]
     );
+    const tradeId = ins.rows[0].id;
+
+    // 现金联动（默认开；前端可关）。买入扣 qty*price+fee；卖出/分红加 qty*price-fee。
+    if (syncCash && currency) {
+      const f = parseFloat(fee) || 0;
+      const gross = qty * price;
+      let delta = 0;
+      if (type === "买入" || type === "BUY") delta = -(gross + f);
+      else if (type === "卖出" || type === "SELL") delta = (gross - f);
+      else if (type === "分红" || type === "DIVIDEND") delta = (gross - f);
+      if (delta !== 0) {
+        const hit = await adjustCashForTrade(req.userId, currency, region || null, delta);
+        if (hit) {
+          await pool.query(
+            "UPDATE trades SET cash_ccy=$1, cash_region=$2, cash_delta=$3 WHERE id=$4",
+            [hit.currency, hit.region, delta, tradeId]
+          );
+        }
+      }
+    }
 
     // 更新持仓
     const hResult = await pool.query("SELECT * FROM holdings WHERE user_id=$1 AND symbol=$2", [req.userId, symbol]);
@@ -672,11 +729,17 @@ app.delete("/api/trade/:id", auth, async (req, res) => {
 
     // Look up the trade first (must belong to this user)
     const lookup = await pool.query(
-      "SELECT symbol FROM trades WHERE id=$1 AND user_id=$2",
+      "SELECT symbol, cash_ccy, cash_region, cash_delta FROM trades WHERE id=$1 AND user_id=$2",
       [tradeId, req.userId]
     );
     if (lookup.rows.length === 0) return res.status(404).json({ error: "Trade not found" });
     const symbol = lookup.rows[0].symbol;
+
+    // 现金联动：若该笔交易曾自动调整过现金，删除时反向退回
+    const cd = lookup.rows[0];
+    if (cd.cash_ccy && cd.cash_delta != null && parseFloat(cd.cash_delta) !== 0) {
+      await adjustCashForTrade(req.userId, cd.cash_ccy, cd.cash_region, -parseFloat(cd.cash_delta));
+    }
 
     // Delete the trade
     await pool.query("DELETE FROM trades WHERE id=$1 AND user_id=$2", [tradeId, req.userId]);
