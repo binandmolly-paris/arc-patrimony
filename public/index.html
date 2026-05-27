@@ -2832,7 +2832,7 @@
                     <div class="tab active" onclick="switchTab(0)">Portfolio <span class="tab-badge" id="holdingsBadge"></span></div>
                     <div class="tab" onclick="switchTab(1)">Market</div>
                     <div class="tab" onclick="switchTab(2)">Trades</div>
-                    <div class="tab-cash" id="cashTabBtn" onclick="openCashModal()" title="现金水位 · 点击管理">💵 现金</div>
+                    <div class="tab-cash" id="cashTabBtn" onclick="openCashModal()" title="现金水位 · 点击管理">💵 Cash</div>
                     <div class="tab" onclick="switchTab(3)">Alerts</div>
                     <div class="tab" onclick="switchTab(4)">Analysis</div>
                     <div class="tab" onclick="switchTab(5)">Allocation</div>
@@ -5113,10 +5113,10 @@
         const below = hasCash && cashPct < redLine;
         btn.classList.toggle('below', below);
         if (!hasCash) {
-            btn.innerHTML = '💵 现金 +';
+            btn.innerHTML = '💵 Cash +';
             btn.title = '未登记现金 · 点击添加';
         } else {
-            btn.innerHTML = `💵 现金 ${cashPct.toFixed(1)}%${below ? ' ⚠️' : ''}`;
+            btn.innerHTML = `💵 Cash ${cashPct.toFixed(1)}%${below ? ' ⚠️' : ''}`;
             btn.title = `现金 $${fmtNum(cashUSD,0)} · 占总资产 ${cashPct.toFixed(1)}%（红线 ${redLine}%）· 点击管理`;
         }
     }
