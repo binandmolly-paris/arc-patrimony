@@ -581,6 +581,31 @@
             from { transform: rotate(0deg); }
             to   { transform: rotate(360deg); }
         }
+        /* 现金水位键：紧跟 Trades，显示现金占比，点击进管理弹窗（不带 .tab 类，不参与 tab 索引）*/
+        .tab-cash {
+            padding: 10px 16px;
+            cursor: pointer;
+            border: 1px solid var(--gold-border);
+            border-radius: 12px;
+            color: var(--gold);
+            font-size: 13px;
+            font-weight: 500;
+            white-space: nowrap;
+            background: rgba(20, 25, 32, 0.4);
+            transition: all 0.3s ease;
+            font-variant-numeric: tabular-nums;
+        }
+        .tab-cash:hover {
+            color: var(--gold-light);
+            background: rgba(193,166,115,0.08);
+            border-color: var(--gold-border-hover);
+        }
+        .tab-cash.below {
+            color: #f87171;
+            border-color: rgba(248,113,113,0.4);
+            background: rgba(248,113,113,0.06);
+        }
+
         /* 行情时间戳备注：紧跟刷新按钮，小字淡灰 */
         .prices-updated-note {
             display: inline-flex;
@@ -968,6 +993,17 @@
         .dd-table thead th:nth-child(2) {           /* 左上角：同时锁行列，层级最高 */
             z-index: 5;
             background: #0f1622;
+        }
+        .dd-name {                                  /* 名称：超长截断省略号，完整名在 title */
+            display: inline-block;
+            max-width: 220px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            vertical-align: middle;
+        }
+        @media (max-width: 768px) {
+            .dd-name { max-width: 4.2em; }          /* 手机：约 4 个汉字宽 */
         }
 
         .region-badge {
@@ -1844,7 +1880,7 @@
                 gap: 6px;
                 -webkit-overflow-scrolling: touch;
             }
-            .tab {
+            .tab, .tab-cash {
                 padding: 7px 12px;
                 font-size: 12px;
                 border-radius: 10px;
@@ -1912,7 +1948,7 @@
             .btn-logout { font-size: 10px; padding: 4px 8px; }
 
             .tabs { padding: 6px 8px; gap: 4px; }
-            .tab { padding: 6px 9px; font-size: 11px; border-radius: 8px; }
+            .tab, .tab-cash { padding: 6px 9px; font-size: 11px; border-radius: 8px; }
             .tab-content { padding: 10px; }
 
             .stat-card { padding: 12px 14px; border-radius: 10px; }
@@ -2656,11 +2692,13 @@
                 }
             });
         } catch(e) {}
+        updateCashTabBtn();
 
         // Update prices every 30 seconds
         if (APP.priceUpdateInterval) clearInterval(APP.priceUpdateInterval);
         APP.priceUpdateInterval = setInterval(async () => {
             await updatePrices();
+            updateCashTabBtn();
             // Re-render current active tab with latest prices
             const activeIdx = document.querySelector('.tab.active');
             if (activeIdx) {
@@ -2781,7 +2819,7 @@
                         </svg>
                         <div>
                             <div class="app-title">ARC PATRIMONY</div>
-                            <div class="app-flag">Family Office · Value Beyond Generations</div>
+                            <div class="app-flag">Family Office</div>
                         </div>
                     </div>
                     <div class="header-user">
@@ -2794,6 +2832,7 @@
                     <div class="tab active" onclick="switchTab(0)">Portfolio <span class="tab-badge" id="holdingsBadge"></span></div>
                     <div class="tab" onclick="switchTab(1)">Market</div>
                     <div class="tab" onclick="switchTab(2)">Trades</div>
+                    <div class="tab-cash" id="cashTabBtn" onclick="openCashModal()" title="现金水位 · 点击管理">💵 现金</div>
                     <div class="tab" onclick="switchTab(3)">Alerts</div>
                     <div class="tab" onclick="switchTab(4)">Analysis</div>
                     <div class="tab" onclick="switchTab(5)">Allocation</div>
@@ -3526,7 +3565,6 @@
                 </div>
             </div>
             ${renderFXStrip()}
-            ${renderCashBar(totalValue)}
             <div class="stat-cards" style="margin-top:12px;">
                 ${Object.entries(regionStats).map(([r, s]) => {
                     // === 区域 P&L: 浮 + 实 + 红 (与顶部 cumulativePL 口径一致) ===
@@ -3932,6 +3970,7 @@
         }
 
         container.innerHTML = html;
+        updateCashTabBtn();
 
         // Render region orbital ring + holdings heatmap
         if (activeHoldings.length > 0) {
@@ -5051,34 +5090,28 @@
     // ===== 现金水位 =====
     function _escCash(s){ return String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
-    function renderCashBar(holdingsValueUSD) {
+    // 更新顶部「💵 现金」键：显示现金占总资产 %，低于红线变红
+    function updateCashTabBtn() {
+        const btn = document.getElementById('cashTabBtn');
+        if (!btn) return;
         const cashUSD = APP.cash.total_usd || 0;
         const redLine = APP.cash.red_line_pct || 20;
-        const totalAssets = (holdingsValueUSD || 0) + cashUSD;
-        const cashPct = totalAssets > 0 ? (cashUSD / totalAssets * 100) : 0;
+        const holdingsUSD = APP.holdings.filter(h => h.qty > 0).reduce((s, h) => {
+            const p = APP.prices[h.symbol]?.price || h.avg_cost;
+            return s + (h.qty * p * (APP.FX_RATES[h.currency] || 1));
+        }, 0);
+        const totalAssets = holdingsUSD + cashUSD;
         const hasCash = (APP.cash.positions || []).length > 0;
+        const cashPct = totalAssets > 0 ? (cashUSD / totalAssets * 100) : 0;
         const below = hasCash && cashPct < redLine;
-        const accent = below ? '#f87171' : '#C1A673';
-        const fillPct = Math.min(100, cashPct);
-        return `<div onclick="openCashModal()" title="点击管理现金" style="margin:8px 0;cursor:pointer;background:rgba(20,25,32,0.6);border:1px solid ${below?'rgba(248,113,113,0.35)':'var(--gold-border)'};border-radius:10px;padding:10px 14px;transition:border-color 0.18s ease;">
-            <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
-                <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-                    <span style="font-size:12px;color:#94a3b8;letter-spacing:0.5px;">💵 现金水位</span>
-                    ${hasCash ? `<span style="font-family:var(--font-mono);font-size:15px;color:${accent};font-weight:600;">$${fmtNum(cashUSD,0)}</span>
-                    <span style="font-size:12px;color:#64748b;">占总资产 <b style="color:${accent};">${cashPct.toFixed(1)}%</b></span>`
-                    : `<span style="font-size:12px;color:#64748b;">未登记现金 · 点此添加</span>`}
-                </div>
-                <div style="display:flex;align-items:center;gap:8px;">
-                    ${below ? `<span style="font-size:10px;color:#f87171;background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.3);border-radius:5px;padding:2px 7px;">⚠️ 低于 ${redLine}% 红线</span>`
-                        : (hasCash ? `<span style="font-size:10px;color:#4ade80;background:rgba(74,222,128,0.08);border:1px solid rgba(74,222,128,0.25);border-radius:5px;padding:2px 7px;">✓ 高于 ${redLine}% 红线</span>` : '')}
-                    <span style="font-size:11px;color:#C1A673;border:1px solid var(--gold-border);border-radius:5px;padding:3px 9px;">管理</span>
-                </div>
-            </div>
-            ${hasCash ? `<div style="position:relative;height:5px;background:rgba(15,23,42,0.8);border-radius:3px;margin-top:8px;">
-                <div style="position:absolute;left:0;top:0;height:100%;width:${fillPct}%;background:${accent};border-radius:3px;"></div>
-                <div style="position:absolute;left:${Math.min(100,redLine)}%;top:-2px;height:9px;width:2px;background:#EADDBC;" title="${redLine}% 红线"></div>
-            </div>` : ''}
-        </div>`;
+        btn.classList.toggle('below', below);
+        if (!hasCash) {
+            btn.innerHTML = '💵 现金 +';
+            btn.title = '未登记现金 · 点击添加';
+        } else {
+            btn.innerHTML = `💵 现金 ${cashPct.toFixed(1)}%${below ? ' ⚠️' : ''}`;
+            btn.title = `现金 $${fmtNum(cashUSD,0)} · 占总资产 ${cashPct.toFixed(1)}%（红线 ${redLine}%）· 点击管理`;
+        }
     }
 
     function openCashModal() {
@@ -6116,7 +6149,7 @@
                 : `<span style="color:#64748b;" title="无实时价，按成本均价显示">${curSym}${fmtNum(item.price, 2)}</span>`;
             return `<tr style="border-bottom:1px solid rgba(193,166,115,0.05);">
                 <td style="${td('text-align:center;color:#C1A673;font-weight:800;font-size:13px;')}">${item.pctOfTotal.toFixed(2)}%</td>
-                <td style="${td('color:#e2e8f0;font-family:inherit;')}">${_esc(item.name)}</td>
+                <td style="${td('color:#e2e8f0;font-family:inherit;')}"><span class="dd-name" title="${_esc(item.name)}">${_esc(item.name)}</span></td>
                 <td style="${td('color:#64748b;font-size:11px;')}">${item.symbol}</td>
                 <td style="${td('text-align:right;color:#C1A673;font-weight:600;')}">${curSym}${fmtNum(item.value)}</td>
                 <td style="${td('text-align:right;color:#cbd5e1;')}">${fmtNum(item.qty, 0)}</td>
