@@ -7,10 +7,10 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Arc Patrimony">
-    <meta name="theme-color" content="#060b18">
+    <meta name="theme-color" content="#0B0F12">
     <title>Arc Patrimony</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=Montserrat:wght@300;400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=Montserrat:wght@300;400;500&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
         :root {
             --gold: #C1A673;
@@ -21,6 +21,7 @@
             --gold-border-hover: rgba(193,166,115,0.4);
             --bg-deep: #0B0F12;
             --bg-card: rgba(20,25,32,0.6);
+            --font-mono: 'JetBrains Mono', 'SF Mono', ui-monospace, 'Menlo', monospace;
         }
         * {
             margin: 0;
@@ -33,6 +34,7 @@
             font-family: 'Montserrat', 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
             background-color: var(--bg-deep);
             color: #e2e8f0;
+            font-variant-numeric: tabular-nums;   /* 全局等宽数字：金额/百分比小数点对齐 */
         }
 
         #root {
@@ -465,6 +467,18 @@
             -webkit-text-fill-color: transparent;
             background-clip: text;
             letter-spacing: 3px;
+        }
+
+        /* SMALTO 风格旗号：11px JetBrains Mono 小尺寸，不放大 */
+        .app-flag {
+            font-family: var(--font-mono);
+            font-size: 10px;
+            font-weight: 500;
+            letter-spacing: 2px;
+            color: var(--gold-dark);
+            margin-top: 2px;
+            text-transform: uppercase;
+            opacity: 0.85;
         }
 
         .header-user {
@@ -900,6 +914,8 @@
         .symbol-cell {
             font-weight: 600;
             color: var(--gold);
+            font-family: var(--font-mono);
+            letter-spacing: 0.3px;
         }
 
         /* 名字列水平滚动时锁定在最左侧（手机/PAD 横向滚动看右侧数据时仍能看到是哪只股） */
@@ -918,6 +934,40 @@
         }
         .holdings-table tbody tr:hover .sticky-name-col {
             background: #181f2b;                    /* 跟随 hover 高亮 */
+        }
+
+        /* ===== 地区抽屉「持仓清单」表：纵向锁表头 + 横向锁前两列(占比/名称) ===== */
+        .dd-scroll {
+            overflow: auto;
+            max-height: 62vh;
+            -webkit-overflow-scrolling: touch;
+        }
+        .dd-table thead th {                        /* 下滑：锁表头 */
+            position: sticky;
+            top: 0;
+            z-index: 3;
+            background: #0f1622;
+        }
+        .dd-table th:nth-child(1), .dd-table td:nth-child(1) {   /* 右滑：锁「占比%」列 */
+            position: sticky;
+            left: 0;
+            z-index: 2;
+            background: #0e1419;
+            width: 78px;
+            min-width: 78px;
+            max-width: 78px;
+        }
+        .dd-table th:nth-child(2), .dd-table td:nth-child(2) {   /* 右滑：锁「名称」列 */
+            position: sticky;
+            left: 78px;
+            z-index: 2;
+            background: #0e1419;
+            box-shadow: 6px 0 8px -6px rgba(0,0,0,0.65);   /* 右缘投影提示该列被钉住 */
+        }
+        .dd-table thead th:nth-child(1),
+        .dd-table thead th:nth-child(2) {           /* 左上角：同时锁行列，层级最高 */
+            z-index: 5;
+            background: #0f1622;
         }
 
         .region-badge {
@@ -1392,8 +1442,6 @@
             width: 100%;
             border-collapse: collapse;
             background: rgba(15, 23, 42, 0.4);
-            border-radius: 12px;
-            overflow: hidden;
             border: none;
         }
 
@@ -1411,6 +1459,10 @@
             text-transform: uppercase;
             letter-spacing: 0.8px;
             white-space: nowrap;
+            position: sticky;          /* 滚动时表头固定（含手机端） */
+            top: 0;
+            background: rgba(6, 11, 24, 0.95);
+            z-index: 10;
         }
 
         .trades-table td {
@@ -1973,6 +2025,7 @@
         holdings: [],
         trades: [],
         alerts: [],
+        cash: { positions: [], total_usd: 0, red_line_pct: 20 },
         selectedStock: null,
         isRegister: false,
         regionFilter: '全部',
@@ -2428,6 +2481,20 @@
         }
     }
 
+    async function loadCash() {
+        try {
+            const r = await apiCall('/cash');
+            APP.cash = {
+                positions: r.positions || [],
+                total_usd: r.total_usd || 0,
+                red_line_pct: r.red_line_pct || 20,
+            };
+        } catch (error) {
+            console.error('Failed to load cash:', error);
+            APP.cash = { positions: [], total_usd: 0, red_line_pct: 20 };
+        }
+    }
+
     // 加载上一年度的锚定价（用于精确 YTD 计算）
     async function loadAnchorPrices() {
         const lastYear = new Date().getFullYear() - 1;
@@ -2570,6 +2637,7 @@
         await loadHoldings();
         await loadTrades();
         await loadAlerts();
+        await loadCash();
         await loadAnchorPrices();  // 加载年初锚定价（用于精确 YTD）
         // Seed target alerts only for LiuBin on first use
         if (APP.alerts.length === 0 && APP.username === 'LiuBin') {
@@ -2711,7 +2779,10 @@
                             <path d="M405,337 L405,525 L465,525 L465,425 A35,35 0 0,1 535,425 L535,525 L595,525 L595,337 Z" fill="url(#goldGradMini)"/>
                             <path d="M500,230 L504,246 L520,250 L504,254 L500,270 L496,254 L480,250 L496,246 Z" fill="url(#goldGradMini)"/>
                         </svg>
-                        <div class="app-title">ARC PATRIMONY</div>
+                        <div>
+                            <div class="app-title">ARC PATRIMONY</div>
+                            <div class="app-flag">Family Office · Value Beyond Generations</div>
+                        </div>
                     </div>
                     <div class="header-user">
                         <div class="header-user-badge">${APP.username}</div>
@@ -2727,9 +2798,8 @@
                     <div class="tab" onclick="switchTab(4)">Analysis</div>
                     <div class="tab" onclick="switchTab(5)">Allocation</div>
                     <div class="tab" onclick="switchTab(6)">Settings</div>
-                    <div class="tab tab-refresh" id="forceRefreshBtn" onclick="forceRefreshPrices()" title="跳过缓存，立刻向 Yahoo 重新拉所有持仓的实时价格"><svg class="tab-refresh-icon" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>Update</div>
+                    <div class="tab tab-refresh" id="forceRefreshBtn" style="margin-left:auto" onclick="forceRefreshPrices()" title="跳过缓存，立刻向 Yahoo 重新拉所有持仓的实时价格"><svg class="tab-refresh-icon" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>Update</div>
                     <span class="prices-updated-note" title="数据来源 Yahoo Finance；亚洲市场免费档约延迟 15 分钟">🕒 行情更新于 <span id="pricesUpdatedLabel">${fmtUpdatedAgo()}</span></span>
-                    <div class="tab" onclick="switchTab(7)" style="margin-left:auto">Briefing</div>
                 </div>
 
                 <div class="tab-content">
@@ -2740,7 +2810,6 @@
                     <div id="tab-4" class="hidden"></div>
                     <div id="tab-5" class="hidden"></div>
                     <div id="tab-6" class="hidden"></div>
-                    <div id="tab-7" class="hidden"></div>
                 </div>
             </div>
 
@@ -2958,6 +3027,52 @@
                     </div>
                 </div>
             </div>
+
+            <div class="modal" id="cashModal">
+                <div class="modal-content" style="position: relative; max-width: 480px;">
+                    <button class="modal-close" onclick="closeModal('cashModal')">×</button>
+                    <div class="modal-header">💵 现金水位管理</div>
+                    <div id="cashModalList"></div>
+                    <div style="border-top:1px dashed rgba(193,166,115,0.18);margin:14px 0;padding-top:12px;">
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label class="form-label">币种 / Currency</label>
+                                <select id="cashCurrency" class="form-input" style="appearance:none;padding-right:30px;">
+                                    <option value="USD">USD 美元</option>
+                                    <option value="CNY">CNY 人民币</option>
+                                    <option value="HKD">HKD 港币</option>
+                                    <option value="JPY">JPY 日元</option>
+                                    <option value="MYR">MYR 马币</option>
+                                    <option value="CHF">CHF 瑞郎</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">地区(可选) / Region</label>
+                                <select id="cashRegion" class="form-input" style="appearance:none;padding-right:30px;">
+                                    <option value="">—</option>
+                                    <option value="美国">美国</option>
+                                    <option value="中国">中国</option>
+                                    <option value="日本">日本</option>
+                                    <option value="香港">香港</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">金额(按所选币种) / Amount</label>
+                            <input type="number" id="cashAmount" class="form-input" placeholder="0.00" step="0.01">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">备注(可选) / Note</label>
+                            <input type="text" id="cashNote" class="form-input" placeholder="e.g. 永隆活期 / HSBC SG 待入金">
+                        </div>
+                        <div style="font-size:10px;color:#475569;line-height:1.5;">同「币种+地区」视为同一笔，再次保存会覆盖金额。</div>
+                    </div>
+                    <div class="modal-buttons">
+                        <button class="btn-secondary" onclick="closeModal('cashModal')">关闭</button>
+                        <button class="btn-primary" onclick="submitCash()">保存这笔</button>
+                    </div>
+                </div>
+            </div>
         `;
 
         renderTab0();
@@ -2987,7 +3102,7 @@
 
     function switchTab(index) {
         // Hide all tabs
-        for (let i = 0; i < 8; i++) {
+        for (let i = 0; i < 7; i++) {
             const tab = document.getElementById(`tab-${i}`);
             const tabBtn = document.querySelectorAll('.tab')[i];
             if (tab) tab.classList.add('hidden');
@@ -3009,7 +3124,6 @@
             case 4: renderTab4(); break;
             case 5: renderTab5Portfolio(); break;
             case 6: renderTab5(); break;
-            case 7: renderTab7AIReport(); break;
         }
     }
 
@@ -3412,6 +3526,7 @@
                 </div>
             </div>
             ${renderFXStrip()}
+            ${renderCashBar(totalValue)}
             <div class="stat-cards" style="margin-top:12px;">
                 ${Object.entries(regionStats).map(([r, s]) => {
                     // === 区域 P&L: 浮 + 实 + 红 (与顶部 cumulativePL 口径一致) ===
@@ -4709,6 +4824,9 @@
             const f = await apiCall(`/fundamentals/${encodeURIComponent(symbol)}`);
             const fs = f.field_sources || {};
             const dc = f.discrepancies || {};
+            // 数据质量哨兵：可疑字段 → 显示 ⚠️（悬停看原因）
+            const qf = {};
+            (f.quality_flags || []).forEach(x => { if (x && x.field) qf[x.field] = x.reason || '数据存疑'; });
             // 取本股票的本地货币（先看 fundamentals 自带的，再 fallback 到 holdings）
             const holdingForFmt = APP.holdings.find(h => h.symbol === symbol);
             const ccy = f.currency || (holdingForFmt && holdingForFmt.currency) || 'USD';
@@ -4806,7 +4924,7 @@
                         ${g.fields.map(x => `
                             <div>
                                 <div style="font-size:10px;color:#94a3b8;letter-spacing:0.5px;margin-bottom:4px;line-height:1.2;">${x.label}${renderSourceBadge(x.srcKey, fs, dc)}</div>
-                                <div style="font-size:15px;font-weight:700;color:${x.color || '#cbd5e1'};font-family:Montserrat,sans-serif;">${x.value}</div>
+                                <div style="font-size:15px;font-weight:700;color:${qf[x.srcKey] ? '#fbbf24' : (x.color || '#cbd5e1')};font-family:var(--font-mono);">${x.value}${qf[x.srcKey] ? ` <span title="${_escCash(qf[x.srcKey])}" style="font-size:11px;cursor:help;">⚠️</span>` : ''}</div>
                             </div>
                         `).join('')}
                     </div>
@@ -4928,6 +5046,93 @@
     }
     function getRegionCurrencySymbol(cur) {
         return cur==='CNY'?'¥':cur==='JPY'?'¥':cur==='HKD'?'HK$':'$';
+    }
+
+    // ===== 现金水位 =====
+    function _escCash(s){ return String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+    function renderCashBar(holdingsValueUSD) {
+        const cashUSD = APP.cash.total_usd || 0;
+        const redLine = APP.cash.red_line_pct || 20;
+        const totalAssets = (holdingsValueUSD || 0) + cashUSD;
+        const cashPct = totalAssets > 0 ? (cashUSD / totalAssets * 100) : 0;
+        const hasCash = (APP.cash.positions || []).length > 0;
+        const below = hasCash && cashPct < redLine;
+        const accent = below ? '#f87171' : '#C1A673';
+        const fillPct = Math.min(100, cashPct);
+        return `<div onclick="openCashModal()" title="点击管理现金" style="margin:8px 0;cursor:pointer;background:rgba(20,25,32,0.6);border:1px solid ${below?'rgba(248,113,113,0.35)':'var(--gold-border)'};border-radius:10px;padding:10px 14px;transition:border-color 0.18s ease;">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+                <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                    <span style="font-size:12px;color:#94a3b8;letter-spacing:0.5px;">💵 现金水位</span>
+                    ${hasCash ? `<span style="font-family:var(--font-mono);font-size:15px;color:${accent};font-weight:600;">$${fmtNum(cashUSD,0)}</span>
+                    <span style="font-size:12px;color:#64748b;">占总资产 <b style="color:${accent};">${cashPct.toFixed(1)}%</b></span>`
+                    : `<span style="font-size:12px;color:#64748b;">未登记现金 · 点此添加</span>`}
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;">
+                    ${below ? `<span style="font-size:10px;color:#f87171;background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.3);border-radius:5px;padding:2px 7px;">⚠️ 低于 ${redLine}% 红线</span>`
+                        : (hasCash ? `<span style="font-size:10px;color:#4ade80;background:rgba(74,222,128,0.08);border:1px solid rgba(74,222,128,0.25);border-radius:5px;padding:2px 7px;">✓ 高于 ${redLine}% 红线</span>` : '')}
+                    <span style="font-size:11px;color:#C1A673;border:1px solid var(--gold-border);border-radius:5px;padding:3px 9px;">管理</span>
+                </div>
+            </div>
+            ${hasCash ? `<div style="position:relative;height:5px;background:rgba(15,23,42,0.8);border-radius:3px;margin-top:8px;">
+                <div style="position:absolute;left:0;top:0;height:100%;width:${fillPct}%;background:${accent};border-radius:3px;"></div>
+                <div style="position:absolute;left:${Math.min(100,redLine)}%;top:-2px;height:9px;width:2px;background:#EADDBC;" title="${redLine}% 红线"></div>
+            </div>` : ''}
+        </div>`;
+    }
+
+    function openCashModal() {
+        renderCashModalBody();
+        openModal('cashModal');
+    }
+
+    function renderCashModalBody() {
+        const el = document.getElementById('cashModalList');
+        if (!el) return;
+        const pos = APP.cash.positions || [];
+        if (!pos.length) {
+            el.innerHTML = `<div style="color:#64748b;font-size:12px;padding:4px 0 8px;">还没有登记现金。在下方按币种添加一笔（地区可选）。</div>`;
+            return;
+        }
+        el.innerHTML = `<div style="display:flex;flex-direction:column;gap:6px;">` + pos.map(p => {
+            const sym = getRegionCurrencySymbol(p.currency);
+            const usd = p.usd_value != null ? `≈$${fmtNum(p.usd_value,0)}` : '汇率缺失';
+            return `<div style="display:flex;justify-content:space-between;align-items:center;background:rgba(15,23,42,0.5);border:1px solid rgba(193,166,115,0.12);border-radius:8px;padding:8px 10px;">
+                <div>
+                    <span style="font-family:var(--font-mono);color:#C1A673;font-weight:600;font-size:13px;">${p.currency}</span>
+                    ${p.region?`<span style="font-size:10px;color:#64748b;margin-left:6px;">${_escCash(p.region)}</span>`:''}
+                    ${p.note?`<span style="font-size:10px;color:#475569;margin-left:6px;">${_escCash(p.note)}</span>`:''}
+                    <div style="font-size:13px;color:#e2e8f0;margin-top:2px;">${sym}${fmtNum(p.amount,2)} <span style="font-size:10px;color:#64748b;">${usd}</span></div>
+                </div>
+                <button onclick="deleteCash(${p.id})" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:15px;padding:4px 8px;" title="删除">🗑</button>
+            </div>`;
+        }).join('') + `</div>`;
+    }
+
+    async function submitCash() {
+        const currency = document.getElementById('cashCurrency').value;
+        const region = document.getElementById('cashRegion').value;
+        const amount = parseFloat(document.getElementById('cashAmount').value);
+        const note = document.getElementById('cashNote').value.trim();
+        if (!Number.isFinite(amount) || amount < 0) { alert('请输入有效金额'); return; }
+        try {
+            await apiCall('/cash', 'POST', { currency, region: region || null, amount, note: note || null });
+            document.getElementById('cashAmount').value = '';
+            document.getElementById('cashNote').value = '';
+            await loadCash();
+            renderCashModalBody();
+            renderTab0();
+        } catch (e) { alert('保存失败：' + e.message); }
+    }
+
+    async function deleteCash(id) {
+        if (!confirm('删除这笔现金登记？')) return;
+        try {
+            await apiCall('/cash/' + id, 'DELETE');
+            await loadCash();
+            renderCashModalBody();
+            renderTab0();
+        } catch (e) { alert('删除失败：' + e.message); }
     }
     // Convert local budget to USD using current real-time FX rate.
     function regionBudgetToUSD(region) {
@@ -5184,193 +5389,6 @@
         container.innerHTML = html;
     }
 
-    // ===== Phase 4: 📰 每日播报 Tab =====
-    let aiReportState = { currentDate: null, dates: [], generating: false };
-
-    async function renderTab7AIReport() {
-        const container = document.getElementById('tab-7');
-        if (!container) return;
-        container.innerHTML = `
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
-                <div>
-                    <div style="font-size:18px;color:#e2e8f0;font-weight:500;">📰 凯旋门今日播报</div>
-                    <div style="font-size:11px;color:#64748b;margin-top:3px;">每天 9:05 北京自动生成 · Claude Opus 4.7 · 含全球新闻 + 财报分析</div>
-                </div>
-                <div style="display:flex;gap:8px;align-items:center;">
-                    <select id="aiReportDateSelect" onchange="onAIReportDateChange()" class="form-input" style="width:auto;font-size:12px;padding:6px 10px;"></select>
-                    <button class="btn-action primary" onclick="manualGenerateAIReport()" id="aiReportGenBtn" style="font-size:12px;">
-                        🤖 立即生成
-                    </button>
-                </div>
-            </div>
-            <div id="aiReportBody" style="background:rgba(30,41,59,0.45);border:1px solid var(--gold-border);border-radius:14px;padding:24px 28px;min-height:200px;">
-                <div style="text-align:center;color:#64748b;padding:40px;">加载中…</div>
-            </div>
-        `;
-        await loadAIReportDates();
-        await loadAIReportLatest();
-    }
-
-    async function loadAIReportDates() {
-        try {
-            const r = await apiCall('/ai-report/dates');
-            aiReportState.dates = (r.dates || []).map(d => typeof d === 'string' ? d.slice(0, 10) : new Date(d).toISOString().slice(0, 10));
-            const sel = document.getElementById('aiReportDateSelect');
-            if (sel) {
-                if (aiReportState.dates.length === 0) {
-                    sel.innerHTML = `<option>暂无报告</option>`;
-                    sel.disabled = true;
-                } else {
-                    sel.innerHTML = aiReportState.dates.map((d, i) => `<option value="${d}">${d}${i === 0 ? ' · 最新' : ''}</option>`).join('');
-                    sel.disabled = false;
-                }
-            }
-        } catch (e) { console.warn('load AI dates:', e.message); }
-    }
-
-    async function loadAIReportLatest(specificDate) {
-        const body = document.getElementById('aiReportBody');
-        if (!body) return;
-        body.innerHTML = `<div style="text-align:center;color:#64748b;padding:40px;">加载中…</div>`;
-        try {
-            const url = specificDate ? `/ai-report/${specificDate}` : '/ai-report/latest';
-            const r = await apiCall(url);
-            if (r && r.exists === false) {
-                body.innerHTML = `
-                    <div style="text-align:center;padding:40px;">
-                        <div style="font-size:42px;margin-bottom:14px;">📰</div>
-                        <div style="color:#cbd5e1;font-size:15px;font-weight:500;margin-bottom:6px;">还没有报告</div>
-                        <div style="color:#64748b;font-size:12px;line-height:1.6;">明天早上 9:05 北京会自动生成第一份。<br/>或者点上方「🤖 立即生成」马上来一份（约 60-90 秒）</div>
-                    </div>
-                `;
-                return;
-            }
-            aiReportState.currentDate = (r.date || '').slice(0, 10);
-            // 同步下拉选中
-            const sel = document.getElementById('aiReportDateSelect');
-            if (sel && aiReportState.currentDate) sel.value = aiReportState.currentDate;
-            // 渲染 Markdown → HTML（轻量自实现）
-            const html = renderMarkdownLite(r.summary_md || '');
-            const ts = r.generated_at ? new Date(r.generated_at).toLocaleString('zh-CN') : '';
-            const tokens = r.prompt_tokens && r.completion_tokens
-                ? `${r.prompt_tokens.toLocaleString()} → ${r.completion_tokens.toLocaleString()} tokens`
-                : '';
-            body.innerHTML = `
-                <div class="ai-report-md">${html}</div>
-                <div style="border-top:1px dashed rgba(148,163,184,0.18);margin-top:24px;padding-top:14px;font-size:10px;color:#475569;display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;">
-                    <span>🤖 ${r.model || 'claude-opus-4-7'} · ${tokens}</span>
-                    <span>生成于 ${ts}</span>
-                </div>
-            `;
-        } catch (e) {
-            body.innerHTML = `<div style="text-align:center;color:#f87171;padding:40px;font-size:13px;">加载失败：${e.message}</div>`;
-        }
-    }
-
-    function onAIReportDateChange() {
-        const sel = document.getElementById('aiReportDateSelect');
-        if (sel && sel.value) loadAIReportLatest(sel.value);
-    }
-
-    async function manualGenerateAIReport() {
-        if (aiReportState.generating) return;
-        if (!confirm('立即生成今日 AI 决策派日报？\n\n· 调 Claude Opus 4.7\n· 含 web 搜索（5-7 次）\n· 约耗时 2-4 分钟\n· 单次约 $0.15-$0.25\n\n继续？')) return;
-        aiReportState.generating = true;
-        const btn = document.getElementById('aiReportGenBtn');
-        if (btn) { btn.disabled = true; btn.innerHTML = '⏳ 生成中…'; }
-        const body = document.getElementById('aiReportBody');
-        if (body) {
-            body.innerHTML = `
-                <div style="text-align:center;padding:60px 20px;">
-                    <div style="font-size:36px;margin-bottom:12px;animation:spin 2s linear infinite;display:inline-block;">🤖</div>
-                    <div style="color:#cbd5e1;font-size:14px;margin-bottom:6px;">Claude 正在分析…</div>
-                    <div id="aiReportProgress" style="color:#94a3b8;font-size:12px;margin-bottom:8px;">已等待 0 秒</div>
-                    <div style="color:#64748b;font-size:11px;line-height:1.6;">读持仓 → 搜全球新闻 → 查财报 → 写报告<br/>2-4 分钟，可以切到别的 tab，回来再看</div>
-                </div>
-                <style>@keyframes spin { 0%,100% { transform: rotate(0deg);} 50% { transform: rotate(180deg);} }</style>
-            `;
-        }
-        try {
-            await apiCall('/ai-report/generate', 'POST'); // 立即返回 202
-            const result = await pollAIReportStatus();
-            if (result.state === 'done') {
-                await loadAIReportDates();
-                await loadAIReportLatest();
-            } else if (result.state === 'error') {
-                alert(`❌ 生成失败：${result.error}`);
-                await loadAIReportLatest();
-            } else {
-                alert('⏰ 超过 6 分钟未完成，请到 Render Logs 排查');
-                await loadAIReportLatest();
-            }
-        } catch (e) {
-            alert(`❌ 启动失败：${e.message}`);
-        } finally {
-            aiReportState.generating = false;
-            if (btn) { btn.disabled = false; btn.innerHTML = '🤖 立即生成'; }
-        }
-    }
-
-    async function pollAIReportStatus(maxMs = 360000, intervalMs = 5000) {
-        const start = Date.now();
-        while (Date.now() - start < maxMs) {
-            await new Promise(r => setTimeout(r, intervalMs));
-            try {
-                const s = await apiCall('/ai-report/status', 'GET');
-                if (s.state === 'done' || s.state === 'error') return s;
-            } catch (e) { /* 网络抖动忽略，继续轮询 */ }
-            const elapsed = Math.round((Date.now() - start) / 1000);
-            const el = document.getElementById('aiReportProgress');
-            if (el) el.textContent = `已等待 ${elapsed} 秒`;
-        }
-        return { state: 'timeout' };
-    }
-
-    // 极简 Markdown → HTML（够用）
-    function renderMarkdownLite(md) {
-        if (!md) return '';
-        const escape = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        let html = '';
-        const lines = md.split('\n');
-        let inList = false;
-        const flushList = () => { if (inList) { html += '</ul>'; inList = false; } };
-        for (let line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed) { flushList(); html += ''; continue; }
-            // Headings
-            const h = trimmed.match(/^(#{1,4})\s+(.+)$/);
-            if (h) {
-                flushList();
-                const level = h[1].length;
-                const text = inlineMd(h[2]);
-                const sizes = { 1: '20px', 2: '17px', 3: '14px', 4: '13px' };
-                const colors = { 1: '#f1f5f9', 2: '#e2e8f0', 3: '#cbd5e1', 4: '#94a3b8' };
-                const margin = { 1: '20px', 2: '20px', 3: '14px', 4: '10px' };
-                html += `<div style="font-size:${sizes[level]};color:${colors[level]};font-weight:${level<=2?600:500};margin-top:${margin[level]};margin-bottom:8px;line-height:1.4;">${text}</div>`;
-                continue;
-            }
-            // Lists
-            const li = trimmed.match(/^[-*•·]\s+(.+)$/);
-            if (li) {
-                if (!inList) { html += '<ul style="margin:6px 0 10px 0;padding-left:22px;color:#cbd5e1;font-size:13px;line-height:1.7;">'; inList = true; }
-                html += `<li style="margin-bottom:4px;">${inlineMd(li[1])}</li>`;
-                continue;
-            }
-            flushList();
-            // 普通段落
-            html += `<p style="font-size:13px;color:#cbd5e1;line-height:1.7;margin:8px 0;">${inlineMd(trimmed)}</p>`;
-        }
-        flushList();
-        return html;
-    }
-    function inlineMd(s) {
-        // bold ** ** / italic * * / code ` `
-        return s
-            .replace(/\*\*([^*]+)\*\*/g, '<strong style="color:#e2e8f0;">$1</strong>')
-            .replace(/\*([^*]+)\*/g, '<em>$1</em>')
-            .replace(/`([^`]+)`/g, '<code style="background:rgba(148,163,184,0.10);padding:1px 5px;border-radius:3px;font-size:11px;color:#fbbf24;font-family:Montserrat,monospace;">$1</code>')
-            .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener" style="color:#60a5fa;">$1</a>');
-    }
 
     // ===== Today P&L 详情弹窗（Phase 3.7：2 级 drill-down）=====
     // L1 = 三地汇总（默认）；L2 = 进入某地区，看该地区个股表
@@ -6067,7 +6085,7 @@
         const active = currentKey === key;
         const upColor   = active && currentDir === 'asc'  ? '#C1A673' : '#475569';
         const downColor = active && currentDir === 'desc' ? '#C1A673' : '#475569';
-        return `<th onclick="setRegionDrilldownSort('${key}')" style="padding:9px 10px;text-align:${align};font-weight:500;cursor:pointer;white-space:nowrap;user-select:none;color:${active?'#C1A673':'#94a3b8'};" onmouseover="this.style.background='rgba(193,166,115,0.08)'" onmouseout="this.style.background='transparent'">
+        return `<th onclick="setRegionDrilldownSort('${key}')" style="padding:9px 10px;text-align:${align};font-weight:500;cursor:pointer;white-space:nowrap;user-select:none;color:${active?'#C1A673':'#94a3b8'};" onmouseover="this.style.background='rgba(193,166,115,0.08)'" onmouseout="this.style.background=''">
             <span>${label}</span>
             <span style="display:inline-flex;flex-direction:column;line-height:0.6;margin-left:4px;vertical-align:middle;font-size:7px;">
                 <span style="color:${upColor};">▲</span>
@@ -6117,8 +6135,8 @@
 
         return `
             <button onclick="switchRegionDrilldownView('pie')" style="background:rgba(193,166,115,0.1);border:1px solid rgba(193,166,115,0.2);color:#C1A673;padding:6px 12px;border-radius:6px;font-size:11px;cursor:pointer;margin-bottom:12px;letter-spacing:0.5px;">← 返回饼图</button>
-            <div style="overflow-x:auto;">
-            <table style="width:100%;border-collapse:collapse;font-size:12.5px;table-layout:auto;">
+            <div class="dd-scroll">
+            <table class="dd-table" style="width:100%;border-collapse:collapse;font-size:12.5px;table-layout:auto;">
                 <thead>
                     <tr style="background:rgba(15,23,42,0.55);font-size:10px;letter-spacing:0.6px;">
                         ${_sortHeaderCell('占比%',      'pctOfTotal', 'center', sk, sd)}
