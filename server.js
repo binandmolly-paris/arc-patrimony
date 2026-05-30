@@ -5,8 +5,12 @@ const path = require("path");
 const crypto = require("crypto");
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: "25mb" }));
 app.use(express.static(path.join(__dirname, "public")));
+
+// Drive upsert 端点(原地更新 Drive 真相源/主档文件,解决 MCP 工具只能新建的问题)
+const { registerDriveUpsert } = require("./drive-upsert");
+registerDriveUpsert(app);
 
 // ===== PostgreSQL 数据库连接 =====
 const pool = new Pool({
