@@ -26,10 +26,12 @@ function getDriveClient() {
   return google.drive({ version: "v3", auth: oauth2 });
 }
 
+// 鉴权:专用强密码 DRIVE_WRITE_SECRET(不复用只读的 CRON_SECRET——本端点能改/删整个 Drive)
+// 接受 header「x-drive-token」或「x-cron-token」或 ?token=,值都须等于 DRIVE_WRITE_SECRET
 function authOK(req, res) {
-  const token = req.headers["x-cron-token"] || req.query.token;
-  if (!process.env.CRON_SECRET) { res.status(500).json({ error: "CRON_SECRET not configured on server" }); return false; }
-  if (!token || token !== process.env.CRON_SECRET) { res.status(401).json({ error: "unauthorized" }); return false; }
+  const token = req.headers["x-drive-token"] || req.headers["x-cron-token"] || req.query.token;
+  if (!process.env.DRIVE_WRITE_SECRET) { res.status(500).json({ error: "DRIVE_WRITE_SECRET not configured on server" }); return false; }
+  if (!token || token !== process.env.DRIVE_WRITE_SECRET) { res.status(401).json({ error: "unauthorized" }); return false; }
   return true;
 }
 
