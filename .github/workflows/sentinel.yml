@@ -1,0 +1,27 @@
+name: 财报哨兵巡检
+
+on:
+  schedule:
+    - cron: "0 1 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: install deps
+        run: pip install -r requirements-sentinel.txt
+      - name: sweep holdings
+        env:
+          SENTINEL_CLOUD: "1"
+          DRIVE_WRITE_SECRET: ${{ secrets.DRIVE_WRITE_SECRET }}
+          TUSHARE_TOKEN: ${{ secrets.TUSHARE_TOKEN }}
+          JQUANTS_KEY: ${{ secrets.JQUANTS_KEY }}
+          EDINET_KEY: ${{ secrets.EDINET_KEY }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: python arc_sentinel_cron.py
