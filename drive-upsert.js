@@ -86,6 +86,33 @@ function registerDriveUpsert(app) {
     }
   });
 
+  // POST /api/drive/ensure-folder  —— 在 parent 下"有则返回、无则创建"一个文件夹(财报哨兵建夹用)
+  // body: { name, parentId }  → { id, action:"found"|"created" }
+  app.post("/api/drive/ensure-folder", async (req, res) => {
+    if (!authOK(req, res)) return;
+    try {
+      const { name, parentId } = req.body || {};
+      if (!name || !parentId) return res.status(400).json({ error: "name 和 parentId 必填" });
+      const drive = getDriveClient();
+      const safe = String(name).replace(/'/g, "\\'");
+      const found = await drive.files.list({
+        q: `name = '${safe}' and '${parentId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+        fields: "files(id,name)", pageSize: 1, supportsAllDrives: true, includeItemsFromAllDrives: true,
+      });
+      if (found.data.files && found.data.files.length) {
+        return res.json({ id: found.data.files[0].id, action: "found" });
+      }
+      const r = await drive.files.create({
+        requestBody: { name, mimeType: "application/vnd.google-apps.folder", parents: [parentId] },
+        fields: "id,name", supportsAllDrives: true,
+      });
+      return res.json({ id: r.data.id, action: "created" });
+    } catch (e) {
+      console.error("[drive-ensure-folder] error:", e.message);
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
   // GET /api/drive/find?title=...&parentId=...  —— 按名查 fileId(给 upsert 用)
   app.get("/api/drive/find", async (req, res) => {
     if (!authOK(req, res)) return;

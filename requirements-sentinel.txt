@@ -1,0 +1,5 @@
+# 财报哨兵 cron 依赖(GitHub Actions / Render Cron 装这个)
+akshare>=1.18
+pandas>=2.0
+# 其余(urllib/json/zipfile/csv)=Python 标准库,无需装
+# Tushare/J-Quants/EDINET/SEC 走 urllib 直连,无额外包
