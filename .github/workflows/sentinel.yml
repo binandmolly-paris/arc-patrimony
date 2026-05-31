@@ -12,8 +12,8 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - name: 续命 notify 记性(变化才发邮件)   # V0.3 (Bin 2026-05-31):跨天保存 notify 指纹,否则每天首跑=每天都发
-        uses: actions/cache@v4
+      - name: 恢复 notify 记性   # V0.4 (Bin 2026-05-31):restore+save 拆分,根治"红→cache不存→永远红"死锁
+        uses: actions/cache/restore@v4
         with:
           path: .sentinel_notify_state.json
           key: sentinel-notify-state-${{ github.run_id }}
@@ -33,4 +33,10 @@ jobs:
           EDINET_KEY: ${{ secrets.EDINET_KEY }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: python arc_sentinel_cron.py
-      # V0.3:退出码 2 仅在【相对上一轮有新变化】时 → job 标黄 → GitHub 自动邮件。持续不变的老需人工/报错 → 0 静默不打扰。
+      - name: 保存 notify 记性(即使红叉/exit2 也存)   # V0.4 关键:job 失败时默认不保存 cache→必须显式 save + if:always
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .sentinel_notify_state.json
+          key: sentinel-notify-state-${{ github.run_id }}
+      # V0.4:退出码 2 仅在【相对上一轮有新变化】时 → job 标黄 → GitHub 自动邮件。持续不变的老需人工/报错 → 0 静默不打扰。
