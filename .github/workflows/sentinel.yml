@@ -1,9 +1,10 @@
 name: 财报哨兵巡检
 
+# 隐形铁律:定时自动跑,只有 needs_human / 跨期变化 / 报错才让 job 标黄(GitHub 自动发邮件)
 on:
   schedule:
-    - cron: "0 1 * * *"
-  workflow_dispatch: {}
+    - cron: "0 1 * * *"        # 每日 UTC 01:00 = 北京 09:00(财报季可加密)
+  workflow_dispatch: {}         # 也允许手动点一次(首跑/调试)
 
 jobs:
   sweep:
@@ -11,17 +12,25 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+      - name: 续命 notify 记性(变化才发邮件)   # V0.3 (Bin 2026-05-31):跨天保存 notify 指纹,否则每天首跑=每天都发
+        uses: actions/cache@v4
+        with:
+          path: .sentinel_notify_state.json
+          key: sentinel-notify-state-${{ github.run_id }}
+          restore-keys: sentinel-notify-state-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: install deps
+      - name: 装依赖
         run: pip install -r requirements-sentinel.txt
-      - name: sweep holdings
+      - name: 巡检全持仓(云写财报库)
         env:
           SENTINEL_CLOUD: "1"
           DRIVE_WRITE_SECRET: ${{ secrets.DRIVE_WRITE_SECRET }}
+          # 可选:把脚本里硬编码的密钥也挪成 secret(见部署文档安全项)
           TUSHARE_TOKEN: ${{ secrets.TUSHARE_TOKEN }}
           JQUANTS_KEY: ${{ secrets.JQUANTS_KEY }}
           EDINET_KEY: ${{ secrets.EDINET_KEY }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: python arc_sentinel_cron.py
+      # V0.3:退出码 2 仅在【相对上一轮有新变化】时 → job 标黄 → GitHub 自动邮件。持续不变的老需人工/报错 → 0 静默不打扰。
