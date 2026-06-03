@@ -385,6 +385,24 @@ async function auth(req, res, next) {
   }
 }
 
+// ===== Alert 自动化:稳定服务令牌 x-alert-token(ALERT_SECRET)=用户登录令牌的替代,仅作用于 alerts 口 =====
+// 仿 cron 模式:单用户 App,取主用户;Claude 可用此令牌写价格预警,无需浏览器登录令牌。
+async function authOrAlert(req, res, next) {
+  const at = req.headers["x-alert-token"];
+  if (at && process.env.ALERT_SECRET && at === process.env.ALERT_SECRET) {
+    try {
+      const u = await pool.query("SELECT id FROM users ORDER BY id LIMIT 1");
+      if (u.rows.length === 0) return res.status(500).json({ error: "no user" });
+      req.userId = u.rows[0].id;
+      return next();
+    } catch (e) {
+      console.error("authOrAlert error:", e.message);
+      return res.status(500).json({ error: "alert auth error" });
+    }
+  }
+  return auth(req, res, next);
+}
+
 // ===== 用户认证 =====
 app.post("/api/register", async (req, res) => {
   try {
@@ -769,7 +787,7 @@ app.delete("/api/trade/:id", auth, async (req, res) => {
 });
 
 // ===== 提醒 =====
-app.get("/api/alerts", auth, async (req, res) => {
+app.get("/api/alerts", authOrAlert, async (req, res) => {
   try {
     const result = await pool.query("SELECT * FROM alerts WHERE user_id=$1", [req.userId]);
     res.json(result.rows);
@@ -779,7 +797,7 @@ app.get("/api/alerts", auth, async (req, res) => {
   }
 });
 
-app.post("/api/alert", auth, async (req, res) => {
+app.post("/api/alert", authOrAlert, async (req, res) => {
   try {
     const { symbol, name, condition, price } = req.body;
     await pool.query(
@@ -793,7 +811,7 @@ app.post("/api/alert", auth, async (req, res) => {
   }
 });
 
-app.put("/api/alert/:id", auth, async (req, res) => {
+app.put("/api/alert/:id", authOrAlert, async (req, res) => {
   try {
     const { active } = req.body;
     await pool.query("UPDATE alerts SET active=$1 WHERE id=$2 AND user_id=$3", [active ? 1 : 0, req.params.id, req.userId]);
@@ -805,7 +823,7 @@ app.put("/api/alert/:id", auth, async (req, res) => {
 });
 
 // 批量导入提醒
-app.post("/api/import-alerts", auth, async (req, res) => {
+app.post("/api/import-alerts", authOrAlert, async (req, res) => {
   try {
     const { alerts: list } = req.body;
     if (!Array.isArray(list)) return res.status(400).json({ error: "数据格式错误" });
@@ -824,7 +842,7 @@ app.post("/api/import-alerts", auth, async (req, res) => {
   }
 });
 
-app.delete("/api/alert/:id", auth, async (req, res) => {
+app.delete("/api/alert/:id", authOrAlert, async (req, res) => {
   try {
     await pool.query("DELETE FROM alerts WHERE id=$1 AND user_id=$2", [req.params.id, req.userId]);
     res.json({ ok: true });
