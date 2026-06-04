@@ -62,7 +62,8 @@ def _camel(member):
 
 
 def locate_latest_annual(cik):
-    """最新年报:优先 10-K(美企),无则 20-F(中概 ADR)。返回 form/accession/reportDate。"""
+    """最新年报:优先 10-K(美企),无则 20-F(中概 ADR)。返回 form/accession/reportDate。
+    ⚠️ 仅年报——保留作兜底/对照;主路径用 locate_latest(季报必接铁律)。"""
     sub = json.loads(_get(f"https://data.sec.gov/submissions/CIK{cik}.json", 40))
     r = sub["filings"]["recent"]
     for want in ("10-K", "20-F"):
@@ -71,6 +72,58 @@ def locate_latest_annual(cik):
                 return {"form": f, "accession": r["accessionNumber"][i],
                         "report_date": r["reportDate"][i], "filing_date": r["filingDate"][i]}
     return None
+
+
+def locate_latest(cik):
+    """⭐ 最新财报(季报必接铁律,2026-06-04 修):取最近一份 10-Q / 10-K /(ADR)20-F。
+    SEC `recent` 数组按【提交时间倒序】(最新在前),首条命中 form = 最近披露的那一期——
+    季报披露晚于它所覆盖的期间,故"最新提交"即"最新期间"(年报后到下季 10-Q 前=年报最新)。
+    美企季度走 10-Q(本次新增解析);ADR(20-F年报+6-K中期)6-K 的 XBRL 分部不稳→仍取 20-F 年报。"""
+    sub = json.loads(_get(f"https://data.sec.gov/submissions/CIK{cik}.json", 40))
+    r = sub["filings"]["recent"]
+    WANT = ("10-Q", "10-K", "20-F")
+    for i, f in enumerate(r["form"]):
+        if f in WANT:
+            return {"form": f, "accession": r["accessionNumber"][i],
+                    "report_date": r["reportDate"][i], "filing_date": r["filingDate"][i]}
+    return None
+
+
+def _period_days(c):
+    """context 时长(天);无 start/end 或解析失败=None。"""
+    if not (c.get("start") and c.get("end")):
+        return None
+    try:
+        from datetime import date
+        s = date(*map(int, c["start"].split("-")))
+        e = date(*map(int, c["end"].split("-")))
+        return (e - s).days
+    except Exception:
+        return None
+
+
+def _primary_period_days(ctx, report_date):
+    """主期间天数 = 所有【截止于报告日】的 context 里时长最长者。
+    10-K→整年(≈365);10-Q→本期 YTD(Q1≈90/Q2≈180/Q3≈270)。统一一条规则覆盖年报+季报。"""
+    cand = [d for c in ctx.values()
+            if c.get("end") == report_date and (d := _period_days(c))]
+    return max(cand) if cand else None
+
+
+def _is_primary(c, report_date, pdays):
+    """该 context 是否=主期间(截止报告日 且 时长≈主期间,±12天容差,滤掉同截止日的更短分期)。"""
+    if not (pdays and c.get("start") and c.get("end") and c["end"] == report_date):
+        return False
+    d = _period_days(c)
+    return d is not None and abs(d - pdays) <= 12
+
+
+def _period_type(form, pdays):
+    if form in ("10-K", "20-F"):
+        return "annual"
+    if form == "10-Q":
+        return "quarterly-YTD" if (pdays and pdays > 100) else "quarterly"
+    return "?"
 
 
 def _instance_url(cik, accession):
@@ -145,6 +198,7 @@ def parse_segment(instance_xml, report_date):
     ctx = _parse_contexts(root)
     units = _parse_units(root)
     rccy = _report_ccy(root, units)
+    pdays = _primary_period_days(ctx, report_date)   # ⭐ 主期间(年报≈365/季报YTD),统一选期
 
     def collect(tags, ctx_map):
         """逐成员取值;只认报告币种的 fact(滤掉 USD 便利换算);tag 优先级靠前者胜。"""
@@ -162,7 +216,7 @@ def parse_segment(instance_xml, report_date):
         return out
 
     # 路径①:事業セグメント合计层(微软纯单轴 / 阿里分部×OperatingSegments 双轴)
-    seg_ctx = {cid: m for cid, c in ctx.items() if _is_fy(c, report_date)
+    seg_ctx = {cid: m for cid, c in ctx.items() if _is_primary(c, report_date, pdays)
                for m in [_seg_total_member(c["dims"])] if m}
     basis, axis = "事業セグメント(business segment)", SEG_AXIS
     rev = collect(REV_TAGS, seg_ctx)
@@ -170,7 +224,7 @@ def parse_segment(instance_xml, report_date):
     # 路径②回退:单一经营分部→按产品/服务拆(纯 ProductOrService 单轴)
     if not rev:
         pos_ctx = {cid: c["dims"][PRODUCT_AXIS] for cid, c in ctx.items()
-                   if _is_fy(c, report_date) and list(c["dims"].keys()) == [PRODUCT_AXIS]}
+                   if _is_primary(c, report_date, pdays) and list(c["dims"].keys()) == [PRODUCT_AXIS]}
         if pos_ctx:
             basis, axis = "按产品/服务(product/service · 单一经营分部)", PRODUCT_AXIS
             rev = collect(REV_TAGS, pos_ctx)
@@ -200,13 +254,14 @@ def parse_segment(instance_xml, report_date):
                          "operating_income": int(op[mem]) if op.get(mem) else None})
     segments.sort(key=lambda s: -(s["revenue"] or 0))
     out = {"status": "ok", "basis": basis, "segment_axis": axis,
-           "currency": rccy, "segments": segments, "segment_sum": seg_sum}
+           "currency": rccy, "segments": segments, "segment_sum": seg_sum,
+           "period_days": pdays}
     if aliases:
         out["deduped_aliases"] = aliases
     # 勾稽:合并总营收 vs 分部合计;残差补"其他·调整"。
     # 合并总营收=无维度全年 context 上所有收入标签的最大值(真总额=最大者,
     # 自动对齐分部所用概念;防 RevenueFromContract-excluding 漏掉 Revenues 的差额)。
-    nodim = {cid for cid, c in ctx.items() if _is_fy(c, report_date) and not c["dims"]}
+    nodim = {cid for cid, c in ctx.items() if _is_primary(c, report_date, pdays) and not c["dims"]}
     total = None
     for el in root:
         if (_ln(el.tag) in REV_TAGS and el.get("contextRef") in nodim
@@ -233,17 +288,23 @@ def parse_segment(instance_xml, report_date):
 
 
 def sec_segment(cik):
-    """端到端:定位最新年报 → 取 instance → 解析分部营收+营业利润。"""
-    loc = locate_latest_annual(cik)
+    """端到端:定位【最新财报】(季报必接:10-Q/10-K/20-F 取最近一份)→ 取 instance → 解析分部。
+    返回带 form/period_type/period_end:季报=quarterly-YTD(本期累计),年报=annual。"""
+    loc = locate_latest(cik)
     if not loc:
-        return {"status": "缺·无10-K/20-F", "cik": cik}
+        return {"status": "缺·无10-Q/10-K/20-F", "cik": cik}
     inst = _instance_url(cik, loc["accession"])
     if not inst:
         return {"status": "缺·无XBRL instance", "cik": cik, "form": loc["form"]}
     seg = parse_segment(_get(inst), loc["report_date"])
+    ptype = _period_type(loc["form"], seg.get("period_days"))
     seg.update({"source": f"SEC EDGAR {loc['form']} XBRL instance(一手)",
-                "form": loc["form"], "fy_end": loc["report_date"],
+                "form": loc["form"], "period_type": ptype,
+                "period_end": loc["report_date"], "fy_end": loc["report_date"],
                 "filing_date": loc["filing_date"], "accession": loc["accession"]})
+    # ⚠️ 季报解析未命中分部(季度脚注期间/轴与年报不同)→ 不静默吞,挂 needs_human 等人工读季报
+    if seg.get("status") == "needs_review" and loc["form"] == "10-Q":
+        seg["reason"] = "10-Q 季报分部脚注未按主期间解出(可能仅季度无YTD/IFRS轴)→ " + seg.get("reason", "")
     return seg
 
 

@@ -47,6 +47,18 @@ def _fingerprint(level, msg):
     return level + "|" + hashlib.md5((msg or "").encode("utf-8")).hexdigest()[:10]
 
 
+# ───── Fix A(Bin 2026-06-04):已知·结构性·恒定的人工旗 = 预期内噪音,不触发邮件 ─────
+# 病根:纯港股(腾讯/小米/泡泡/地平线)无程序化分部源 → 永久挂"manual"人工旗;notify 状态一旦
+# 在云端漂移(Actions cache miss),这 4 只老相识就被当"新出现的 attention"→ exit2 → 天天假红。
+# 修:把"已知恒定人工旗"排除出【邮件触发】(仍在日志/汇总里可见,Claude 财报季照常人工读披露易);
+# 只有【真·新转变】(采集报错 / 勾稽 FAIL / 跨期变化 / 新冒出的人工旗)才标黄发邮件。
+EXPECTED_NOISE_MARKS = ("纯港股·无干净程序化分部源",)
+
+
+def _is_expected_noise(msg):
+    return bool(msg) and any(mk in msg for mk in EXPECTED_NOISE_MARKS)
+
+
 def live_holdings():
     req = urllib.request.Request(HOLDINGS_URL, headers={"x-cron-token": CRON_TOKEN})
     d = json.loads(urllib.request.urlopen(req, timeout=40).read())
@@ -102,8 +114,11 @@ def main(argv):
 
     # ───── NOTIFY 汇总(隐形:只报需关注的)─────
     att, err = summary["attention"], summary["error"]
-    # ─ V0.3 变化才发邮件(Bin 2026-05-31):只挑相对上一轮"新增/变化"的项(att+err 同此逻辑)─
-    changed_notify = [(s, n, m) for (s, n, m) in (att + err)
+    # ─ Fix A(Bin 2026-06-04):先剔除"已知恒定人工旗"(纯港股),它们不进邮件触发(根治假红)─
+    notifiable = [(s, n, m) for (s, n, m) in (att + err) if not _is_expected_noise(m)]
+    expected = [(s, n, m) for (s, n, m) in (att + err) if _is_expected_noise(m)]
+    # ─ V0.3 变化才发邮件(Bin 2026-05-31):只挑相对上一轮"新增/变化"的项 ─
+    changed_notify = [(s, n, m) for (s, n, m) in notifiable
                       if new_state.get(s) != old_state.get(s)]
     _save_state(new_state)             # 落本轮指纹,供下次比对
 
@@ -115,6 +130,8 @@ def main(argv):
             print(f"  🟡 {nm}({sym}): {msg}")
         for sym, nm, msg in err:
             print(f"  ❌ {nm}({sym}): {msg}")
+        if expected:
+            print(f"   └ 其中 {len(expected)} 项=已知恒定人工旗(纯港股,Fix A),不触发邮件(财报季人工读披露易)")
     if changed_notify:
         print(f"\n📨 本轮【新变化】{len(changed_notify)} 项 → 发邮件:")
         for sym, nm, msg in changed_notify:
