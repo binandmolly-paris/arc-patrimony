@@ -29,7 +29,7 @@ JQUANTS_KEY = _key("JQUANTS_KEY")
 SEC_UA = "ArcPatrimony research binandmolly@gmail.com"
 REPORT_LIB = os.path.expanduser(
     "~/Library/CloudStorage/GoogleDrive-binandmolly@gmail.com/我的云端硬盘/凯旋门/6_财报库")
-TODAY = "2026-05-30"
+TODAY = datetime.date.today().isoformat()   # 当天动态日期(2026-06-04 修:原写死"2026-05-30"→pulled_at撒谎+库不按日期累积)
 
 def _sanitize(o):
     if isinstance(o, float) and not math.isfinite(o): return None
