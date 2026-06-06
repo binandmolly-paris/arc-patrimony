@@ -403,6 +403,25 @@ async function authOrAlert(req, res, next) {
   return auth(req, res, next);
 }
 
+// ===== 持仓写自动化:稳定服务令牌 x-holdings-token(HOLDINGS_WRITE_SECRET)=用户登录令牌替代,仅作用于持仓记录写口 =====
+// 仿 alert/cron:单用户 App 取主用户;Claude 可用此令牌改持仓字段(名称/数量/成本/属性/板块/地区/目标权重),无需浏览器登录令牌。
+// ⚠️ 不含 /api/trade(记交易+动现金)与 /api/import-holdings(批量覆盖)——那两口仍只认登录令牌。
+async function authOrHoldings(req, res, next) {
+  const ht = req.headers["x-holdings-token"];
+  if (ht && process.env.HOLDINGS_WRITE_SECRET && ht === process.env.HOLDINGS_WRITE_SECRET) {
+    try {
+      const u = await pool.query("SELECT id FROM users ORDER BY id LIMIT 1");
+      if (u.rows.length === 0) return res.status(500).json({ error: "no user" });
+      req.userId = u.rows[0].id;
+      return next();
+    } catch (e) {
+      console.error("authOrHoldings error:", e.message);
+      return res.status(500).json({ error: "holdings auth error" });
+    }
+  }
+  return auth(req, res, next);
+}
+
 // ===== 用户认证 =====
 app.post("/api/register", async (req, res) => {
   try {
@@ -544,7 +563,7 @@ app.post("/api/portfolio-config", auth, async (req, res) => {
   }
 });
 
-app.post("/api/holdings/target-weight", auth, async (req, res) => {
+app.post("/api/holdings/target-weight", authOrHoldings, async (req, res) => {
   try {
     const { symbol, target_weight } = req.body;
     await pool.query("UPDATE holdings SET target_weight=$1 WHERE user_id=$2 AND symbol=$3", [target_weight || 0, req.userId, symbol]);
@@ -592,7 +611,7 @@ app.get("/api/holdings", auth, async (req, res) => {
   }
 });
 
-app.post("/api/holdings", auth, async (req, res) => {
+app.post("/api/holdings", authOrHoldings, async (req, res) => {
   try {
     const { symbol, name, qty, avg_cost, currency, market, region, attribute, sector } = req.body;
     await pool.query(
