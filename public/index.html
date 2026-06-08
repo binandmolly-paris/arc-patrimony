@@ -2698,6 +2698,7 @@
         if (APP.priceUpdateInterval) clearInterval(APP.priceUpdateInterval);
         APP.priceUpdateInterval = setInterval(async () => {
             await updatePrices();
+            try { const _al = await apiCall('/alerts'); if (Array.isArray(_al)) APP.alerts = _al; } catch(e) {} // 自动刷新告警(含外部API写入)·失败不清空
             updateCashTabBtn();
             // Re-render current active tab with latest prices
             const activeIdx = document.querySelector('.tab.active');
@@ -2706,6 +2707,7 @@
                 const idx = Array.from(tabs).indexOf(activeIdx);
                 if (idx === 0) renderTab0();
                 else if (idx === 1) renderTab1();
+                else if (idx === 3) renderTab3();
                 else if (idx === 4) renderTab4();
             }
             // 如果弹窗当前是打开的（如"今日浮盈亏个股明细"），也一并刷新内部数据
