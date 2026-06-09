@@ -193,6 +193,52 @@ def _report_ccy(root, units):
     return max(cnt, key=cnt.get) if cnt else None
 
 
+def _subset_sum(items, target, tol):
+    """在 items(正整数列表)里找一个【≥2 个元素】的子集,其和≈target(容差 tol)。
+    返回该子集(list)或 None。仅服务于分部成员去重(N 很小),超 20 个直接放弃防指数爆炸。"""
+    if len(items) > 20:
+        return None
+    items = sorted(items, reverse=True)
+    picked = []
+
+    def rec(i, remaining, chosen):
+        if abs(remaining) <= tol and len(chosen) >= 2:
+            picked.extend(chosen)
+            return True
+        if i >= len(items) or remaining < -tol:
+            return False
+        if sum(items[i:]) < remaining - tol:        # 把剩下全拿上也够不着 target → 剪枝
+            return False
+        if rec(i + 1, remaining - items[i], chosen + [items[i]]):
+            return True
+        return rec(i + 1, remaining, chosen)
+
+    return picked if rec(0, target, []) else None
+
+
+def _strip_rollup_parents(rev_by_val):
+    """⭐ 同轴父/子嵌套去重(2026-06-09 修双重计数 bug,PANW 暴露):
+    某些公司在同一分部轴上同时列【父项 + 它的子项】(典型:SEC `srt:ProductOrServiceAxis`
+    上 Service = Subscription + Support),朴素求和会把父项连同其子项重复计一遍,致 segment_sum
+    虚高、占比系统性偏低(PANW:Product 被算成 10.6%,真实 19.1%)。
+    规则:凡某成员的值 == 其它【≥2 个】成员之和(报告精度内精确)即判为【父项·汇总行】并剔除,
+    只留最细的叶子节点(finest leaves win)。从大到小处理:父项(较大)先被识别并排除,避免误删较小叶子。
+    返回 (kept{value:member}, rolled_up[“父 = 子 + 子” 的说明列表]);无嵌套则原样返回。"""
+    vals = sorted(rev_by_val.keys(), reverse=True)
+    parents, rolled_up = set(), []
+    for v in vals:
+        if v in parents or v <= 0:
+            continue
+        others = [x for x in vals if x != v and x not in parents and x > 0]
+        combo = _subset_sum(others, v, max(1, round(v * 0.0005)))   # 0.05% 容差,吸收换算舍入
+        if combo:
+            parents.add(v)
+            rolled_up.append(_camel(rev_by_val[v]) + " = "
+                             + " + ".join(_camel(rev_by_val[c]) for c in combo))
+    kept = {v: m for v, m in rev_by_val.items() if v not in parents}
+    return kept, rolled_up
+
+
 def parse_segment(instance_xml, report_date):
     root = ET.fromstring(instance_xml)
     ctx = _parse_contexts(root)
@@ -246,11 +292,27 @@ def parse_segment(instance_xml, report_date):
             aliases.append(_camel(drop) + " = " + _camel(keep))
         else:
             by_val[iv] = mem
+    # ⭐ 同轴父/子嵌套去重(2026-06-09 修双重计数):剔除"父项=子项之和"的汇总行(如 Service=
+    # Subscription+Support),只留叶子节点,防 segment_sum 把父子重复计一遍致占比系统性偏低。
+    by_val, rolled_up = _strip_rollup_parents(by_val)
     seg_sum = sum(by_val.keys())
+
+    # 合并总营收(占比分母真相源)=无维度主期间 context 上所有收入标签的最大值(真总额=最大者,
+    # 自动对齐分部所用概念;防 RevenueFromContract-excluding 漏掉 Revenues 的差额)。
+    # ⭐ 先算 total 再算占比:占比一律以【合并营收】为分母(叶子剔重后 seg_sum≈合并营收)。
+    nodim = {cid for cid, c in ctx.items() if _is_primary(c, report_date, pdays) and not c["dims"]}
+    total = None
+    for el in root:
+        if (_ln(el.tag) in REV_TAGS and el.get("contextRef") in nodim
+                and units.get(el.get("unitRef")) in (rccy, None) and el.text):
+            total = max(total or 0, int(el.text))
+    # 分母:有干净合并行(≥分部合计)→ 用合并营收;否则(合并行系更窄概念)回退分部叶子合计
+    denom = total if (total and total >= seg_sum * 0.95) else seg_sum
+
     segments = []
     for iv, mem in by_val.items():
         segments.append({"segment": _camel(mem), "revenue": iv,
-                         "pct": round(iv / seg_sum, 4) if seg_sum else None,
+                         "pct": round(iv / denom, 4) if denom else None,
                          "operating_income": int(op[mem]) if op.get(mem) else None})
     segments.sort(key=lambda s: -(s["revenue"] or 0))
     out = {"status": "ok", "basis": basis, "segment_axis": axis,
@@ -258,15 +320,10 @@ def parse_segment(instance_xml, report_date):
            "period_days": pdays}
     if aliases:
         out["deduped_aliases"] = aliases
-    # 勾稽:合并总营收 vs 分部合计;残差补"其他·调整"。
-    # 合并总营收=无维度全年 context 上所有收入标签的最大值(真总额=最大者,
-    # 自动对齐分部所用概念;防 RevenueFromContract-excluding 漏掉 Revenues 的差额)。
-    nodim = {cid for cid, c in ctx.items() if _is_primary(c, report_date, pdays) and not c["dims"]}
-    total = None
-    for el in root:
-        if (_ln(el.tag) in REV_TAGS and el.get("contextRef") in nodim
-                and units.get(el.get("unitRef")) in (rccy, None) and el.text):
-            total = max(total or 0, int(el.text))
+    if rolled_up:
+        out["rolled_up_parents"] = rolled_up
+
+    # 勾稽:合并总营收 vs 分部叶子合计;校验 segment_sum 是否≈合并营收。
     if total and total >= seg_sum * 0.95:
         # 正常:合并行≥分部合计(残差=公司未分配/抵销,正值)
         resid = total - seg_sum
@@ -280,10 +337,19 @@ def parse_segment(instance_xml, report_date):
             for s in out["segments"]:
                 s["pct"] = round(s["revenue"] / total, 4)
     else:
-        # 无维度合并行<分部合计→该行是更窄概念(如合同收入子集),分部合计本身≈外部总营收
-        out["reconciliation"] = {"consolidated_revenue": total, "segment_sum": seg_sum,
-                                 "pass": None,
-                                 "note": "无干净合并行≥分部合计(合并行系更窄概念);分部外部收入合计即≈总营收,占比以其为分母"}
+        # 无干净合并行≥分部合计→该行系更窄概念(如合同收入子集),分部叶子合计本身≈外部总营收。
+        # ⚠️ 不再静默 pass:null 放过——量化 seg_sum vs 合并行 缺口,差异过大(叶子剔重后理应≈合并行,
+        #    仍超阈值=疑似父子重复计数/口径不一致)→ 闸门拦截 pass=False 挂旗(接 cron classify)。
+        rec = {"consolidated_revenue": total, "segment_sum": seg_sum, "pass": None,
+               "note": "无干净合并行≥分部合计(合并行系更窄概念);分部外部收入合计即≈总营收,占比以其为分母"}
+        if total and seg_sum:
+            gap = (seg_sum - total) / seg_sum
+            rec["seg_vs_consolidated_gap_pct"] = round(gap, 4)
+            if gap > 0.20:
+                rec["pass"] = False
+                rec["flag"] = ("分部合计较合并行高 %.1f%%,疑似仍有父子重复计数/口径不一致,请人工核对"
+                               % (gap * 100))
+        out["reconciliation"] = rec
     return out
 
 
