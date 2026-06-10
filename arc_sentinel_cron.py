@@ -94,6 +94,10 @@ def classify(data):
 def main(argv):
     only = set(argv[1:])
     universe = live_holdings()
+    # 候选池追加巡检(非持仓 · Bin 指定):2026-06-10 Costco(美国组合第8席候选,等价格回落,财报照拉入库)
+    EXTRA_WATCH = [("美国", "COST", "Costco")]
+    _have = {u[1] for u in universe}
+    universe += [e for e in EXTRA_WATCH if e[1] not in _have]
     if only:
         universe = [u for u in universe if u[1].split(".")[0] in only or u[1] in only]
     summary = {"ok": [], "attention": [], "error": []}
