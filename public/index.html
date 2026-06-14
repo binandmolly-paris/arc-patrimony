@@ -4325,21 +4325,55 @@
         `;
 
         if (APP.alerts.length > 0) {
+            // ===== A1 触达检测(2026-06-14):用现价 APP.prices 比对目标价 =====
+            // condition 存中文「低于/高于」(亦兼容历史 BELOW/ABOVE)
+            const isTriggered = (a) => {
+                const cur = APP.prices[a.symbol]?.price;
+                if (cur == null) return false;
+                const c = String(a.condition || '').toUpperCase();
+                if (String(a.condition || '').includes('低') || c.includes('BELOW')) return cur <= a.price;
+                if (String(a.condition || '').includes('高') || c.includes('ABOVE')) return cur >= a.price;
+                return false;
+            };
+            // 修 bug:旧版只认 'ABOVE',「高于」会被错显示成 Below
+            const condText = (a) => {
+                const c = String(a.condition || '').toUpperCase();
+                return (String(a.condition || '').includes('高') || c.includes('ABOVE')) ? '高于 Above' : '低于 Below';
+            };
+            const hitCount = APP.alerts.filter(a => a.active && isTriggered(a)).length;
+            // 已触达的排到最前
+            const sorted = [...APP.alerts].sort((x, y) =>
+                ((y.active && isTriggered(y)) ? 1 : 0) - ((x.active && isTriggered(x)) ? 1 : 0));
+
+            if (hitCount > 0) {
+                html += `
+                    <div style="background:linear-gradient(135deg,#7c2d12,#b91c1c);border:1px solid #f59e0b;border-radius:12px;padding:14px 18px;margin-bottom:18px;display:flex;align-items:center;gap:12px;">
+                        <div style="font-size:26px;">🔔</div>
+                        <div>
+                            <div style="font-size:18px;font-weight:bold;color:#fff;">你有 ${hitCount} 条价格已触达</div>
+                            <div style="font-size:13px;color:#fde68a;">下方红框为已到价的提醒 · 现价已穿过你设的目标线</div>
+                        </div>
+                    </div>
+                `;
+            }
+
             html += `
                 <div class="alert-cards">
             `;
 
-            APP.alerts.forEach(a => {
-                const typeText = a.condition === 'ABOVE' ? 'Above' : 'Below';
+            sorted.forEach(a => {
+                const cur = APP.prices[a.symbol]?.price;
+                const hit = a.active && isTriggered(a);
+                const curTxt = (cur != null) ? fmtNum(cur, 2) : '—';
                 html += `
-                    <div class="alert-card">
+                    <div class="alert-card" style="${hit ? 'border:2px solid #f59e0b;box-shadow:0 0 0 3px rgba(245,158,11,.15);' : ''}">
                         <div class="alert-card-header">
-                            <div class="alert-card-symbol">${a.symbol}</div>
+                            <div class="alert-card-symbol">${a.symbol}${hit ? ' <span style="font-size:12px;color:#f59e0b;">🔔 已触达</span>' : ''}</div>
                             <button class="alert-card-close" onclick="deleteAlert('${a.id}')">×</button>
                         </div>
                         <div class="alert-card-condition">${a.name}</div>
-                        <div style="font-size:22px;font-weight:bold;color:#4ade80;margin:8px 0;">$${fmtNum(a.price, 2)}</div>
-                        <div class="alert-card-condition">When price ${typeText} reaches this level</div>
+                        <div style="font-size:22px;font-weight:bold;color:${hit ? '#f59e0b' : '#4ade80'};margin:8px 0;">${fmtNum(a.price, 2)}<span style="font-size:13px;color:#9ca3af;font-weight:normal;"> · 现价 ${curTxt}</span></div>
+                        <div class="alert-card-condition">When price ${condText(a)} reaches this level</div>
                         <div style="display: flex; justify-content: space-between; align-items: center;">
                             <div class="text-sm text-muted">Status: ${a.active ? 'Active' : 'Inactive'}</div>
                             <div class="toggle-switch ${a.active ? 'active' : ''}" onclick="toggleAlert('${a.id}', ${!a.active})">
