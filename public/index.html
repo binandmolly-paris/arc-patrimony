@@ -1444,6 +1444,30 @@
             margin-bottom: 12px;
         }
 
+        /* ===== 主页价格触达走马灯(A1+,2026-06-14)===== */
+        .alert-ticker {
+            display: flex; align-items: stretch; margin: 0 0 18px;
+            height: 40px; border-radius: 10px; overflow: hidden;
+            background: linear-gradient(90deg, rgba(185,28,28,0.20), rgba(20,25,32,0.55));
+            border: 1px solid rgba(245,158,11,0.38);
+        }
+        .alert-ticker .at-label {
+            flex: 0 0 auto; display: flex; align-items: center; gap: 5px;
+            background: #b91c1c; color: #fff; font-size: 12px; font-weight: bold;
+            padding: 0 13px; letter-spacing: 0.3px; white-space: nowrap;
+        }
+        .alert-ticker .at-scroll { flex: 1 1 auto; overflow: hidden; position: relative; display: flex; align-items: center; }
+        .alert-ticker .at-track {
+            display: inline-flex; white-space: nowrap; will-change: transform;
+            animation: at-marquee 26s linear infinite;
+        }
+        .alert-ticker .at-track:hover { animation-play-state: paused; }
+        .alert-ticker .at-track > span { display: inline-block; padding-left: 28px; }
+        .alert-ticker .at-item { font-size: 13.5px; color: #fde68a; }
+        .alert-ticker .at-item b { color: #fff; }
+        .alert-ticker .sep { color: rgba(245,158,11,0.55); margin: 0 4px; }
+        @keyframes at-marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+
         .toggle-switch {
             position: relative;
             width: 50px;
@@ -3439,7 +3463,29 @@
         const budgetBarColor = budgetUsedPct > 100 ? '#f87171' : budgetUsedPct > 80 ? '#fbbf24' : '#C1A673';
         const budgetTextColor = budgetUsedPct > 100 ? '#f87171' : budgetUsedPct > 80 ? '#fbbf24' : '#94a3b8';
 
+        // === 主页价格触达走马灯(A1+,2026-06-14):放标签栏与预算卡之间 ===
+        const _trig = (a) => {
+            const cur = APP.prices[a.symbol]?.price;
+            if (cur == null) return false;
+            const s = String(a.condition || ''); const c = s.toUpperCase();
+            if (s.includes('低') || c.includes('BELOW')) return cur <= a.price;
+            if (s.includes('高') || c.includes('ABOVE')) return cur >= a.price;
+            return false;
+        };
+        const _hits = (APP.alerts || []).filter(a => a.active && _trig(a));
+        let alertTicker = '';
+        if (_hits.length) {
+            const _items = _hits.map(a => {
+                const cur = APP.prices[a.symbol]?.price;
+                const s = String(a.condition || ''); const cond = (s.includes('高') || s.toUpperCase().includes('ABOVE')) ? '高于' : '低于';
+                return `<span class="at-item">🔔 <b>${a.symbol}</b> ${a.name || ''} · 现价 ${fmtNum(cur,2)}(目标 ${cond} ${fmtNum(a.price,2)})</span>`;
+            }).join('<span class="sep">◆</span>');
+            const _block = _items + '<span class="sep">◆</span>';
+            alertTicker = `<div class="alert-ticker"><div class="at-label">🔔 ${_hits.length} 条触达</div><div class="at-scroll"><div class="at-track"><span>${_block}</span><span>${_block}</span></div></div></div>`;
+        }
+
         let html = `
+            ${alertTicker}
             <div class="stat-grid">
                 <!-- ===== Card 1: Budget (used by COST not market value) ===== -->
                 <div class="stat-card stat-budget">
