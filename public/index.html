@@ -1444,29 +1444,34 @@
             margin-bottom: 12px;
         }
 
-        /* ===== 主页价格触达走马灯(A1+,2026-06-14)===== */
-        .alert-ticker {
-            display: flex; align-items: stretch; margin: 0 0 18px;
-            height: 40px; border-radius: 10px; overflow: hidden;
-            background: linear-gradient(90deg, rgba(185,28,28,0.20), rgba(20,25,32,0.55));
-            border: 1px solid rgba(245,158,11,0.38);
+        /* ===== 主页价格触达走马灯(A1+,2026-06-14;格式对齐底部 FX 条·复用 fxStripMarquee)===== */
+        .alert-strip {
+            position: relative; overflow: hidden;
+            background: linear-gradient(180deg, rgba(120,30,25,0.55) 0%, rgba(60,18,16,0.85) 50%, rgba(20,8,8,0.95) 100%);
+            border-radius: 10px;
+            box-shadow: 0 8px 22px rgba(0,0,0,0.55), inset 0 1px 0 rgba(245,158,11,0.25), inset 0 -2px 4px rgba(0,0,0,0.5);
+            cursor: pointer; user-select: none; padding: 7px 0; margin: 6px 0 14px;
         }
-        .alert-ticker .at-label {
-            flex: 0 0 auto; display: flex; align-items: center; gap: 5px;
-            background: #b91c1c; color: #fff; font-size: 12px; font-weight: bold;
-            padding: 0 13px; letter-spacing: 0.3px; white-space: nowrap;
+        .alert-strip-label {
+            position: absolute; left: 0; top: 0; bottom: 0;
+            display: flex; align-items: center; padding: 0 12px;
+            font-size: 10px; color: #fca5a5; letter-spacing: 1px; font-weight: 700;
+            background: linear-gradient(90deg, rgba(20,8,8,0.98) 0%, rgba(20,8,8,0.95) 70%, rgba(20,8,8,0) 100%);
+            z-index: 2; pointer-events: none; white-space: nowrap;
         }
-        .alert-ticker .at-scroll { flex: 1 1 auto; overflow: hidden; position: relative; display: flex; align-items: center; }
-        .alert-ticker .at-track {
-            display: inline-flex; white-space: nowrap; will-change: transform;
-            animation: at-marquee 26s linear infinite;
+        .alert-strip-track {
+            display: flex; gap: 10px; width: max-content;
+            animation: fxStripMarquee 30s linear infinite;
+            padding-left: 84px; will-change: transform;
         }
-        .alert-ticker .at-track:hover { animation-play-state: paused; }
-        .alert-ticker .at-track > span { display: inline-block; padding-left: 28px; }
-        .alert-ticker .at-item { font-size: 13.5px; color: #fde68a; }
-        .alert-ticker .at-item b { color: #fff; }
-        .alert-ticker .sep { color: rgba(245,158,11,0.55); margin: 0 4px; }
-        @keyframes at-marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+        .alert-strip.paused .alert-strip-track { animation-play-state: paused; }
+        .alert-chip {
+            background: rgba(0,0,0,0.42); border: 1px solid rgba(245,158,11,0.30); border-radius: 7px;
+            padding: 5px 11px; display: inline-flex; align-items: center; gap: 7px; flex-shrink: 0; cursor: pointer;
+        }
+        .alert-chip:hover { border-color: rgba(245,158,11,0.7); background: rgba(245,158,11,0.10); }
+        .alert-chip .ac-sym { font-size: 11px; color: #fff; font-weight: 700; letter-spacing: 0.3px; }
+        .alert-chip .ac-info { font-size: 10px; color: #fde68a; font-family: Montserrat, sans-serif; }
 
         .toggle-switch {
             position: relative;
@@ -3198,6 +3203,22 @@
         }
     }
 
+    // 点击走马灯某条告警:弹出详情 → 记入 dismissed(从栏移除)→ 重渲染主页
+    function dismissAlertChip(id) {
+        const a = (APP.alerts || []).find(x => x.id === id);
+        if (a) {
+            const cur = APP.prices[a.symbol]?.price;
+            const s = String(a.condition || ''); const cond = (s.includes('高') || s.toUpperCase().includes('ABOVE')) ? '高于' : '低于';
+            alert(`🔔 价格告警已触达\n\n${a.symbol}  ${a.name || ''}\n目标:${cond} ${fmtNum(a.price,2)}\n现价:${cur != null ? fmtNum(cur,2) : '—'}\n\n(已确认,从主页提示栏移除;价格回到目标线另一侧后会重新提示。)`);
+        }
+        try {
+            const arr = JSON.parse(localStorage.getItem('kxm_dismissed_alerts') || '[]');
+            if (!arr.includes(id)) arr.push(id);
+            localStorage.setItem('kxm_dismissed_alerts', JSON.stringify(arr));
+        } catch(e) {}
+        if (typeof renderTab0 === 'function') renderTab0();
+    }
+
     function renderTab0() {
         const container = document.getElementById('tab-0');
 
@@ -3463,7 +3484,7 @@
         const budgetBarColor = budgetUsedPct > 100 ? '#f87171' : budgetUsedPct > 80 ? '#fbbf24' : '#C1A673';
         const budgetTextColor = budgetUsedPct > 100 ? '#f87171' : budgetUsedPct > 80 ? '#fbbf24' : '#94a3b8';
 
-        // === 主页价格触达走马灯(A1+,2026-06-14):放标签栏与预算卡之间 ===
+        // === 主页价格触达走马灯(A1+,2026-06-14;格式对齐底部 FX 条):放标签栏与预算卡之间 ===
         const _trig = (a) => {
             const cur = APP.prices[a.symbol]?.price;
             if (cur == null) return false;
@@ -3472,16 +3493,22 @@
             if (s.includes('高') || c.includes('ABOVE')) return cur >= a.price;
             return false;
         };
-        const _hits = (APP.alerts || []).filter(a => a.active && _trig(a));
+        const _allTrig = (APP.alerts || []).filter(a => a.active && _trig(a));
+        // 点过详情的从栏移除(存 localStorage);但若该告警已不再触达 → 清出 dismissed,下次再触发会重新提示
+        let _dismissed = (function(){ try { return new Set(JSON.parse(localStorage.getItem('kxm_dismissed_alerts') || '[]')); } catch(e){ return new Set(); } })();
+        const _trigIds = new Set(_allTrig.map(a => a.id));
+        const _kept = [..._dismissed].filter(id => _trigIds.has(id));
+        if (_kept.length !== _dismissed.size) { try { localStorage.setItem('kxm_dismissed_alerts', JSON.stringify(_kept)); } catch(e){} _dismissed = new Set(_kept); }
+        const _hits = _allTrig.filter(a => !_dismissed.has(a.id));
         let alertTicker = '';
         if (_hits.length) {
-            const _items = _hits.map(a => {
+            const _chip = (a) => {
                 const cur = APP.prices[a.symbol]?.price;
                 const s = String(a.condition || ''); const cond = (s.includes('高') || s.toUpperCase().includes('ABOVE')) ? '高于' : '低于';
-                return `<span class="at-item">🔔 <b>${a.symbol}</b> ${a.name || ''} · 现价 ${fmtNum(cur,2)}(目标 ${cond} ${fmtNum(a.price,2)})</span>`;
-            }).join('<span class="sep">◆</span>');
-            const _block = _items + '<span class="sep">◆</span>';
-            alertTicker = `<div class="alert-ticker"><div class="at-label">🔔 ${_hits.length} 条触达</div><div class="at-scroll"><div class="at-track"><span>${_block}</span><span>${_block}</span></div></div></div>`;
+                return `<div class="alert-chip" onclick="event.stopPropagation(); dismissAlertChip(${a.id})" title="点击查看详情并从栏移除"><span class="ac-sym">🔔 ${a.symbol}</span><span class="ac-info">现价 ${fmtNum(cur,2)} ${cond} ${fmtNum(a.price,2)}</span></div>`;
+            };
+            const _set = _hits.map(_chip).join('');
+            alertTicker = `<div class="alert-strip" onclick="this.classList.toggle('paused')" title="点击空白处暂停滚动"><div class="alert-strip-label">🔔 ${_hits.length} 条</div><div class="alert-strip-track">${_set}${_set}</div></div>`;
         }
 
         let html = `
