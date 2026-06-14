@@ -11,6 +11,7 @@ app.use(express.static(path.join(__dirname, "public")));
 // Drive upsert 端点(原地更新 Drive 真相源/主档文件,解决 MCP 工具只能新建的问题)
 const { registerDriveUpsert } = require("./drive-upsert");
 registerDriveUpsert(app);
+const { checkAndNotifyAlerts } = require("./alert-notify"); // A2 价格告警邮件通知
 
 // ===== PostgreSQL 数据库连接 =====
 const pool = new Pool({
@@ -63,6 +64,7 @@ async function initDB() {
       price REAL NOT NULL,
       active INTEGER DEFAULT 1
     );
+    ALTER TABLE alerts ADD COLUMN IF NOT EXISTS notified INTEGER DEFAULT 0;
     CREATE TABLE IF NOT EXISTS portfolio_config (
       id SERIAL PRIMARY KEY,
       user_id INTEGER NOT NULL,
@@ -2854,6 +2856,8 @@ app.post("/api/cron/snapshot", async (req, res) => {
       try {
         const r = await takeDailySnapshot(u.id);
         results.push(r);
+        try { await checkAndNotifyAlerts(pool, fetchYahooQuotes, u.id); } // A2 价格告警邮件
+        catch (ne) { console.error("Alert notify failed for user " + u.id + ":", ne.message); }
       } catch (e) {
         console.error(`Snapshot failed for user ${u.id}:`, e.message);
         results.push({ userId: u.id, error: e.message });
