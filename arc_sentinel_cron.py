@@ -11,7 +11,8 @@
 输出:
   - 落库 JSON(经 save(),含 period_diff)
   - stdout 末尾一段 NOTIFY 汇总(给 GitHub Actions / 邮件 / 人工)
-  - 退出码:有需人工项=2(便于 CI 标黄),纯报错=1,全静默=0
+  - 退出码(V0.5 · 2026-06-14):仅【真·财务硬信号=跨期变化/勾稽FAIL】或【系统性采集故障】=2(CI标黄发邮件);
+    常驻人工旗 / 单次瞬时采集报错 = 噪音,只记日志、不发邮件 → 0(静默)。
 """
 import sys, os, json, hashlib, urllib.request, traceback
 import arc_sentinel_multi as M
@@ -32,7 +33,7 @@ def _load_state():
     try:
         return json.load(open(STATE_PATH, encoding="utf-8"))
     except Exception:
-        return {}          # 首跑/cache miss = 空 → 本轮如有异常照发(安全降级:宁可多发一次,不漏报)
+        return {}          # 首跑/cache miss = 空 → V0.5 安全降级:只发硬信号(见 main),不再"照发全部"
 
 
 def _save_state(state):
@@ -48,15 +49,26 @@ def _fingerprint(level, msg):
 
 
 # ───── Fix A(Bin 2026-06-04):已知·结构性·恒定的人工旗 = 预期内噪音,不触发邮件 ─────
-# 病根:纯港股(腾讯/小米/泡泡/地平线)无程序化分部源 → 永久挂"manual"人工旗;notify 状态一旦
-# 在云端漂移(Actions cache miss),这 4 只老相识就被当"新出现的 attention"→ exit2 → 天天假红。
-# 修:把"已知恒定人工旗"排除出【邮件触发】(仍在日志/汇总里可见,Claude 财报季照常人工读披露易);
-# 只有【真·新转变】(采集报错 / 勾稽 FAIL / 跨期变化 / 新冒出的人工旗)才标黄发邮件。
+# (V0.5 已被下方 _is_hard_signal 涵盖:除"跨期变化/勾稽FAIL"外一切均不发邮件;此处保留不删,无副作用。)
 EXPECTED_NOISE_MARKS = ("纯港股·无干净程序化分部源",)
 
 
 def _is_expected_noise(msg):
     return bool(msg) and any(mk in msg for mk in EXPECTED_NOISE_MARKS)
+
+
+# ───── V0.5(Bin 2026-06-14):只有"真·财务硬信号"才发邮件,根治"红绿天天翻" ─────
+# 病根:旧版 cache(GitHub Actions)偶发 miss → old_state 读空 → 旧"安全降级=照发全部"→ 常驻
+# 人工旗 / 瞬时采集报错被当"新出现"→ exit2 假红 → 红绿随 cache 命中/失效天天翻(annotation 实锤 exit code 2)。
+# 修:① 只有【跨期变化 / 勾稽FAIL】=真财务信号才进邮件触发(这两者由"本轮数据 vs 财报库"判定,
+#      不依赖 GitHub cache,可靠);② 常驻人工旗 + 单次采集报错 → 只记日志、永不单独触发红;
+#    ③ cache miss 的安全降级从"照发全部"改成"只发硬信号"(根治假红风暴);
+#    ④ 系统性采集故障(报错 ≥ 1/3 持仓)→ 单条汇总发(防真·全盘宕机被静默吞)。
+HARD_SIGNAL_MARKS = ("跨期变化", "勾稽")   # 跨期变化 / 勾稽未过 = 唯一邮件触发源
+
+
+def _is_hard_signal(msg):
+    return bool(msg) and any(mk in msg for mk in HARD_SIGNAL_MARKS)
 
 
 def live_holdings():
@@ -116,34 +128,39 @@ def main(argv):
         new_state[symbol] = _fingerprint(level, msg)   # V0.3 本轮指纹
         print(f"[{level:9s}] {symbol:11s} {name} {msg}", flush=True)
 
-    # ───── NOTIFY 汇总(隐形:只报需关注的)─────
+    # ───── NOTIFY 汇总(V0.5 · Bin 2026-06-14:只让"真·财务硬信号"发邮件)─────
     att, err = summary["attention"], summary["error"]
-    # ─ Fix A(Bin 2026-06-04):先剔除"已知恒定人工旗"(纯港股),它们不进邮件触发(根治假红)─
-    notifiable = [(s, n, m) for (s, n, m) in (att + err) if not _is_expected_noise(m)]
-    expected = [(s, n, m) for (s, n, m) in (att + err) if _is_expected_noise(m)]
-    # ─ V0.3 变化才发邮件(Bin 2026-05-31):只挑相对上一轮"新增/变化"的项 ─
-    changed_notify = [(s, n, m) for (s, n, m) in notifiable
-                      if new_state.get(s) != old_state.get(s)]
+    # 真·硬信号 = 跨期变化 / 勾稽FAIL(本轮数据 vs 财报库判定,不依赖 GitHub cache);
+    # 常驻人工旗 + 单次采集报错 = 噪音 → 只记日志,永不单独触发红。
+    hard = [(s, n, m) for (s, n, m) in (att + err) if _is_hard_signal(m)]
+    # 硬信号去重:cache 命中 → 只发"相对上轮新变化"的;cache 丢失 → 全发硬信号(本就稀少,宁多发不漏;
+    # 不再像旧版 cache 丢就"发全部"= 根治假红风暴)。
+    if old_state:
+        changed_notify = [(s, n, m) for (s, n, m) in hard if new_state.get(s) != old_state.get(s)]
+    else:
+        changed_notify = hard
+    # 系统性采集故障安全网:报错 ≥ max(5, 持仓1/3) → 疑数据源/网络全盘宕机 → 单条汇总发(防被静默吞)。
+    systemic = len(err) >= max(5, len(universe) // 3)
     _save_state(new_state)             # 落本轮指纹,供下次比对
 
     print("\n" + "=" * 64)
     print(f"📊 哨兵巡检完成:{len(summary['ok'])} 静默OK · {len(att)} 需人工 · {len(err)} 报错 / 共 {len(universe)}")
     if att or err:
-        print(f"   全部需关注 {len(att)+len(err)} 项(仅日志记录):")
+        print(f"   需关注 {len(att)+len(err)} 项(仅日志;非硬信号=噪音不发邮件):")
         for sym, nm, msg in att:
             print(f"  🟡 {nm}({sym}): {msg}")
         for sym, nm, msg in err:
             print(f"  ❌ {nm}({sym}): {msg}")
-        if expected:
-            print(f"   └ 其中 {len(expected)} 项=已知恒定人工旗(纯港股,Fix A),不触发邮件(财报季人工读披露易)")
     if changed_notify:
-        print(f"\n📨 本轮【新变化】{len(changed_notify)} 项 → 发邮件:")
+        print(f"\n📨 本轮【真·财务硬信号】{len(changed_notify)} 项 → 发邮件(标红 exit2):")
         for sym, nm, msg in changed_notify:
             print(f"  🔺 {nm}({sym}): {msg}")
-    else:
-        print("✅ 与上一轮一致,无新变化 → 静默不打扰。")
-    # 退出码:仅当有【新变化】才标黄发邮件;持续不变的老 attention/error → 0 静默
-    return 2 if changed_notify else 0
+    if systemic:
+        print(f"\n🔧 系统性采集故障:{len(err)}/{len(universe)} 只报错 → 发汇总(疑数据源/网络全盘问题)。")
+    if not changed_notify and not systemic:
+        print("✅ 无新财务硬信号(人工旗/瞬时报错=噪音已静默)→ 绿灯不打扰。")
+    # 退出码:仅【真·财务硬信号】或【系统性故障】才 exit2 标红发邮件;其余一律 0(绿,静默)
+    return 2 if (changed_notify or systemic) else 0
 
 
 if __name__ == "__main__":
