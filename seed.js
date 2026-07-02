@@ -98,8 +98,8 @@ const holdings = [
   { symbol: "8058.T",  name: "三菱商事", qty: 500, avg_cost: 5476, currency: "JPY", market: "东京", region: "日本", attribute: "防守", sector: "贸易" },
   { symbol: "8766.T",  name: "东京海上", qty: 200, avg_cost: 7191, currency: "JPY", market: "东京", region: "日本", attribute: "防守", sector: "保险" },
   { symbol: "8316.T",  name: "三井住友金融", qty: 200, avg_cost: 5015, currency: "JPY", market: "东京", region: "日本", attribute: "防守", sector: "金融" },
-  { symbol: "8031.T",  name: "三井物产", qty: 300, avg_cost: 6280, currency: "JPY", market: "东京", region: "日本", attribute: "防守", sector: "贸易" },
-  { symbol: "8053.T",  name: "住友商事", qty: 100, avg_cost: 5734, currency: "JPY", market: "东京", region: "日本", attribute: "防守", sector: "贸易" },
+  { symbol: "8031.T",  name: "三井物产", qty: 500, avg_cost: 6231.956, currency: "JPY", market: "东京", region: "日本", attribute: "防守", sector: "贸易" }, // 2026-07 加仓 200 股后
+  { symbol: "8053.T",  name: "住友商事", qty: 400, avg_cost: 1433.54, currency: "JPY", market: "东京", region: "日本", attribute: "防守", sector: "贸易" }, // 1拆4 分割后
   { symbol: "8002.T",  name: "丸红", qty: 500, avg_cost: 5413, currency: "JPY", market: "东京", region: "日本", attribute: "防守", sector: "贸易" },
 
   // === 美国 ===
