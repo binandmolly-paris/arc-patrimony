@@ -1,4 +1,6 @@
 *_local.py
 __pycache__/
 arc_keys.py
+*.env
+.arc-todo.local.env
 .sentinel_notify_state.json

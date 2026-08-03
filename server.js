@@ -12,12 +12,16 @@ app.use(express.static(path.join(__dirname, "public")));
 const { registerDriveUpsert } = require("./drive-upsert");
 registerDriveUpsert(app);
 const { checkAndNotifyAlerts } = require("./alert-notify"); // A2 价格告警邮件通知
+const { initArcTodoDB, seedArcTodoMembers, registerArcTodoRoutes } = require("./arc-todo-routes");
 
 // ===== PostgreSQL 数据库连接 =====
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false,
 });
+
+// ARC TODO 是独立模块：自己的表、会话 cookie、OAuth 与 cron 令牌，绝不复用投资账户的认证或写入令牌。
+registerArcTodoRoutes(app, pool);
 
 // ===== 数据库初始化 =====
 async function initDB() {
@@ -252,7 +256,9 @@ async function initDB() {
       ADD COLUMN IF NOT EXISTS cash_delta NUMERIC(20,2)
   `);
 
-  console.log("✅ 数据库表已就绪（Phase 2.3：含双源交叉检查字段）");
+  await initArcTodoDB(pool);
+  await seedArcTodoMembers(pool);
+  console.log("✅ 数据库表已就绪（Phase 2.3 + ARC TODO 隔离模块）");
 }
 
 // ===== 自动初始化 LiuBin 用户 =====

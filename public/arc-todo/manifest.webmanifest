@@ -1,0 +1,11 @@
+{
+  "name": "ARC TODO",
+  "short_name": "ARC TODO",
+  "description": "让每一件重要的事都有下一步。",
+  "lang": "zh-CN",
+  "start_url": "/arc-todo/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
+  "icons": [{ "src": "./icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}

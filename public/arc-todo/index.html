@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#ffffff" />
+    <meta name="description" content="ARC TODO — 让每一件重要的事都有下一步。" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./icon.svg" />
+    <link rel="stylesheet" href="./styles.css" />
+    <title>ARC TODO</title>
+  </head>
+  <body>
+    <div class="app" id="app" data-screen="loading">
+      <main class="loading-screen" id="loadingScreen"><div class="mark mark-large"><i></i></div><p>ARC TODO</p></main>
+
+      <main class="auth-screen" id="authScreen" hidden>
+        <section class="auth-card">
+          <div class="mark mark-large"><i></i></div>
+          <p class="overline">ARC TODO</p>
+          <h1>每一件事，<br><em>都有下一步。</em></h1>
+          <p class="auth-copy">为家人而设的私密行动清单。只需使用已获授权的 Google 账户登录。</p>
+          <a class="apple-button" href="/api/arc-todo/auth/google">使用 Google 登录 <span>→</span></a>
+          <p class="auth-footnote">LIU BIN 可看全家事项；每位成员只看与自己有关的任务。</p>
+        </section>
+      </main>
+
+      <main class="todo-shell" id="todoShell" hidden>
+        <header class="topbar">
+          <a class="wordmark" href="#today" aria-label="ARC TODO 今日事项"><span class="mark"><i></i></span><strong>ARC TODO</strong></a>
+          <div class="topbar-actions"><span class="date-label" id="todayLabel"></span><button class="avatar-button" id="profileButton" type="button" aria-label="账户菜单"></button></div>
+        </header>
+
+        <div class="layout">
+          <aside class="sidebar" aria-label="任务分类">
+            <div class="person-card"><p class="person-name" id="personName"></p><p class="person-role" id="personRole"></p></div>
+            <nav class="nav-list" id="navList">
+              <button class="nav-item is-active" data-filter="today" type="button"><span class="nav-icon">◷</span>今天 <b id="countToday">0</b></button>
+              <button class="nav-item" data-filter="inbox" type="button"><span class="nav-icon">□</span>收件箱 <b id="countInbox">0</b></button>
+              <button class="nav-item" data-filter="upcoming" type="button"><span class="nav-icon">↗</span>即将到期 <b id="countUpcoming">0</b></button>
+              <button class="nav-item" data-filter="waiting" type="button"><span class="nav-icon">→</span>等待他人 <b id="countWaiting">0</b></button>
+              <button class="nav-item" data-filter="completed" type="button"><span class="nav-icon">✓</span>已完成 <b id="countCompleted">0</b></button>
+            </nav>
+            <div class="sidebar-bottom"><button class="plain-button" id="importButton" type="button">导入旧待办</button><button class="plain-button" id="logoutButton" type="button">退出登录</button></div>
+          </aside>
+
+          <section class="content" id="today">
+            <div class="content-heading"><div><p class="eyebrow" id="contextLabel">TODAY</p><h1 id="listTitle">今天</h1><p class="subheading" id="listSubtitle"></p></div><button class="round-add" id="openTaskDialog" type="button" aria-label="添加任务">＋</button></div>
+            <form class="quick-add" id="quickAddForm"><input id="quickTitle" autocomplete="off" placeholder="添加一件事…" required /><button type="submit">添加</button></form>
+            <div class="task-toolbar"><div class="segmented" id="statusSegments"><button class="is-selected" data-status="open" type="button">待处理</button><button data-status="done" type="button">已完成</button></div><label class="search"><span>⌕</span><input id="searchInput" type="search" placeholder="搜索" /></label></div>
+            <section class="task-list" id="taskList" aria-live="polite"></section>
+          </section>
+        </div>
+      </main>
+    </div>
+
+    <dialog class="task-dialog" id="taskDialog" aria-labelledby="taskDialogTitle">
+      <form class="dialog-panel" id="taskForm" method="dialog">
+        <header class="dialog-header"><div><p class="eyebrow" id="taskDialogKicker">NEW TASK</p><h2 id="taskDialogTitle">添加一件事</h2></div><button class="close-button" id="closeTaskDialog" type="button" aria-label="关闭">×</button></header>
+        <input id="taskId" type="hidden" />
+        <label class="input-field full"><span>事项</span><input id="taskTitle" maxlength="160" placeholder="清楚地写下要完成的事" required /></label>
+        <div class="input-grid"><label class="input-field"><span>负责人</span><select id="taskAssignee"></select></label><label class="input-field"><span>共同参与</span><select id="taskCollaborator"></select></label></div>
+        <div class="input-grid"><label class="input-field"><span>截止时间</span><input id="taskDueAt" type="datetime-local" required /></label><label class="input-field"><span>优先级</span><select id="taskPriority"><option value="high">优先</option><option value="normal" selected>正常</option><option value="low">不急</option></select></label></div>
+        <label class="input-field full"><span>备注</span><textarea id="taskNotes" rows="3" placeholder="链接、材料或完成标准（可选）"></textarea></label>
+        <aside class="notice"><span>◌</span><p><strong>提醒</strong>截止前 1 天、截止当天、逾期第 3 天；App、日历和邮件同步。</p></aside>
+        <footer class="dialog-actions"><button class="secondary-action" id="cancelTaskDialog" type="button">取消</button><button class="primary-action" type="submit">完成</button></footer>
+      </form>
+    </dialog>
+
+    <dialog class="detail-dialog" id="detailDialog" aria-labelledby="detailTitle">
+      <article class="dialog-panel detail-panel"><header class="dialog-header"><div><p class="eyebrow" id="detailState"></p><h2 id="detailTitle"></h2></div><button class="close-button" id="closeDetailDialog" type="button" aria-label="关闭">×</button></header><div class="detail-pills" id="detailPills"></div><p class="detail-notes" id="detailNotes"></p><section class="timeline"><p class="eyebrow">REMINDERS</p><div id="reminderSteps"></div></section><section class="activity"><p class="eyebrow">ACTIVITY</p><ul id="activityList"></ul></section><footer class="dialog-actions" id="detailActions"></footer></article>
+    </dialog>
+
+    <dialog class="import-dialog" id="importDialog" aria-labelledby="importTitle">
+      <form class="dialog-panel import-panel" id="importForm" method="dialog"><header class="dialog-header"><div><p class="eyebrow">MIGRATE</p><h2 id="importTitle">导入本地待办</h2></div><button class="close-button" id="closeImportDialog" type="button" aria-label="关闭">×</button></header><p class="import-copy">从旧版 ARC TODO 点击“备份待办”生成 JSON 文件后，在这里选择该文件。导入前请将旧身份对应到正确的家庭成员。</p><label class="file-drop"><input id="importFile" type="file" accept="application/json" required /><span id="importFileName">选择备份文件</span></label><div class="mapping-grid"><label class="input-field"><span>旧版：刘斌</span><select id="mapLiu"></select></label><label class="input-field"><span>旧版：Molly</span><select id="mapWife"></select></label><label class="input-field"><span>旧版：Yukun</span><select id="mapSon"></select></label></div><footer class="dialog-actions"><button class="secondary-action" id="cancelImportDialog" type="button">取消</button><button class="primary-action" type="submit">导入任务</button></footer></form>
+    </dialog>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="./app.js"></script>
+  </body>
+</html>
