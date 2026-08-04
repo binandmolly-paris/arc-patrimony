@@ -4,6 +4,7 @@ const {
   normalizeEmail,
   tokenHash,
   canViewTask,
+  canFocusTask,
   normalizeTaskInput,
   normalizeLegacyTask,
   reminderCheckpoints,
@@ -25,11 +26,23 @@ test("admin sees all tasks; a member sees only participant tasks", () => {
 });
 
 test("normalizes task input and rejects an empty title", () => {
-  const task = normalizeTaskInput({ title: "  预约牙医  ", dueAt: "2026-08-03T10:00:00+08:00", priority: "unknown" });
+  const task = normalizeTaskInput({ title: "  预约牙医  ", dueAt: "2026-08-03T10:00:00+08:00", plannedStartAt: "2026-08-03T09:00:00+08:00", plannedEndAt: "2026-08-03T10:00:00+08:00", priority: "unknown" });
   assert.equal(task.title, "预约牙医");
   assert.equal(task.priority, "normal");
   assert.equal(task.status, "assigned");
+  assert.equal(task.plannedStartAt, "2026-08-03T01:00:00.000Z");
+  const clearedSchedule = normalizeTaskInput({ title: "清除时段", dueAt: "2026-08-03T10:00:00+08:00", planned_start_at: "2026-08-03T09:00:00+08:00", plannedStartAt: null, plannedEndAt: null });
+  assert.equal(clearedSchedule.plannedStartAt, null);
+  assert.throws(() => normalizeTaskInput({ title: "时段不完整", dueAt: "2026-08-03", plannedStartAt: "2026-08-03T10:00:00+08:00" }), /同时填写/);
   assert.throws(() => normalizeTaskInput({ title: "", dueAt: "2026-08-03" }), /不能为空/);
+});
+
+test("only an open assignee or collaborator can make a task their current focus", () => {
+  const task = { assigned_to: 2, status: "assigned" };
+  assert.equal(canFocusTask({ id: 2, role: "member" }, task, []), true);
+  assert.equal(canFocusTask({ id: 3, role: "member" }, task, [3]), true);
+  assert.equal(canFocusTask({ id: 1, role: "admin" }, task, []), false);
+  assert.equal(canFocusTask({ id: 2, role: "member" }, { ...task, status: "done" }, []), false);
 });
 
 test("creates exactly the pre-due, due-day, and day-three reminder checkpoints", () => {

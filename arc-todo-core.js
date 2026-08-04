@@ -25,6 +25,11 @@ function assertTaskParticipant(member, task, collaboratorIds = []) {
   }
 }
 
+function canFocusTask(member, task, collaboratorIds = []) {
+  if (!member || !task || task.status === "done") return false;
+  return task.assigned_to === member.id || collaboratorIds.includes(member.id);
+}
+
 function clampText(value, limit) {
   return String(value || "").trim().slice(0, limit);
 }
@@ -49,13 +54,35 @@ function normalizeTaskInput(input, { fallbackDueAt = null } = {}) {
   }
   const rawStatus = String(input?.status || "assigned");
   const rawPriority = String(input?.priority || "normal");
+  const optionalDate = (value, label) => {
+    if (value === undefined || value === null || value === "") return null;
+    const date = parseDate(value);
+    if (date) return date;
+    const error = new Error(`${label}无效`);
+    error.code = "VALIDATION";
+    throw error;
+  };
+  const plannedStart = optionalDate(Object.prototype.hasOwnProperty.call(input || {}, "plannedStartAt") ? input.plannedStartAt : input?.planned_start_at, "开始时间");
+  const plannedEnd = optionalDate(Object.prototype.hasOwnProperty.call(input || {}, "plannedEndAt") ? input.plannedEndAt : input?.planned_end_at, "结束时间");
+  if (Boolean(plannedStart) !== Boolean(plannedEnd)) {
+    const error = new Error("安排时段请同时填写开始与结束时间");
+    error.code = "VALIDATION";
+    throw error;
+  }
+  if (plannedStart && plannedEnd && plannedEnd <= plannedStart) {
+    const error = new Error("结束时间需要晚于开始时间");
+    error.code = "VALIDATION";
+    throw error;
+  }
   return {
     title,
     notes: clampText(input?.notes, 4000),
     dueAt: dueAt.toISOString(),
     timezone: clampText(input?.timezone, 64) || "Asia/Kuala_Lumpur",
     priority: VALID_PRIORITIES.has(rawPriority) ? rawPriority : "normal",
-    status: VALID_STATUSES.has(rawStatus) ? rawStatus : "assigned"
+    status: VALID_STATUSES.has(rawStatus) ? rawStatus : "assigned",
+    plannedStartAt: plannedStart?.toISOString() || null,
+    plannedEndAt: plannedEnd?.toISOString() || null
   };
 }
 
@@ -97,6 +124,7 @@ module.exports = {
   tokenHash,
   canViewTask,
   assertTaskParticipant,
+  canFocusTask,
   normalizeTaskInput,
   normalizeLegacyTask,
   reminderCheckpoints,

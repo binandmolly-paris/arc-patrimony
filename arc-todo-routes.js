@@ -5,6 +5,7 @@ const {
   tokenHash,
   canViewTask,
   assertTaskParticipant,
+  canFocusTask,
   normalizeTaskInput,
   normalizeLegacyTask
 } = require("./arc-todo-core");
@@ -71,6 +72,8 @@ async function initArcTodoDB(pool) {
       assigned_to INTEGER NOT NULL REFERENCES arc_todo_members(id),
       calendar_event_id TEXT,
       delivery_state TEXT NOT NULL DEFAULT 'pending_connection',
+      planned_start_at TIMESTAMPTZ,
+      planned_end_at TIMESTAMPTZ,
       completed_at TIMESTAMPTZ,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -112,10 +115,31 @@ async function initArcTodoDB(pool) {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       UNIQUE(task_id, checkpoint, channel)
     );
+    ALTER TABLE arc_todo_tasks ADD COLUMN IF NOT EXISTS planned_start_at TIMESTAMPTZ;
+    ALTER TABLE arc_todo_tasks ADD COLUMN IF NOT EXISTS planned_end_at TIMESTAMPTZ;
+    CREATE TABLE IF NOT EXISTS arc_todo_focus_sessions (
+      id BIGSERIAL PRIMARY KEY,
+      member_id INTEGER NOT NULL REFERENCES arc_todo_members(id) ON DELETE CASCADE,
+      task_id INTEGER NOT NULL REFERENCES arc_todo_tasks(id) ON DELETE CASCADE,
+      started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      ended_at TIMESTAMPTZ,
+      duration_seconds INTEGER,
+      ended_reason TEXT CHECK (ended_reason IN ('paused', 'completed', 'cleared', 'switched')),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS arc_todo_focus_states (
+      member_id INTEGER PRIMARY KEY REFERENCES arc_todo_members(id) ON DELETE CASCADE,
+      task_id INTEGER NOT NULL REFERENCES arc_todo_tasks(id) ON DELETE CASCADE,
+      selected_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      active_session_id BIGINT,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
     CREATE INDEX IF NOT EXISTS idx_arc_todo_tasks_due_open ON arc_todo_tasks (due_at) WHERE status <> 'done' AND archived_at IS NULL;
     CREATE INDEX IF NOT EXISTS idx_arc_todo_tasks_assigned ON arc_todo_tasks (assigned_to, due_at DESC);
     CREATE INDEX IF NOT EXISTS idx_arc_todo_collaborators_member ON arc_todo_collaborators (member_id, task_id);
     CREATE INDEX IF NOT EXISTS idx_arc_todo_activity_task ON arc_todo_activity (task_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_arc_todo_focus_sessions_member ON arc_todo_focus_sessions (member_id, started_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_arc_todo_focus_states_task ON arc_todo_focus_states (task_id);
   `);
 }
 
@@ -205,6 +229,85 @@ async function taskView(pool, task) {
 
 function publicMember(member) {
   return { id: member.id, displayName: member.display_name, role: member.role };
+}
+
+async function currentFocus(pool, memberId) {
+  const result = await pool.query(
+    `SELECT f.task_id, f.selected_at, f.active_session_id, s.started_at AS session_started_at
+       FROM arc_todo_focus_states f
+       JOIN arc_todo_tasks t ON t.id=f.task_id AND t.archived_at IS NULL AND t.status <> 'done'
+       LEFT JOIN arc_todo_focus_sessions s ON s.id=f.active_session_id AND s.ended_at IS NULL
+      WHERE f.member_id=$1`,
+    [memberId]
+  );
+  if (!result.rows.length) return null;
+  const focus = result.rows[0];
+  return {
+    taskId: focus.task_id,
+    selectedAt: focus.selected_at,
+    activeSession: focus.active_session_id && focus.session_started_at ? { id: focus.active_session_id, startedAt: focus.session_started_at } : null
+  };
+}
+
+async function focusCandidates(pool, memberId, currentTaskId = null) {
+  const result = await pool.query(
+    `SELECT t.id, t.title, t.due_at, t.planned_start_at, t.planned_end_at, t.priority
+       FROM arc_todo_tasks t
+      WHERE t.archived_at IS NULL AND t.status <> 'done'
+        AND (t.assigned_to=$1 OR EXISTS (
+          SELECT 1 FROM arc_todo_collaborators c WHERE c.task_id=t.id AND c.member_id=$1
+        ))
+        AND ($2::int IS NULL OR t.id <> $2)
+      ORDER BY CASE t.priority WHEN 'high' THEN 0 WHEN 'normal' THEN 1 ELSE 2 END,
+               COALESCE(t.planned_start_at, t.due_at), t.id DESC
+      LIMIT 12`,
+    [memberId, currentTaskId]
+  );
+  return result.rows;
+}
+
+async function familyFocusTitles(pool) {
+  const result = await pool.query(
+    `SELECT m.id AS member_id, m.display_name, t.id AS task_id, t.title
+       FROM arc_todo_focus_states f
+       JOIN arc_todo_members m ON m.id=f.member_id AND m.active=TRUE
+       JOIN arc_todo_tasks t ON t.id=f.task_id AND t.archived_at IS NULL AND t.status <> 'done'
+      ORDER BY m.display_name`
+  );
+  return result.rows.map((row) => ({ memberId: row.member_id, displayName: row.display_name, taskId: row.task_id, title: row.title }));
+}
+
+async function endFocusForMember(pool, memberId, reason) {
+  const result = await pool.query(
+    "SELECT task_id, selected_at, active_session_id FROM arc_todo_focus_states WHERE member_id=$1",
+    [memberId]
+  );
+  if (!result.rows.length) return null;
+  const focus = result.rows[0];
+  if (focus.active_session_id) {
+    await pool.query(
+      `UPDATE arc_todo_focus_sessions
+          SET ended_at=NOW(), duration_seconds=GREATEST(0, FLOOR(EXTRACT(EPOCH FROM NOW()-started_at))::int), ended_reason=$2
+        WHERE id=$1 AND ended_at IS NULL`,
+      [focus.active_session_id, reason]
+    );
+  }
+  await pool.query("DELETE FROM arc_todo_focus_states WHERE member_id=$1", [memberId]);
+  return { taskId: focus.task_id, selectedAt: focus.selected_at, activeSession: focus.active_session_id ? { id: focus.active_session_id } : null };
+}
+
+async function endFocusForTask(pool, taskId, reason) {
+  const active = await pool.query("SELECT member_id FROM arc_todo_focus_states WHERE task_id=$1", [taskId]);
+  for (const state of active.rows) await endFocusForMember(pool, state.member_id, reason);
+}
+
+async function focusPayload(pool, member) {
+  const focus = await currentFocus(pool, member.id);
+  return {
+    focus,
+    candidates: await focusCandidates(pool, member.id, focus?.taskId || null),
+    familyPriorities: member.role === "admin" ? await familyFocusTitles(pool) : []
+  };
 }
 
 function registerArcTodoRoutes(app, pool) {
@@ -300,6 +403,71 @@ function registerArcTodoRoutes(app, pool) {
     res.json({ tasks: result.rows.map((task) => ({ ...task, collaborators: collaboratorMap.get(task.id) || [] })) });
   });
 
+  app.get("/api/arc-todo/focus", requireMember.bind(null, pool), async (req, res) => {
+    try {
+      res.json(await focusPayload(pool, req.arcTodoMember));
+    } catch (error) {
+      res.status(500).json({ error: "无法读取当前重点。" });
+    }
+  });
+
+  app.post("/api/arc-todo/focus/current", requireMember.bind(null, pool), async (req, res) => {
+    try {
+      const taskId = Number(req.body?.taskId);
+      const loaded = await loadTask(pool, taskId);
+      if (!loaded) return res.status(404).json({ error: "任务不存在。" });
+      if (!canFocusTask(req.arcTodoMember, loaded.task, loaded.collaboratorIds)) return res.status(403).json({ error: "只能选择由您负责或共同参与的未完成任务。" });
+      await endFocusForMember(pool, req.arcTodoMember.id, "switched");
+      await pool.query(
+        `INSERT INTO arc_todo_focus_states (member_id, task_id, selected_at, updated_at)
+         VALUES ($1,$2,NOW(),NOW())
+         ON CONFLICT (member_id) DO UPDATE SET task_id=EXCLUDED.task_id, selected_at=NOW(), active_session_id=NULL, updated_at=NOW()`,
+        [req.arcTodoMember.id, taskId]
+      );
+      await writeActivity(pool, taskId, req.arcTodoMember.id, "focus_selected");
+      res.json(await focusPayload(pool, req.arcTodoMember));
+    } catch (error) {
+      res.status(error.code === "FORBIDDEN" || error.code === "VALIDATION" ? 400 : 500).json({ error: error.message || "无法设定当前重点。" });
+    }
+  });
+
+  app.delete("/api/arc-todo/focus/current", requireMember.bind(null, pool), async (req, res) => {
+    try {
+      await endFocusForMember(pool, req.arcTodoMember.id, "cleared");
+      res.json(await focusPayload(pool, req.arcTodoMember));
+    } catch (error) {
+      res.status(500).json({ error: "无法移除当前重点。" });
+    }
+  });
+
+  app.post("/api/arc-todo/focus/start", requireMember.bind(null, pool), async (req, res) => {
+    try {
+      const focus = await currentFocus(pool, req.arcTodoMember.id);
+      if (!focus) return res.status(400).json({ error: "请先选择当前重点。" });
+      if (!focus.activeSession) {
+        const session = await pool.query(
+          "INSERT INTO arc_todo_focus_sessions (member_id, task_id) VALUES ($1,$2) RETURNING id",
+          [req.arcTodoMember.id, focus.taskId]
+        );
+        await pool.query("UPDATE arc_todo_focus_states SET active_session_id=$1, updated_at=NOW() WHERE member_id=$2", [session.rows[0].id, req.arcTodoMember.id]);
+        await writeActivity(pool, focus.taskId, req.arcTodoMember.id, "focus_started");
+      }
+      res.json(await focusPayload(pool, req.arcTodoMember));
+    } catch (error) {
+      res.status(500).json({ error: "无法开始专注。" });
+    }
+  });
+
+  app.post("/api/arc-todo/focus/pause", requireMember.bind(null, pool), async (req, res) => {
+    try {
+      const focus = await endFocusForMember(pool, req.arcTodoMember.id, "paused");
+      if (focus) await writeActivity(pool, focus.taskId, req.arcTodoMember.id, "focus_paused");
+      res.json(await focusPayload(pool, req.arcTodoMember));
+    } catch (error) {
+      res.status(500).json({ error: "无法暂停专注。" });
+    }
+  });
+
   app.post("/api/arc-todo/tasks", requireMember.bind(null, pool), async (req, res) => {
     try {
       const input = normalizeTaskInput(req.body);
@@ -308,9 +476,9 @@ function registerArcTodoRoutes(app, pool) {
       await ensureMemberExists(pool, assignedTo);
       if (collaboratorId) await ensureMemberExists(pool, collaboratorId);
       const result = await pool.query(
-        `INSERT INTO arc_todo_tasks (title, notes, due_at, timezone, priority, status, created_by, assigned_to, completed_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
-        [input.title, input.notes, input.dueAt, input.timezone, input.priority, input.status, req.arcTodoMember.id, assignedTo, input.status === "done" ? new Date() : null]
+        `INSERT INTO arc_todo_tasks (title, notes, due_at, timezone, priority, status, created_by, assigned_to, planned_start_at, planned_end_at, completed_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+        [input.title, input.notes, input.dueAt, input.timezone, input.priority, input.status, req.arcTodoMember.id, assignedTo, input.plannedStartAt, input.plannedEndAt, input.status === "done" ? new Date() : null]
       );
       const task = result.rows[0];
       if (collaboratorId && collaboratorId !== assignedTo && collaboratorId !== req.arcTodoMember.id) {
@@ -332,16 +500,19 @@ function registerArcTodoRoutes(app, pool) {
       const input = normalizeTaskInput({ ...loaded.task, ...req.body, dueAt: req.body.dueAt || loaded.task.due_at });
       const assignedTo = req.body.assignedTo ? Number(req.body.assignedTo) : loaded.task.assigned_to;
       const collaboratorId = req.body.collaboratorId === null ? null : (req.body.collaboratorId ? Number(req.body.collaboratorId) : undefined);
+      const nextCollaboratorIds = collaboratorId && collaboratorId !== assignedTo && collaboratorId !== req.arcTodoMember.id ? [collaboratorId] : [];
+      const collaboratorChanged = collaboratorId !== undefined && (loaded.collaboratorIds.length !== nextCollaboratorIds.length || loaded.collaboratorIds.some((id) => !nextCollaboratorIds.includes(id)));
       await ensureMemberExists(pool, assignedTo);
       const result = await pool.query(
         `UPDATE arc_todo_tasks
-            SET title=$1, notes=$2, due_at=$3, timezone=$4, priority=$5, status=$6, assigned_to=$7,
+            SET title=$1, notes=$2, due_at=$3, timezone=$4, priority=$5, status=$6, assigned_to=$7, planned_start_at=$8, planned_end_at=$9,
                 completed_at=CASE WHEN $6='done' THEN COALESCE(completed_at, NOW()) ELSE NULL END,
                 delivery_state=CASE WHEN due_at <> $3::timestamptz OR assigned_to <> $7 THEN 'pending_connection' ELSE delivery_state END,
                 updated_at=NOW()
-          WHERE id=$8 RETURNING *`,
-        [input.title, input.notes, input.dueAt, input.timezone, input.priority, input.status, assignedTo, loaded.task.id]
+          WHERE id=$10 RETURNING *`,
+        [input.title, input.notes, input.dueAt, input.timezone, input.priority, input.status, assignedTo, input.plannedStartAt, input.plannedEndAt, loaded.task.id]
       );
+      if (input.status === "done") await endFocusForTask(pool, loaded.task.id, "completed");
       if (collaboratorId !== undefined) {
         await pool.query("DELETE FROM arc_todo_collaborators WHERE task_id=$1", [loaded.task.id]);
         if (collaboratorId && collaboratorId !== assignedTo && collaboratorId !== req.arcTodoMember.id) {
@@ -349,6 +520,7 @@ function registerArcTodoRoutes(app, pool) {
           await pool.query("INSERT INTO arc_todo_collaborators (task_id, member_id) VALUES ($1,$2)", [loaded.task.id, collaboratorId]);
         }
       }
+      if (input.status !== "done" && (assignedTo !== loaded.task.assigned_to || collaboratorChanged)) await endFocusForTask(pool, loaded.task.id, "cleared");
       await writeActivity(pool, loaded.task.id, req.arcTodoMember.id, "updated", { assignedTo });
       await deliverTask(pool, loaded.task.id, "updated").catch((error) => console.error("ARC TODO update delivery failed:", error.message));
       res.json({ task: await taskView(pool, result.rows[0]) });
@@ -364,6 +536,7 @@ function registerArcTodoRoutes(app, pool) {
       if (!loaded) return res.status(404).json({ error: "任务不存在。" });
       assertTaskParticipant(req.arcTodoMember, loaded.task, loaded.collaboratorIds);
       const result = await pool.query("UPDATE arc_todo_tasks SET status='done', completed_at=NOW(), updated_at=NOW() WHERE id=$1 RETURNING *", [loaded.task.id]);
+      await endFocusForTask(pool, loaded.task.id, "completed");
       await writeActivity(pool, loaded.task.id, req.arcTodoMember.id, "completed");
       res.json({ task: await taskView(pool, result.rows[0]) });
     } catch (error) {
