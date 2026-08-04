@@ -11,6 +11,18 @@ const {
   normalizeLegacyTask
 } = require("./arc-todo-core");
 const { integrationHealth, deliverTask, runReminderDispatch } = require("./arc-todo-notify");
+const {
+  CALENDAR_SCOPES,
+  encryptRefreshToken,
+  decryptRefreshToken,
+  calendarClient,
+  createArcTodoCalendar,
+  freeBusyForDay,
+  upsertManagedEvent,
+  deleteManagedEvent,
+  readManagedEvent,
+  scheduleFromGoogleEvent
+} = require("./arc-todo-calendar");
 
 const COOKIE_NAME = "arc_todo_session";
 const SESSION_DAYS = 30;
@@ -40,6 +52,32 @@ function getGoogleLoginClient() {
   const redirectUri = process.env.ARC_TODO_GOOGLE_REDIRECT_URI;
   if (!clientId || !clientSecret || !redirectUri) return null;
   return new google.auth.OAuth2(clientId, clientSecret, redirectUri);
+}
+
+function calendarConfig() {
+  return {
+    clientId: process.env.ARC_TODO_GOOGLE_CLIENT_ID,
+    clientSecret: process.env.ARC_TODO_GOOGLE_CLIENT_SECRET,
+    redirectUri: process.env.ARC_TODO_GOOGLE_REDIRECT_URI
+  };
+}
+
+function calendarConfigured() {
+  const { clientId, clientSecret, redirectUri } = calendarConfig();
+  return Boolean(clientId && clientSecret && redirectUri);
+}
+
+function calendarDayWindow(value) {
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(String(value || "")) ? String(value) : null;
+  if (!date) {
+    const error = new Error("日期无效");
+    error.code = "VALIDATION";
+    throw error;
+  }
+  // 第一版的日程以用户已选择的马来西亚时区呈现，避免 Render 的 UTC 时区把日期切错。
+  const start = new Date(`${date}T00:00:00+08:00`);
+  const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+  return { start, end, timeZone: "Asia/Kuala_Lumpur" };
 }
 
 function memberConfig() {
@@ -102,6 +140,8 @@ async function initArcTodoDB(pool) {
     );
     CREATE TABLE IF NOT EXISTS arc_todo_oauth_states (
       state_hash TEXT PRIMARY KEY,
+      purpose TEXT NOT NULL DEFAULT 'login',
+      member_id INTEGER REFERENCES arc_todo_members(id) ON DELETE CASCADE,
       expires_at TIMESTAMPTZ NOT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
@@ -140,11 +180,26 @@ async function initArcTodoDB(pool) {
       task_id INTEGER NOT NULL REFERENCES arc_todo_tasks(id) ON DELETE CASCADE,
       planned_start_at TIMESTAMPTZ NOT NULL,
       planned_end_at TIMESTAMPTZ NOT NULL,
+      calendar_event_id TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       PRIMARY KEY (member_id, task_id),
       CHECK (planned_end_at > planned_start_at)
     );
+    CREATE TABLE IF NOT EXISTS arc_todo_calendar_connections (
+      member_id INTEGER PRIMARY KEY REFERENCES arc_todo_members(id) ON DELETE CASCADE,
+      refresh_token_ciphertext TEXT NOT NULL,
+      calendar_id TEXT NOT NULL,
+      calendar_name TEXT NOT NULL DEFAULT 'ARC TODO',
+      calendar_time_zone TEXT NOT NULL DEFAULT 'Asia/Kuala_Lumpur',
+      connected_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      last_sync_at TIMESTAMPTZ,
+      last_error TEXT,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    ALTER TABLE arc_todo_oauth_states ADD COLUMN IF NOT EXISTS purpose TEXT NOT NULL DEFAULT 'login';
+    ALTER TABLE arc_todo_oauth_states ADD COLUMN IF NOT EXISTS member_id INTEGER REFERENCES arc_todo_members(id) ON DELETE CASCADE;
+    ALTER TABLE arc_todo_task_plans ADD COLUMN IF NOT EXISTS calendar_event_id TEXT;
     INSERT INTO arc_todo_task_plans (member_id, task_id, planned_start_at, planned_end_at)
       SELECT assigned_to, id, planned_start_at, planned_end_at
         FROM arc_todo_tasks
@@ -226,6 +281,119 @@ async function writeActivity(pool, taskId, actorId, eventType, detail = {}) {
     "INSERT INTO arc_todo_activity (task_id, actor_id, event_type, detail) VALUES ($1, $2, $3, $4::jsonb)",
     [taskId, actorId || null, eventType, JSON.stringify(detail)]
   );
+}
+
+async function calendarConnection(pool, memberId) {
+  const result = await pool.query(
+    `SELECT member_id, refresh_token_ciphertext, calendar_id, calendar_name, calendar_time_zone,
+            connected_at, last_sync_at, last_error
+       FROM arc_todo_calendar_connections WHERE member_id=$1`,
+    [memberId]
+  );
+  return result.rows[0] || null;
+}
+
+function calendarForConnection(connection) {
+  const { clientId, clientSecret } = calendarConfig();
+  return calendarClient({
+    clientId,
+    clientSecret,
+    refreshToken: decryptRefreshToken(connection.refresh_token_ciphertext, clientSecret)
+  });
+}
+
+async function rememberCalendarFailure(pool, memberId, error) {
+  await pool.query(
+    "UPDATE arc_todo_calendar_connections SET last_error=$1, updated_at=NOW() WHERE member_id=$2",
+    [String(error?.message || "日历同步失败").slice(0, 500), memberId]
+  ).catch(() => {});
+}
+
+async function syncPlanToCalendar(pool, member, task, plan) {
+  const connection = await calendarConnection(pool, member.id);
+  if (!connection) return { connected: false, synced: false };
+  try {
+    const event = await upsertManagedEvent(calendarForConnection(connection), connection.calendar_id, plan.calendar_event_id, { member, task, plan });
+    await pool.query(
+      `UPDATE arc_todo_task_plans
+          SET calendar_event_id=$1, updated_at=NOW()
+        WHERE member_id=$2 AND task_id=$3`,
+      [event.id, member.id, task.id]
+    );
+    await pool.query(
+      "UPDATE arc_todo_calendar_connections SET last_sync_at=NOW(), last_error=NULL, updated_at=NOW() WHERE member_id=$1",
+      [member.id]
+    );
+    return { connected: true, synced: true, calendarEventId: event.id };
+  } catch (error) {
+    await rememberCalendarFailure(pool, member.id, error);
+    return { connected: true, synced: false, error: "日历暂未同步；你的 ARC TODO 安排已保存。" };
+  }
+}
+
+async function removePlanFromCalendar(pool, member, plan) {
+  const connection = await calendarConnection(pool, member.id);
+  if (!connection || !plan?.calendar_event_id) return { connected: Boolean(connection), synced: false };
+  try {
+    await deleteManagedEvent(calendarForConnection(connection), connection.calendar_id, plan.calendar_event_id);
+    await pool.query(
+      "UPDATE arc_todo_calendar_connections SET last_sync_at=NOW(), last_error=NULL, updated_at=NOW() WHERE member_id=$1",
+      [member.id]
+    );
+    return { connected: true, synced: true };
+  } catch (error) {
+    await rememberCalendarFailure(pool, member.id, error);
+    return { connected: true, synced: false };
+  }
+}
+
+async function pullManagedCalendarPlans(pool, member) {
+  const connection = await calendarConnection(pool, member.id);
+  if (!connection) return { connection: null, changed: false };
+  try {
+    const plans = await pool.query(
+      `SELECT p.member_id, p.task_id, p.planned_start_at, p.planned_end_at, p.calendar_event_id,
+              t.id, t.title, t.notes, t.due_at, t.timezone, t.status
+         FROM arc_todo_task_plans p
+         JOIN arc_todo_tasks t ON t.id=p.task_id
+        WHERE p.member_id=$1 AND p.calendar_event_id IS NOT NULL
+          AND t.archived_at IS NULL AND t.status <> 'done'
+        ORDER BY p.updated_at DESC
+        LIMIT 80`,
+      [member.id]
+    );
+    const calendar = calendarForConnection(connection);
+    let changed = false;
+    for (const plan of plans.rows) {
+      const event = await readManagedEvent(calendar, connection.calendar_id, plan.calendar_event_id);
+      if (!event || event.status === "cancelled") {
+        await pool.query("DELETE FROM arc_todo_task_plans WHERE member_id=$1 AND task_id=$2", [member.id, plan.task_id]);
+        await writeActivity(pool, plan.task_id, member.id, "personal_plan_cleared_in_calendar");
+        changed = true;
+        continue;
+      }
+      const schedule = scheduleFromGoogleEvent(event);
+      if (!schedule) continue;
+      if (schedule.plannedStartAt !== new Date(plan.planned_start_at).toISOString() || schedule.plannedEndAt !== new Date(plan.planned_end_at).toISOString()) {
+        await pool.query(
+          `UPDATE arc_todo_task_plans
+              SET planned_start_at=$1, planned_end_at=$2, updated_at=NOW()
+            WHERE member_id=$3 AND task_id=$4`,
+          [schedule.plannedStartAt, schedule.plannedEndAt, member.id, plan.task_id]
+        );
+        await writeActivity(pool, plan.task_id, member.id, "personal_plan_updated_in_calendar");
+        changed = true;
+      }
+    }
+    await pool.query(
+      "UPDATE arc_todo_calendar_connections SET last_sync_at=NOW(), last_error=NULL, updated_at=NOW() WHERE member_id=$1",
+      [member.id]
+    );
+    return { connection: { ...connection, last_error: null }, changed };
+  } catch (error) {
+    await rememberCalendarFailure(pool, member.id, error);
+    return { connection: { ...connection, last_error: String(error?.message || "日历同步失败") }, changed: false };
+  }
 }
 
 async function taskView(pool, task) {
@@ -337,6 +505,7 @@ function registerArcTodoRoutes(app, pool) {
         ok: true,
         membersConfigured: result.rows[0].members,
         googleLoginConfigured: Boolean(getGoogleLoginClient()),
+        personalCalendarConfigured: calendarConfigured(),
         ...integrationHealth()
       });
     } catch (error) {
@@ -349,7 +518,7 @@ function registerArcTodoRoutes(app, pool) {
     if (!client) return res.status(503).send("ARC TODO Google 登录尚未配置。");
     const state = crypto.randomBytes(32).toString("base64url");
     const expiresAt = new Date(Date.now() + OAUTH_STATE_MINUTES * 60 * 1000);
-    await pool.query("INSERT INTO arc_todo_oauth_states (state_hash, expires_at) VALUES ($1, $2)", [tokenHash(state), expiresAt]);
+    await pool.query("INSERT INTO arc_todo_oauth_states (state_hash, purpose, expires_at) VALUES ($1, 'login', $2)", [tokenHash(state), expiresAt]);
     const url = client.generateAuthUrl({
       access_type: "online",
       scope: ["openid", "email", "profile"],
@@ -359,6 +528,30 @@ function registerArcTodoRoutes(app, pool) {
     res.redirect(url);
   });
 
+  app.get("/api/arc-todo/calendar/connect", requireMember.bind(null, pool), async (req, res) => {
+    try {
+      const client = getGoogleLoginClient();
+      if (!client || !calendarConfigured()) return res.status(503).send("ARC TODO Google 日历尚未配置。");
+      const state = crypto.randomBytes(32).toString("base64url");
+      const expiresAt = new Date(Date.now() + OAUTH_STATE_MINUTES * 60 * 1000);
+      await pool.query(
+        "INSERT INTO arc_todo_oauth_states (state_hash, purpose, member_id, expires_at) VALUES ($1, 'calendar_connect', $2, $3)",
+        [tokenHash(state), req.arcTodoMember.id, expiresAt]
+      );
+      const url = client.generateAuthUrl({
+        access_type: "offline",
+        include_granted_scopes: true,
+        prompt: "consent",
+        scope: CALENDAR_SCOPES,
+        state
+      });
+      res.redirect(url);
+    } catch (error) {
+      console.error("ARC TODO calendar connect start failed:", error.message);
+      res.status(500).send("ARC TODO 无法开始日历连接。请稍后重试。");
+    }
+  });
+
   app.get("/api/arc-todo/auth/google/callback", async (req, res) => {
     try {
       const client = getGoogleLoginClient();
@@ -366,7 +559,7 @@ function registerArcTodoRoutes(app, pool) {
       const code = String(req.query.code || "");
       if (!client || !state || !code) return res.status(400).send("ARC TODO 登录参数不完整。请返回重试。");
       const stateResult = await pool.query(
-        "DELETE FROM arc_todo_oauth_states WHERE state_hash=$1 AND expires_at > NOW() RETURNING state_hash",
+        "DELETE FROM arc_todo_oauth_states WHERE state_hash=$1 AND expires_at > NOW() RETURNING purpose, member_id",
         [tokenHash(state)]
       );
       if (!stateResult.rows.length) return res.status(400).send("ARC TODO 登录已过期。请重新开始。");
@@ -374,9 +567,32 @@ function registerArcTodoRoutes(app, pool) {
       if (!tokens.id_token) return res.status(400).send("Google 未返回身份凭证。请重新登录。");
       const ticket = await client.verifyIdToken({ idToken: tokens.id_token, audience: process.env.ARC_TODO_GOOGLE_CLIENT_ID });
       const email = normalizeEmail(ticket.getPayload()?.email);
+      const stateRow = stateResult.rows[0];
       const result = await pool.query("SELECT id, email, display_name, role FROM arc_todo_members WHERE email=$1 AND active=TRUE", [email]);
       if (!result.rows.length) return res.status(403).send("这个 Google 账户尚未获 ARC TODO 授权。");
-      const session = await createSession(pool, result.rows[0].id);
+      const member = result.rows[0];
+      if (stateRow.purpose === "calendar_connect") {
+        if (Number(stateRow.member_id) !== member.id) return res.status(403).send("请使用当前 ARC TODO 账户对应的 Google 日历连接。");
+        if (!tokens.refresh_token) return res.status(400).send("Google 未返回日历持续授权。请在授权页确认所有日历权限后重试。");
+        const existing = await calendarConnection(pool, member.id);
+        const { clientId, clientSecret } = calendarConfig();
+        const calendar = calendarClient({ clientId, clientSecret, refreshToken: tokens.refresh_token });
+        const created = existing ? { id: existing.calendar_id, summary: existing.calendar_name, timeZone: existing.calendar_time_zone } : await createArcTodoCalendar(calendar);
+        await pool.query(
+          `INSERT INTO arc_todo_calendar_connections
+             (member_id, refresh_token_ciphertext, calendar_id, calendar_name, calendar_time_zone, connected_at, last_sync_at, last_error, updated_at)
+           VALUES ($1,$2,$3,$4,$5,NOW(),NOW(),NULL,NOW())
+           ON CONFLICT (member_id) DO UPDATE
+             SET refresh_token_ciphertext=EXCLUDED.refresh_token_ciphertext, calendar_id=EXCLUDED.calendar_id,
+                 calendar_name=EXCLUDED.calendar_name, calendar_time_zone=EXCLUDED.calendar_time_zone,
+                 connected_at=NOW(), last_sync_at=NOW(), last_error=NULL, updated_at=NOW()`,
+          [member.id, encryptRefreshToken(tokens.refresh_token, clientSecret), created.id, created.summary || "ARC TODO", created.timeZone || "Asia/Kuala_Lumpur"]
+        );
+        const session = await createSession(pool, member.id);
+        setSessionCookie(res, session.raw, session.expiresAt);
+        return res.redirect("/arc-todo/?calendar=connected");
+      }
+      const session = await createSession(pool, member.id);
       setSessionCookie(res, session.raw, session.expiresAt);
       res.redirect("/arc-todo/");
     } catch (error) {
@@ -391,6 +607,40 @@ function registerArcTodoRoutes(app, pool) {
     if (token) await pool.query("DELETE FROM arc_todo_sessions WHERE token_hash=$1", [tokenHash(token)]).catch(() => {});
     clearSessionCookie(res);
     res.json({ ok: true });
+  });
+
+  app.get("/api/arc-todo/calendar/status", requireMember.bind(null, pool), async (req, res) => {
+    try {
+      const connection = await calendarConnection(pool, req.arcTodoMember.id);
+      res.json({
+        configured: calendarConfigured(),
+        connected: Boolean(connection),
+        calendarName: connection?.calendar_name || null,
+        lastSyncedAt: connection?.last_sync_at || null,
+        lastError: connection?.last_error || null
+      });
+    } catch (error) {
+      res.status(500).json({ error: "无法读取日历连接状态。" });
+    }
+  });
+
+  app.get("/api/arc-todo/calendar/day", requireMember.bind(null, pool), async (req, res) => {
+    try {
+      const { start, end, timeZone } = calendarDayWindow(req.query.date);
+      const pulled = await pullManagedCalendarPlans(pool, req.arcTodoMember);
+      if (!pulled.connection) return res.json({ connected: false, busy: [], calendarName: null, changed: false });
+      if (pulled.connection.last_error) return res.json({ connected: true, busy: [], calendarName: pulled.connection.calendar_name, changed: pulled.changed, syncError: "日历暂时无法读取；你的 ARC TODO 安排仍然可用。" });
+      const busy = await freeBusyForDay(calendarForConnection(pulled.connection), start, end, timeZone);
+      res.json({
+        connected: true,
+        calendarName: pulled.connection.calendar_name,
+        busy: busy.map((entry) => ({ start: entry.start, end: entry.end })),
+        changed: pulled.changed
+      });
+    } catch (error) {
+      console.error("ARC TODO calendar day failed:", error.message);
+      res.status(500).json({ error: "无法读取 Google 日历空档。" });
+    }
   });
 
   app.get("/api/arc-todo/members", requireMember.bind(null, pool), async (_req, res) => {
@@ -568,7 +818,12 @@ function registerArcTodoRoutes(app, pool) {
         [req.arcTodoMember.id, loaded.task.id, plan.plannedStartAt, plan.plannedEndAt]
       );
       await writeActivity(pool, loaded.task.id, req.arcTodoMember.id, "personal_plan_updated");
-      res.json({ plan });
+      const persistedPlan = await pool.query(
+        "SELECT member_id, task_id, planned_start_at, planned_end_at, calendar_event_id FROM arc_todo_task_plans WHERE member_id=$1 AND task_id=$2",
+        [req.arcTodoMember.id, loaded.task.id]
+      );
+      const calendar = await syncPlanToCalendar(pool, req.arcTodoMember, loaded.task, persistedPlan.rows[0]);
+      res.json({ plan, calendar });
     } catch (error) {
       res.status(error.code === "VALIDATION" ? 400 : 500).json({ error: error.message || "安排时间失败。" });
     }
@@ -579,9 +834,13 @@ function registerArcTodoRoutes(app, pool) {
       const loaded = await loadTask(pool, Number(req.params.id));
       if (!loaded) return res.status(404).json({ error: "任务不存在。" });
       if (!canFocusTask(req.arcTodoMember, loaded.task, loaded.collaboratorIds)) return res.status(403).json({ error: "只能移除自己的计划时间。" });
-      await pool.query("DELETE FROM arc_todo_task_plans WHERE member_id=$1 AND task_id=$2", [req.arcTodoMember.id, loaded.task.id]);
+      const plan = await pool.query(
+        "DELETE FROM arc_todo_task_plans WHERE member_id=$1 AND task_id=$2 RETURNING calendar_event_id",
+        [req.arcTodoMember.id, loaded.task.id]
+      );
+      const calendar = await removePlanFromCalendar(pool, req.arcTodoMember, plan.rows[0]);
       await writeActivity(pool, loaded.task.id, req.arcTodoMember.id, "personal_plan_cleared");
-      res.json({ ok: true });
+      res.json({ ok: true, calendar });
     } catch (error) {
       res.status(500).json({ error: "移除计划时间失败。" });
     }

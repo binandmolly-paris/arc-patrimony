@@ -9,7 +9,9 @@ const state = {
   status: "open",
   search: "",
   selectedId: null,
-  plannerOffset: 0
+  plannerDate: asDateInput(new Date()),
+  planningTaskId: null,
+  calendar: { configured: false, connected: false, busy: [], loading: false, changed: false, syncError: null }
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -39,6 +41,12 @@ function personalPlanStart(task) { return task.personal_planned_start_at || null
 function personalPlanEnd(task) { return task.personal_planned_end_at || null; }
 function scheduledDate(task) { return startOfDay(personalPlanStart(task) || task.due_at); }
 function sameDay(left, right) { return startOfDay(left).getTime() === startOfDay(right).getTime(); }
+function plannerDay() { return new Date(`${state.plannerDate}T00:00:00`); }
+function plannerDayEnd() { const end = plannerDay(); end.setDate(end.getDate() + 1); return end; }
+function addHours(value, hours) { return new Date(value.getTime() + hours * 60 * 60 * 1000); }
+function clamp(value, minimum, maximum) { return Math.min(maximum, Math.max(minimum, value)); }
+function minutesIntoPlannerDay(value) { return Math.round((new Date(value).getTime() - plannerDay().getTime()) / 60000); }
+function plannerDateCopy() { return dateFormatter.format(plannerDay()); }
 
 async function api(path, options = {}) {
   const response = await fetch(`/api/arc-todo${path}`, { credentials: "same-origin", headers: { "Content-Type":"application/json", ...(options.headers || {}) }, ...options });
@@ -158,22 +166,105 @@ function focusDuration() {
 
 function updateFocusElapsed() { const target = $("#focusElapsed"); if (target) target.textContent = focusDuration(); }
 
-function plannerDays() {
-  const start = addDays(startOfDay(new Date()), state.plannerOffset * 7);
-  return Array.from({ length: 7 }, (_, index) => addDays(start, index));
+const PLANNER_START_HOUR = 7;
+const PLANNER_END_HOUR = 22;
+const PLANNER_HOUR_HEIGHT = 68;
+
+function agendaBlockStyle(start, end) {
+  const totalMinutes = (PLANNER_END_HOUR - PLANNER_START_HOUR) * 60;
+  const startMinutes = clamp(minutesIntoPlannerDay(start) - PLANNER_START_HOUR * 60, 0, totalMinutes);
+  const endMinutes = clamp(minutesIntoPlannerDay(end) - PLANNER_START_HOUR * 60, 0, totalMinutes);
+  if (endMinutes <= 0 || startMinutes >= totalMinutes || endMinutes <= startMinutes) return "";
+  const top = startMinutes / 60 * PLANNER_HOUR_HEIGHT;
+  const height = Math.max(30, (endMinutes - startMinutes) / 60 * PLANNER_HOUR_HEIGHT);
+  return `style="top:${top}px;height:${height}px"`;
 }
 
-function plannerTask(task) {
-  return `<button class="planner-task ${task.priority === "high" ? "is-priority" : ""}" data-task-id="${task.id}" type="button"><span>${escapeHtml(task.title)}</span><small>${timeRange(task)}</small></button>`;
+function visiblePlannerTask(task) {
+  if (!isFocusEligible(task)) return false;
+  const start = personalPlanStart(task);
+  const end = personalPlanEnd(task);
+  return Boolean(start && end && new Date(start) < plannerDayEnd() && new Date(end) > plannerDay());
+}
+
+function agendaTaskBlock(task) {
+  const start = personalPlanStart(task);
+  const end = personalPlanEnd(task);
+  const style = agendaBlockStyle(start, end);
+  if (!style) return "";
+  return `<button class="agenda-block agenda-task-block ${task.priority === "high" ? "is-priority" : ""}" data-plan-task-id="${task.id}" type="button" ${style}><span>${escapeHtml(task.title)}</span><small>${timeRange(task)}</small></button>`;
+}
+
+function agendaBusyBlock(item) {
+  const style = agendaBlockStyle(item.start, item.end);
+  return style ? `<div class="agenda-block agenda-busy-block" aria-label="Google 日历已有安排" ${style}><span>忙碌</span></div>` : "";
+}
+
+function agendaHourRows() {
+  return Array.from({ length: PLANNER_END_HOUR - PLANNER_START_HOUR + 1 }, (_, index) => {
+    const hour = PLANNER_START_HOUR + index;
+    return `<div class="agenda-hour"><span>${pad(hour)}:00</span></div>`;
+  }).join("");
+}
+
+function agendaSlots() {
+  const slots = [];
+  for (let hour = PLANNER_START_HOUR; hour < PLANNER_END_HOUR; hour++) {
+    for (const minute of [0, 30]) {
+      const start = new Date(plannerDay());
+      start.setHours(hour, minute, 0, 0);
+      slots.push(`<button class="agenda-slot" data-plan-slot="${start.toISOString()}" type="button" aria-label="安排到 ${pad(hour)}:${pad(minute)}"></button>`);
+    }
+  }
+  return slots.join("");
+}
+
+function unplannedAgendaTasks() {
+  return state.tasks.filter((task) => isFocusEligible(task) && !personalPlanStart(task));
+}
+
+function hasAgendaConflict(start, end, ignoreTaskId = null) {
+  const intervals = [
+    ...(state.calendar.busy || []).map((item) => ({ start: item.start, end: item.end })),
+    ...state.tasks
+      .filter((task) => Number(task.id) !== Number(ignoreTaskId) && personalPlanStart(task) && personalPlanEnd(task))
+      .map((task) => ({ start: personalPlanStart(task), end: personalPlanEnd(task) }))
+  ];
+  return intervals.some((interval) => new Date(interval.start) < end && new Date(interval.end) > start);
 }
 
 function renderPlanner() {
-  const days = plannerDays();
-  const heading = state.plannerOffset === 0 ? "未来七天" : `${dayFormatter.format(days[0])} — ${dayFormatter.format(days[6])}`;
-  $("#plannerView").innerHTML = `<div class="planner-controls"><button class="planner-arrow" data-plan-action="previous" type="button" aria-label="上一周">←</button><strong>${heading}</strong><button class="planner-today" data-plan-action="today" type="button">今天</button><button class="planner-arrow" data-plan-action="next" type="button" aria-label="下一周">→</button></div><div class="planner-grid">${days.map((day) => {
-    const tasks = state.tasks.filter((task) => isFocusEligible(task) && sameDay(scheduledDate(task), day)).sort((left, right) => new Date(personalPlanStart(left) || left.due_at) - new Date(personalPlanStart(right) || right.due_at));
-    return `<section class="planner-day ${sameDay(day, new Date()) ? "is-today" : ""}"><header><span>${dayFormatter.format(day)}</span>${sameDay(day, new Date()) ? "<b>今天</b>" : ""}</header><div class="planner-day-tasks">${tasks.length ? tasks.map(plannerTask).join("") : "<p>留白</p>"}</div></section>`;
-  }).join("")}</div>`;
+  const agenda = state.calendar;
+  const date = plannerDay();
+  const today = sameDay(date, new Date());
+  const selectedTask = state.tasks.find((task) => task.id === Number(state.planningTaskId));
+  const scheduled = state.tasks.filter(visiblePlannerTask).sort((left, right) => new Date(personalPlanStart(left)) - new Date(personalPlanStart(right)));
+  const unplanned = unplannedAgendaTasks();
+  const connection = agenda.connected
+    ? `<div class="calendar-status is-connected"><span>●</span><b>${escapeHtml(agenda.calendarName || "ARC TODO")}</b><small>Google 日历忙闲已显示</small><button data-plan-action="refresh" type="button">刷新</button></div>`
+    : `<div class="calendar-status"><span>○</span><div><b>连接 Google 日历</b><small>只显示你已有行程的忙闲；ARC TODO 会另建自己的工作日历。</small></div><button class="secondary-action" data-plan-action="connect" type="button">连接</button></div>`;
+  const prompt = selectedTask
+    ? `已选择「${escapeHtml(selectedTask.title)}」；点一个空白时段安排。`
+    : "先选择一件未安排事项，再点空白时段。";
+  const unscheduled = unplanned.length
+    ? `<div class="agenda-unplanned-list">${unplanned.map((task) => `<button class="agenda-unplanned-task ${Number(state.planningTaskId) === task.id ? "is-selected" : ""}" data-plan-action="select-task" data-plan-task-id="${task.id}" type="button"><span>${escapeHtml(task.title)}</span><small>${task.priority === "high" ? "优先 · " : ""}截止 ${dateFormatter.format(new Date(task.due_at))}</small></button>`).join("")}</div>`
+    : `<p class="agenda-empty">所有可处理事项都已有时间，或者先添加一件事。</p>`;
+  $("#plannerView").innerHTML = `<section class="agenda-shell">
+    <div class="planner-controls"><button class="planner-arrow" data-plan-action="previous" type="button" aria-label="前一天">←</button><strong>${plannerDateCopy()}</strong>${today ? "<b>今天</b>" : ""}<button class="planner-today" data-plan-action="today" type="button">今天</button><button class="planner-arrow" data-plan-action="next" type="button" aria-label="后一天">→</button></div>
+    ${connection}
+    <section class="agenda-unplanned"><div><p class="eyebrow">UNSCHEDULED</p><p>${prompt}</p></div>${unscheduled}</section>
+    ${agenda.syncError ? `<p class="agenda-sync-note">${escapeHtml(agenda.syncError)}</p>` : ""}
+    <section class="agenda-day" aria-label="${plannerDateCopy()}的日程">
+      <div class="agenda-hours">${agendaHourRows()}</div>
+      <div class="agenda-track ${agenda.loading ? "is-loading" : ""}" style="height:${(PLANNER_END_HOUR - PLANNER_START_HOUR) * PLANNER_HOUR_HEIGHT}px">
+        <div class="agenda-slot-layer">${agendaSlots()}</div>
+        <div class="agenda-busy-layer">${(agenda.busy || []).map(agendaBusyBlock).join("")}</div>
+        <div class="agenda-task-layer">${scheduled.map(agendaTaskBlock).join("")}</div>
+        ${agenda.loading ? '<div class="agenda-loading">正在读取日程…</div>' : ""}
+      </div>
+    </section>
+    <p class="agenda-legend"><span class="busy-dot"></span> Google 日历已有安排 <span class="task-dot"></span> ARC TODO 工作安排</p>
+  </section>`;
 }
 
 function render() {
@@ -206,11 +297,26 @@ function applyFocus(payload) {
   state.familyPriorities = payload.familyPriorities || [];
 }
 
-async function loadData() {
-  const [members, tasks, focus] = await Promise.all([api("/members"), api("/tasks"), api("/focus")]);
+async function loadData({ refreshPlanner = true } = {}) {
+  const [members, tasks, focus, calendar] = await Promise.all([api("/members"), api("/tasks"), api("/focus"), api("/calendar/status")]);
   state.members = members.members;
   state.tasks = tasks.tasks;
   applyFocus(focus);
+  state.calendar = { ...state.calendar, ...calendar, busy: calendar.connected ? state.calendar.busy || [] : [], loading: false };
+  render();
+  if (state.filter === "planner" && refreshPlanner) await refreshPlannerDay();
+}
+
+async function refreshPlannerDay() {
+  state.calendar = { ...state.calendar, loading: true, syncError: null };
+  render();
+  try {
+    const agenda = await api(`/calendar/day?date=${encodeURIComponent(state.plannerDate)}`);
+    state.calendar = { ...state.calendar, ...agenda, loading: false };
+    if (agenda.changed) await loadData({ refreshPlanner: false });
+  } catch (error) {
+    state.calendar = { ...state.calendar, loading: false, syncError: error.message };
+  }
   render();
 }
 
@@ -303,12 +409,12 @@ function openDetail(task) {
   $("#detailDialog").showModal();
 }
 
-function openPlanDialog(task) {
+function openPlanDialog(task, { startAt = null, endAt = null } = {}) {
   $("#planTaskId").value = task.id;
   $("#planTaskTitle").textContent = task.title;
   $("#planDeadline").textContent = `任务截止：${dateFormatter.format(new Date(task.due_at))}`;
-  $("#planStart").value = personalPlanStart(task) ? asInputDate(personalPlanStart(task)) : "";
-  $("#planEnd").value = personalPlanEnd(task) ? asInputDate(personalPlanEnd(task)) : "";
+  $("#planStart").value = startAt ? asInputDate(startAt) : (personalPlanStart(task) ? asInputDate(personalPlanStart(task)) : "");
+  $("#planEnd").value = endAt ? asInputDate(endAt) : (personalPlanEnd(task) ? asInputDate(personalPlanEnd(task)) : "");
   $("#clearPlanButton").hidden = !personalPlanStart(task);
   $("#planDialog").showModal();
 }
@@ -320,11 +426,12 @@ async function savePlan(event) {
   const endAt = $("#planEnd").value;
   if (!startAt || !endAt) return toast("请同时填写开始时间和计划完成时间。");
   try {
-    await api(`/tasks/${taskId}/plan`, { method: "PUT", body: JSON.stringify({ startAt: new Date(startAt).toISOString(), endAt: new Date(endAt).toISOString() }) });
+    const result = await api(`/tasks/${taskId}/plan`, { method: "PUT", body: JSON.stringify({ startAt: new Date(startAt).toISOString(), endAt: new Date(endAt).toISOString() }) });
     closeDialog("#planDialog");
     closeDialog("#detailDialog");
+    state.planningTaskId = null;
     await loadData();
-    toast("已保存你的个人安排。");
+    toast(result.calendar?.synced ? "已保存，并同步到 ARC TODO 日历。" : (result.calendar?.error || "已保存你的个人安排。"));
   } catch (error) { toast(error.message); }
 }
 
@@ -403,12 +510,13 @@ async function importLegacy(event) {
 }
 
 function bindEvents() {
-  $("#navList").addEventListener("click", (event) => {
+  $("#navList").addEventListener("click", async (event) => {
     const button = event.target.closest("[data-filter]");
     if (!button) return;
     state.filter = button.dataset.filter;
     state.status = state.filter === "completed" ? "done" : "open";
     render();
+    if (state.filter === "planner") await refreshPlannerDay();
   });
   $("#statusSegments").addEventListener("click", (event) => { const button = event.target.closest("[data-status]"); if (!button) return; state.status = button.dataset.status; render(); });
   $("#searchInput").addEventListener("input", (event) => { state.search = event.target.value; render(); });
@@ -422,12 +530,38 @@ function bindEvents() {
     if (!task) return;
     if (event.target.closest("[data-action]")?.dataset.action === "complete") completeTask(task.id); else openDetail(task);
   });
-  $("#plannerView").addEventListener("click", (event) => {
+  $("#plannerView").addEventListener("click", async (event) => {
     const action = event.target.closest("[data-plan-action]")?.dataset.planAction;
-    if (action) { state.plannerOffset = action === "previous" ? state.plannerOffset - 1 : (action === "next" ? state.plannerOffset + 1 : 0); render(); return; }
-    const taskId = Number(event.target.closest("[data-task-id]")?.dataset.taskId);
+    if (action === "previous" || action === "next" || action === "today") {
+      const date = plannerDay();
+      if (action === "previous") date.setDate(date.getDate() - 1);
+      if (action === "next") date.setDate(date.getDate() + 1);
+      if (action === "today") state.plannerDate = asDateInput(new Date()); else state.plannerDate = asDateInput(date);
+      state.planningTaskId = null;
+      state.calendar = { ...state.calendar, busy: [] };
+      await refreshPlannerDay();
+      return;
+    }
+    if (action === "connect") { window.location.assign("/api/arc-todo/calendar/connect"); return; }
+    if (action === "refresh") { await refreshPlannerDay(); return; }
+    if (action === "select-task") {
+      state.planningTaskId = Number(event.target.closest("[data-plan-task-id]")?.dataset.planTaskId);
+      render();
+      return;
+    }
+    const slot = event.target.closest("[data-plan-slot]")?.dataset.planSlot;
+    if (slot) {
+      const task = state.tasks.find((item) => item.id === Number(state.planningTaskId));
+      if (!task) { toast("先选择一件未安排事项，再点空白时间。 "); return; }
+      const start = new Date(slot);
+      const end = addHours(start, 1);
+      if (hasAgendaConflict(start, end, task.id)) { toast("这个时段已有安排。请选择日历中的空白时段。"); return; }
+      openPlanDialog(task, { startAt: start, endAt: end });
+      return;
+    }
+    const taskId = Number(event.target.closest("[data-plan-task-id]")?.dataset.planTaskId);
     const task = state.tasks.find((item) => item.id === taskId);
-    if (task) openDetail(task);
+    if (task) openPlanDialog(task);
   });
   $("#focusCard").addEventListener("click", (event) => {
     const action = event.target.closest("[data-focus-action]")?.dataset.focusAction;
@@ -473,6 +607,10 @@ async function boot() {
     state.member = me.member;
     await loadData();
     showApp();
+    if (new URLSearchParams(location.search).get("calendar") === "connected") {
+      history.replaceState({}, "", "/arc-todo/");
+      toast("Google 日历已连接。现在可以在计划页看到空档。 ");
+    }
   } catch (error) {
     if ($("#app").dataset.screen !== "auth") showAuth();
   }

@@ -68,6 +68,23 @@ NODE_ENV=production
 
 完成后，任务创建、改期或换负责人时会同步一个日历事项并发送 ARC TODO 邮件；到期前一天、到期当天与逾期第三天，提醒调度会检查并发送一次邮件，同时保持该任务的日历事项同步。完成任务后不再催办。
 
+### 3. 个人工作安排（Google Calendar 忙闲视图）
+
+这是给**每一位实际使用者**的个人连接，不复用上面的通知身份，也不需要在 Render 新增环境变量。
+
+先在 Google Cloud 的 **ARC TODO** 项目中，打开 **Google Auth Platform → 资料存取权**，为现有的 Family Sign-in OAuth 同意画面加入：
+
+- `https://www.googleapis.com/auth/calendar.events.freebusy`
+- `https://www.googleapis.com/auth/calendar.app.created`
+
+之后使用者在 ARC TODO 的 **计划** 页面点击 **连接 Google 日历**，用自己的 ARC TODO 登录邮箱同意即可。系统会：
+
+- 只从该用户的主日历读取“忙碌时间”，不读取日历事项标题或内容；
+- 在该用户 Google Calendar 内新建一个独立的 **ARC TODO** 日历，仅把 ARC TODO 的个人工作时间写入这里；
+- 在 ARC TODO 或这个独立日历中调整/删除该工作时间，两边会在下次打开计划日或点击刷新时同步。
+
+现有的登录回调地址不变：`ARC_TODO_GOOGLE_REDIRECT_URI`。若 Google OAuth 仍在 Testing，三位家庭成员仍须保留在测试用户清单中。
+
 ## 定时提醒
 
 在 cron-job.org（或等效调度器）创建一条独立任务：

@@ -11,6 +11,12 @@ const {
   reminderCheckpoints,
   dueCheckpointWindow
 } = require("../arc-todo-core");
+const {
+  CALENDAR_SCOPES,
+  encryptRefreshToken,
+  decryptRefreshToken,
+  scheduleFromGoogleEvent
+} = require("../arc-todo-calendar");
 
 test("normalizes email and hashes a session token deterministically", () => {
   assert.equal(normalizeEmail("  Molly@Example.COM "), "molly@example.com");
@@ -62,4 +68,31 @@ test("normalizes legacy local tasks for explicit import", () => {
   assert.equal(imported.legacyAssignee, "son");
   assert.equal(imported.status, "done");
   assert.ok(imported.completedAt);
+});
+
+test("keeps a personal Google Calendar refresh token encrypted at rest", () => {
+  const secret = "test-google-client-secret";
+  const encrypted = encryptRefreshToken("refresh-token-for-test", secret);
+  assert.match(encrypted, /^v1\./);
+  assert.notEqual(encrypted, "refresh-token-for-test");
+  assert.equal(decryptRefreshToken(encrypted, secret), "refresh-token-for-test");
+  assert.throws(() => decryptRefreshToken(encrypted, "another-secret"), /重新连接/);
+});
+
+test("uses only the two minimal personal calendar permissions", () => {
+  assert.ok(CALENDAR_SCOPES.includes("https://www.googleapis.com/auth/calendar.events.freebusy"));
+  assert.ok(CALENDAR_SCOPES.includes("https://www.googleapis.com/auth/calendar.app.created"));
+  assert.equal(CALENDAR_SCOPES.some((scope) => scope === "https://www.googleapis.com/auth/calendar"), false);
+});
+
+test("accepts timed Google calendar events and ignores all-day events", () => {
+  const schedule = scheduleFromGoogleEvent({
+    start: { dateTime: "2026-08-04T09:00:00+08:00" },
+    end: { dateTime: "2026-08-04T10:30:00+08:00" }
+  });
+  assert.deepEqual(schedule, {
+    plannedStartAt: "2026-08-04T01:00:00.000Z",
+    plannedEndAt: "2026-08-04T02:30:00.000Z"
+  });
+  assert.equal(scheduleFromGoogleEvent({ start: { date: "2026-08-04" }, end: { date: "2026-08-05" } }), null);
 });
