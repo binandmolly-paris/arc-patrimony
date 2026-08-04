@@ -13,16 +13,18 @@
   </head>
   <body>
     <div class="app" id="app" data-screen="loading">
-      <main class="loading-screen" id="loadingScreen"><div class="mark mark-large"><i></i></div><p>ARC TODO</p></main>
+      <main class="launch-screen" id="launchScreen" aria-live="polite">
+        <section class="launch-panel loading-screen" id="loadingScreen" aria-hidden="false"><div class="mark mark-large"><i></i></div><p>ARC TODO</p></section>
 
-      <main class="auth-screen" id="authScreen" hidden>
+        <section class="launch-panel auth-screen" id="authScreen" aria-hidden="true">
         <section class="auth-card">
           <div class="mark mark-large"><i></i></div>
           <p class="overline">ARC TODO</p>
           <h1>每一件事，<br><em>都有下一步。</em></h1>
           <p class="auth-copy">为家人而设的私密行动清单。只需使用已获授权的 Google 账户登录。</p>
-          <a class="apple-button" href="/api/arc-todo/auth/google">使用 Google 登录 <span>→</span></a>
+          <a class="apple-button" id="googleLogin" href="/api/arc-todo/auth/google">使用 Google 登录 <span>→</span></a>
           <p class="auth-footnote">LIU BIN 可看全家事项；每位成员只看与自己有关的任务。</p>
+        </section>
         </section>
       </main>
 

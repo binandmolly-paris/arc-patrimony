@@ -46,8 +46,20 @@ async function api(path, options = {}) {
   return body;
 }
 
-function showAuth() { $("#app").dataset.screen = "auth"; $("#loadingScreen").hidden = true; $("#todoShell").hidden = true; $("#authScreen").hidden = false; }
-function showApp() { $("#app").dataset.screen = "app"; $("#loadingScreen").hidden = true; $("#authScreen").hidden = true; $("#todoShell").hidden = false; }
+function showAuth() {
+  $("#app").dataset.screen = "auth";
+  $("#todoShell").hidden = true;
+  $("#launchScreen").hidden = false;
+  $("#launchScreen").classList.add("is-auth");
+  $("#loadingScreen").setAttribute("aria-hidden", "true");
+  $("#authScreen").setAttribute("aria-hidden", "false");
+}
+
+function showApp() {
+  $("#app").dataset.screen = "app";
+  $("#launchScreen").hidden = true;
+  $("#todoShell").hidden = false;
+}
 
 function statusCopy(task) {
   const due = new Date(task.due_at);
@@ -415,6 +427,7 @@ function bindEvents() {
 }
 
 async function boot() {
+  if (location.protocol === "file:") $("#googleLogin").href = "https://arc-patrimony.onrender.com/api/arc-todo/auth/google";
   try {
     const me = await api("/auth/me");
     state.member = me.member;
