@@ -7,6 +7,7 @@ const {
   assertTaskParticipant,
   canFocusTask,
   normalizeTaskInput,
+  normalizeProjectInput,
   normalizePlanInput,
   normalizeLegacyTask
 } = require("./arc-todo-core");
@@ -99,6 +100,17 @@ async function initArcTodoDB(pool) {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+    CREATE TABLE IF NOT EXISTS arc_todo_projects (
+      id SERIAL PRIMARY KEY,
+      title TEXT NOT NULL,
+      notes TEXT NOT NULL DEFAULT '',
+      due_at TIMESTAMPTZ,
+      timezone TEXT NOT NULL DEFAULT 'Asia/Kuala_Lumpur',
+      created_by INTEGER NOT NULL REFERENCES arc_todo_members(id),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      archived_at TIMESTAMPTZ
+    );
     CREATE TABLE IF NOT EXISTS arc_todo_tasks (
       id SERIAL PRIMARY KEY,
       title TEXT NOT NULL,
@@ -109,6 +121,7 @@ async function initArcTodoDB(pool) {
       status TEXT NOT NULL DEFAULT 'assigned' CHECK (status IN ('inbox', 'assigned', 'done')),
       created_by INTEGER NOT NULL REFERENCES arc_todo_members(id),
       assigned_to INTEGER NOT NULL REFERENCES arc_todo_members(id),
+      project_id INTEGER REFERENCES arc_todo_projects(id) ON DELETE SET NULL,
       calendar_event_id TEXT,
       delivery_state TEXT NOT NULL DEFAULT 'pending_connection',
       planned_start_at TIMESTAMPTZ,
@@ -200,6 +213,7 @@ async function initArcTodoDB(pool) {
     ALTER TABLE arc_todo_oauth_states ADD COLUMN IF NOT EXISTS purpose TEXT NOT NULL DEFAULT 'login';
     ALTER TABLE arc_todo_oauth_states ADD COLUMN IF NOT EXISTS member_id INTEGER REFERENCES arc_todo_members(id) ON DELETE CASCADE;
     ALTER TABLE arc_todo_task_plans ADD COLUMN IF NOT EXISTS calendar_event_id TEXT;
+    ALTER TABLE arc_todo_tasks ADD COLUMN IF NOT EXISTS project_id INTEGER REFERENCES arc_todo_projects(id) ON DELETE SET NULL;
     INSERT INTO arc_todo_task_plans (member_id, task_id, planned_start_at, planned_end_at)
       SELECT assigned_to, id, planned_start_at, planned_end_at
         FROM arc_todo_tasks
@@ -207,6 +221,8 @@ async function initArcTodoDB(pool) {
       ON CONFLICT (member_id, task_id) DO NOTHING;
     CREATE INDEX IF NOT EXISTS idx_arc_todo_tasks_due_open ON arc_todo_tasks (due_at) WHERE status <> 'done' AND archived_at IS NULL;
     CREATE INDEX IF NOT EXISTS idx_arc_todo_tasks_assigned ON arc_todo_tasks (assigned_to, due_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_arc_todo_tasks_project ON arc_todo_tasks (project_id, due_at) WHERE archived_at IS NULL;
+    CREATE INDEX IF NOT EXISTS idx_arc_todo_projects_created_by ON arc_todo_projects (created_by, updated_at DESC) WHERE archived_at IS NULL;
     CREATE INDEX IF NOT EXISTS idx_arc_todo_collaborators_member ON arc_todo_collaborators (member_id, task_id);
     CREATE INDEX IF NOT EXISTS idx_arc_todo_activity_task ON arc_todo_activity (task_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_arc_todo_focus_sessions_member ON arc_todo_focus_sessions (member_id, started_at DESC);
@@ -272,6 +288,57 @@ async function ensureMemberExists(pool, memberId) {
   if (!result.rows.length) {
     const error = new Error("负责人不存在或已停用");
     error.code = "VALIDATION";
+    throw error;
+  }
+}
+
+function optionalProjectId(value) {
+  if (value === undefined || value === null || value === "") return null;
+  const projectId = Number(value);
+  if (!Number.isInteger(projectId) || projectId < 1) {
+    const error = new Error("所属项目无效");
+    error.code = "VALIDATION";
+    throw error;
+  }
+  return projectId;
+}
+
+function canViewProject(member, project) {
+  return Boolean(member && project && (member.role === "admin" || project.created_by === member.id));
+}
+
+async function loadProject(pool, projectId) {
+  const result = await pool.query("SELECT * FROM arc_todo_projects WHERE id=$1 AND archived_at IS NULL", [projectId]);
+  return result.rows[0] || null;
+}
+
+async function assertProjectVisible(pool, member, projectId) {
+  const project = await loadProject(pool, projectId);
+  if (!project) {
+    const error = new Error("所属项目不存在");
+    error.code = "VALIDATION";
+    throw error;
+  }
+  if (canViewProject(member, project)) return project;
+  const participation = await pool.query(
+    `SELECT 1
+       FROM arc_todo_tasks t
+      WHERE t.project_id=$1 AND t.archived_at IS NULL
+        AND (t.created_by=$2 OR t.assigned_to=$2
+             OR EXISTS (SELECT 1 FROM arc_todo_collaborators c WHERE c.task_id=t.id AND c.member_id=$2))
+      LIMIT 1`,
+    [projectId, member.id]
+  );
+  if (participation.rows.length) return project;
+  const error = new Error("无权使用这个项目");
+  error.code = "FORBIDDEN";
+  throw error;
+}
+
+function assertProjectManager(member, project) {
+  if (!canViewProject(member, project)) {
+    const error = new Error("只有项目创建者或家庭管理员可以编辑项目");
+    error.code = "FORBIDDEN";
     throw error;
   }
 }
@@ -648,16 +715,78 @@ function registerArcTodoRoutes(app, pool) {
     res.json({ members: result.rows.map((member) => publicMember(member)) });
   });
 
+  app.get("/api/arc-todo/projects", requireMember.bind(null, pool), async (req, res) => {
+    try {
+      const member = req.arcTodoMember;
+      const result = await pool.query(
+        `SELECT p.id, p.title, p.notes, p.due_at, p.timezone, p.created_by, p.created_at, p.updated_at,
+                creator.display_name AS creator_name,
+                COUNT(t.id)::int AS task_count,
+                COUNT(t.id) FILTER (WHERE t.status='done')::int AS completed_count
+           FROM arc_todo_projects p
+           JOIN arc_todo_members creator ON creator.id=p.created_by
+           LEFT JOIN arc_todo_tasks t ON t.project_id=p.id AND t.archived_at IS NULL
+          WHERE p.archived_at IS NULL
+            AND ($1='admin' OR p.created_by=$2 OR EXISTS (
+              SELECT 1 FROM arc_todo_tasks visible
+               WHERE visible.project_id=p.id AND visible.archived_at IS NULL
+                 AND (visible.created_by=$2 OR visible.assigned_to=$2
+                      OR EXISTS (SELECT 1 FROM arc_todo_collaborators c WHERE c.task_id=visible.id AND c.member_id=$2))
+            ))
+          GROUP BY p.id, creator.display_name
+          ORDER BY p.due_at NULLS LAST, p.updated_at DESC, p.id DESC`,
+        [member.role, member.id]
+      );
+      res.json({ projects: result.rows });
+    } catch (error) {
+      res.status(500).json({ error: "无法读取项目。" });
+    }
+  });
+
+  app.post("/api/arc-todo/projects", requireMember.bind(null, pool), async (req, res) => {
+    try {
+      const input = normalizeProjectInput(req.body);
+      const result = await pool.query(
+        `INSERT INTO arc_todo_projects (title, notes, due_at, timezone, created_by)
+         VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+        [input.title, input.notes, input.dueAt, input.timezone, req.arcTodoMember.id]
+      );
+      res.status(201).json({ project: result.rows[0] });
+    } catch (error) {
+      res.status(error.code === "VALIDATION" ? 400 : 500).json({ error: error.message || "创建项目失败。" });
+    }
+  });
+
+  app.patch("/api/arc-todo/projects/:id", requireMember.bind(null, pool), async (req, res) => {
+    try {
+      const project = await loadProject(pool, Number(req.params.id));
+      if (!project) return res.status(404).json({ error: "项目不存在。" });
+      assertProjectManager(req.arcTodoMember, project);
+      const input = normalizeProjectInput({ ...project, ...req.body, dueAt: req.body.dueAt !== undefined ? req.body.dueAt : project.due_at });
+      const result = await pool.query(
+        `UPDATE arc_todo_projects
+            SET title=$1, notes=$2, due_at=$3, timezone=$4, updated_at=NOW()
+          WHERE id=$5 RETURNING *`,
+        [input.title, input.notes, input.dueAt, input.timezone, project.id]
+      );
+      res.json({ project: result.rows[0] });
+    } catch (error) {
+      const status = error.code === "FORBIDDEN" ? 403 : (error.code === "VALIDATION" ? 400 : 500);
+      res.status(status).json({ error: error.message || "更新项目失败。" });
+    }
+  });
+
   app.get("/api/arc-todo/tasks", requireMember.bind(null, pool), async (req, res) => {
     const member = req.arcTodoMember;
     const result = await pool.query(
-      `SELECT t.id, t.title, t.notes, t.due_at, t.timezone, t.priority, t.status, t.created_by, t.assigned_to,
+      `SELECT t.id, t.title, t.notes, t.due_at, t.timezone, t.priority, t.status, t.created_by, t.assigned_to, t.project_id,
               t.calendar_event_id, t.delivery_state, t.completed_at, t.created_at, t.updated_at, t.archived_at,
               p.planned_start_at AS personal_planned_start_at, p.planned_end_at AS personal_planned_end_at,
-              creator.display_name AS creator_name, assignee.display_name AS assignee_name
+              creator.display_name AS creator_name, assignee.display_name AS assignee_name, project.title AS project_title
          FROM arc_todo_tasks t
          JOIN arc_todo_members creator ON creator.id=t.created_by
          JOIN arc_todo_members assignee ON assignee.id=t.assigned_to
+         LEFT JOIN arc_todo_projects project ON project.id=t.project_id AND project.archived_at IS NULL
          LEFT JOIN arc_todo_task_plans p ON p.task_id=t.id AND p.member_id=$2
         WHERE t.archived_at IS NULL
           AND ($1='admin' OR t.created_by=$2 OR t.assigned_to=$2
@@ -746,18 +875,20 @@ function registerArcTodoRoutes(app, pool) {
       const input = normalizeTaskInput(req.body);
       const assignedTo = Number(req.body.assignedTo || req.arcTodoMember.id);
       const collaboratorId = req.body.collaboratorId ? Number(req.body.collaboratorId) : null;
+      const projectId = optionalProjectId(req.body.projectId);
       await ensureMemberExists(pool, assignedTo);
       if (collaboratorId) await ensureMemberExists(pool, collaboratorId);
+      if (projectId) await assertProjectVisible(pool, req.arcTodoMember, projectId);
       const result = await pool.query(
-        `INSERT INTO arc_todo_tasks (title, notes, due_at, timezone, priority, status, created_by, assigned_to, completed_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
-        [input.title, input.notes, input.dueAt, input.timezone, input.priority, input.status, req.arcTodoMember.id, assignedTo, input.status === "done" ? new Date() : null]
+        `INSERT INTO arc_todo_tasks (title, notes, due_at, timezone, priority, status, created_by, assigned_to, project_id, completed_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+        [input.title, input.notes, input.dueAt, input.timezone, input.priority, input.status, req.arcTodoMember.id, assignedTo, projectId, input.status === "done" ? new Date() : null]
       );
       const task = result.rows[0];
       if (collaboratorId && collaboratorId !== assignedTo && collaboratorId !== req.arcTodoMember.id) {
         await pool.query("INSERT INTO arc_todo_collaborators (task_id, member_id) VALUES ($1,$2) ON CONFLICT DO NOTHING", [task.id, collaboratorId]);
       }
-      await writeActivity(pool, task.id, req.arcTodoMember.id, "created", { assignedTo });
+      await writeActivity(pool, task.id, req.arcTodoMember.id, "created", { assignedTo, projectId });
       await deliverTask(pool, task.id, "assignment").catch((error) => console.error("ARC TODO assignment delivery failed:", error.message));
       res.status(201).json({ task: await taskView(pool, task) });
     } catch (error) {
@@ -773,17 +904,19 @@ function registerArcTodoRoutes(app, pool) {
       const input = normalizeTaskInput({ ...loaded.task, ...req.body, dueAt: req.body.dueAt || loaded.task.due_at });
       const assignedTo = req.body.assignedTo ? Number(req.body.assignedTo) : loaded.task.assigned_to;
       const collaboratorId = req.body.collaboratorId === null ? null : (req.body.collaboratorId ? Number(req.body.collaboratorId) : undefined);
+      const projectId = req.body.projectId === undefined ? loaded.task.project_id : optionalProjectId(req.body.projectId);
       const nextCollaboratorIds = collaboratorId && collaboratorId !== assignedTo && collaboratorId !== req.arcTodoMember.id ? [collaboratorId] : [];
       const collaboratorChanged = collaboratorId !== undefined && (loaded.collaboratorIds.length !== nextCollaboratorIds.length || loaded.collaboratorIds.some((id) => !nextCollaboratorIds.includes(id)));
       await ensureMemberExists(pool, assignedTo);
+      if (projectId) await assertProjectVisible(pool, req.arcTodoMember, projectId);
       const result = await pool.query(
         `UPDATE arc_todo_tasks
-            SET title=$1, notes=$2, due_at=$3, timezone=$4, priority=$5, status=$6, assigned_to=$7,
+            SET title=$1, notes=$2, due_at=$3, timezone=$4, priority=$5, status=$6, assigned_to=$7, project_id=$8,
                 completed_at=CASE WHEN $6='done' THEN COALESCE(completed_at, NOW()) ELSE NULL END,
                 delivery_state=CASE WHEN due_at <> $3::timestamptz OR assigned_to <> $7 THEN 'pending_connection' ELSE delivery_state END,
                 updated_at=NOW()
-          WHERE id=$8 RETURNING *`,
-        [input.title, input.notes, input.dueAt, input.timezone, input.priority, input.status, assignedTo, loaded.task.id]
+          WHERE id=$9 RETURNING *`,
+        [input.title, input.notes, input.dueAt, input.timezone, input.priority, input.status, assignedTo, projectId, loaded.task.id]
       );
       if (input.status === "done") await endFocusForTask(pool, loaded.task.id, "completed");
       if (collaboratorId !== undefined) {
@@ -794,7 +927,7 @@ function registerArcTodoRoutes(app, pool) {
         }
       }
       if (input.status !== "done" && (assignedTo !== loaded.task.assigned_to || collaboratorChanged)) await endFocusForTask(pool, loaded.task.id, "cleared");
-      await writeActivity(pool, loaded.task.id, req.arcTodoMember.id, "updated", { assignedTo });
+      await writeActivity(pool, loaded.task.id, req.arcTodoMember.id, "updated", { assignedTo, projectId });
       await deliverTask(pool, loaded.task.id, "updated").catch((error) => console.error("ARC TODO update delivery failed:", error.message));
       res.json({ task: await taskView(pool, result.rows[0]) });
     } catch (error) {

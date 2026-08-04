@@ -89,6 +89,22 @@ function normalizeTaskInput(input, { fallbackDueAt = null } = {}) {
   };
 }
 
+function normalizeProjectInput(input) {
+  const title = clampText(input?.title, 160);
+  if (!title) {
+    const error = new Error("项目名称不能为空");
+    error.code = "VALIDATION";
+    throw error;
+  }
+  const dueAt = optionalDate(input?.dueAt ?? input?.due_at, "总截止日期");
+  return {
+    title,
+    notes: clampText(input?.notes, 4000),
+    dueAt: dueAt?.toISOString() || null,
+    timezone: clampText(input?.timezone, 64) || "Asia/Kuala_Lumpur"
+  };
+}
+
 function reminderCheckpoints(dueAt) {
   const due = parseDate(dueAt);
   if (!due) throw new Error("Invalid due date");
@@ -129,6 +145,7 @@ module.exports = {
   assertTaskParticipant,
   canFocusTask,
   normalizeTaskInput,
+  normalizeProjectInput,
   normalizePlanInput,
   normalizeLegacyTask,
   reminderCheckpoints,

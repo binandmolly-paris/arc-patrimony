@@ -1,6 +1,7 @@
 const state = {
   member: null,
   members: [],
+  projects: [],
   tasks: [],
   focus: null,
   focusCandidates: [],
@@ -9,6 +10,7 @@ const state = {
   status: "open",
   search: "",
   selectedId: null,
+  selectedProjectId: null,
   plannerDate: asDateInput(new Date()),
   planningTaskId: null,
   calendar: { configured: false, connected: false, busy: [], loading: false, changed: false, syncError: null }
@@ -118,6 +120,7 @@ function screenTitle() {
   return {
     today: ["今天", "先把重要的事情做好。"],
     planner: ["计划", "先安排时间，再开始行动。"],
+    projects: ["项目", "把大事拆成可以完成的小事。"],
     inbox: ["收件箱", "还没有被安排的念头。"],
     upcoming: ["即将到期", "未来七天需要推进的事。"],
     waiting: ["等待他人", "你已经交代，等待回应。"],
@@ -128,9 +131,10 @@ function screenTitle() {
 function taskRow(task) {
   const due = statusCopy(task);
   const assignee = memberFor(task.assigned_to) || { displayName: task.assignee_name || "—", role: "member" };
+  const project = task.project_title ? ` · ${escapeHtml(task.project_title)}` : "";
   return `<article class="task-row ${isDone(task) ? "is-done" : ""}" data-task-id="${task.id}">
     <button class="check-button" type="button" data-action="complete" aria-label="完成 ${escapeHtml(task.title)}">✓</button>
-    <button class="task-title-button" type="button" data-action="detail"><span class="task-title">${escapeHtml(task.title)}</span><span class="task-meta">${escapeHtml(task.creator_name)} 创建${task.priority === "high" ? " · 优先" : ""}</span></button>
+    <button class="task-title-button" type="button" data-action="detail"><span class="task-title">${escapeHtml(task.title)}</span><span class="task-meta">${escapeHtml(task.creator_name)} 创建${project}${task.priority === "high" ? " · 优先" : ""}</span></button>
     <div class="assignee"><span class="assignee-dot" data-role="${assignee.role}">${initials(assignee.displayName)}</span><span>${escapeHtml(assignee.displayName)}</span></div>
     <div class="due ${due.className}">${due.label}</div>
     <button class="more-button" type="button" data-action="detail" aria-label="查看详情">···</button>
@@ -267,10 +271,37 @@ function renderPlanner() {
   </section>`;
 }
 
+function projectDueCopy(project) {
+  return project.due_at ? `总截止：${dateFormatter.format(new Date(project.due_at))}` : "未设总截止日";
+}
+
+function projectProgress(project) {
+  const total = Number(project.task_count || 0);
+  const completed = Number(project.completed_count || 0);
+  return { total, completed, percentage: total ? Math.round(completed / total * 100) : 0 };
+}
+
+function projectCard(project) {
+  const progress = projectProgress(project);
+  const status = progress.total && progress.total === progress.completed ? "已完成" : `${progress.completed} / ${progress.total} 已完成`;
+  return `<button class="project-card" data-project-id="${project.id}" type="button">
+    <div><p class="eyebrow">PROJECT</p><strong>${escapeHtml(project.title)}</strong><small>${escapeHtml(projectDueCopy(project))}</small></div>
+    <div class="project-card-progress"><b>${status}</b><span><i style="width:${progress.percentage}%"></i></span></div>
+  </button>`;
+}
+
+function renderProjects() {
+  const projects = state.projects || [];
+  $("#projectsView").innerHTML = projects.length
+    ? `<div class="project-list">${projects.map(projectCard).join("")}</div>`
+    : `<div class="empty"><strong>先建立一个项目。</strong>例如“更新跨机构资料”，然后把清单、材料与各项办理拆成子任务。</div>`;
+}
+
 function render() {
   if (!state.member) return;
   const [title, subtitle] = screenTitle();
   const isPlanner = state.filter === "planner";
+  const isProjects = state.filter === "projects";
   const tasks = visibleTasks();
   $("#todayLabel").textContent = fullDateFormatter.format(new Date());
   $("#personName").textContent = state.member.displayName;
@@ -282,13 +313,16 @@ function render() {
   [["today", "countToday"], ["inbox", "countInbox"], ["upcoming", "countUpcoming"], ["waiting", "countWaiting"], ["completed", "countCompleted"]].forEach(([filter, id]) => $("#" + id).textContent = count(filter));
   $$(".nav-item").forEach((button) => button.classList.toggle("is-active", button.dataset.filter === state.filter));
   $$("#statusSegments button").forEach((button) => button.classList.toggle("is-selected", button.dataset.status === state.status));
-  $("#quickAddForm").hidden = isPlanner;
-  $(".task-toolbar").hidden = isPlanner;
-  $("#taskList").hidden = isPlanner;
+  $("#quickAddForm").hidden = isPlanner || isProjects;
+  $(".task-toolbar").hidden = isPlanner || isProjects;
+  $("#taskList").hidden = isPlanner || isProjects;
+  $("#focusCard").hidden = isProjects;
   $("#plannerView").hidden = !isPlanner;
+  $("#projectsView").hidden = !isProjects;
   $("#taskList").innerHTML = tasks.length ? tasks.map(taskRow).join("") : `<div class="empty"><strong>这里已经很清爽。</strong>${state.status === "done" ? "还没有完成事项。" : "添加一件事，让 ARC TODO 帮你记住。"}</div>`;
   renderFocusCard();
   if (isPlanner) renderPlanner();
+  if (isProjects) renderProjects();
 }
 
 function applyFocus(payload) {
@@ -298,8 +332,9 @@ function applyFocus(payload) {
 }
 
 async function loadData({ refreshPlanner = true } = {}) {
-  const [members, tasks, focus, calendar] = await Promise.all([api("/members"), api("/tasks"), api("/focus"), api("/calendar/status")]);
+  const [members, projects, tasks, focus, calendar] = await Promise.all([api("/members"), api("/projects"), api("/tasks"), api("/focus"), api("/calendar/status")]);
   state.members = members.members;
+  state.projects = projects.projects;
   state.tasks = tasks.tasks;
   applyFocus(focus);
   state.calendar = { ...state.calendar, ...calendar, busy: calendar.connected ? state.calendar.busy || [] : [], loading: false };
@@ -324,13 +359,19 @@ function memberOptions(selected, includeNone = false) {
   return `${includeNone ? '<option value="">无</option>' : ""}${state.members.map((member) => `<option value="${member.id}" ${Number(selected) === member.id ? "selected" : ""}>${escapeHtml(member.displayName)}</option>`).join("")}`;
 }
 
-function openTaskDialog(task = null) {
+function projectOptions(selected) {
+  return `<option value="">独立任务</option>${state.projects.map((project) => `<option value="${project.id}" ${Number(selected) === project.id ? "selected" : ""}>${escapeHtml(project.title)}</option>`).join("")}`;
+}
+
+function openTaskDialog(task = null, { projectId = null } = {}) {
+  const selectedProject = task?.project_id ?? projectId;
   $("#taskId").value = task?.id || "";
-  $("#taskDialogKicker").textContent = task ? "EDIT TASK" : "NEW TASK";
-  $("#taskDialogTitle").textContent = task ? "编辑任务" : "添加一件事";
+  $("#taskDialogKicker").textContent = task ? "EDIT TASK" : (selectedProject ? "NEW SUBTASK" : "NEW TASK");
+  $("#taskDialogTitle").textContent = task ? "编辑任务" : (selectedProject ? "添加子任务" : "添加一件事");
   $("#taskTitle").value = task?.title || "";
   $("#taskAssignee").innerHTML = memberOptions(task?.assigned_to || state.member.id);
   $("#taskCollaborator").innerHTML = memberOptions(task?.collaborators?.[0]?.id, true);
+  $("#taskProject").innerHTML = projectOptions(selectedProject);
   $("#taskDate").value = task ? asDateInput(task.due_at) : defaultTaskDate();
   $("#taskPriority").value = task?.priority || "normal";
   $("#taskNotes").value = task?.notes || "";
@@ -347,6 +388,7 @@ async function saveTask(event) {
     title: $("#taskTitle").value,
     assignedTo: Number($("#taskAssignee").value),
     collaboratorId: $("#taskCollaborator").value ? Number($("#taskCollaborator").value) : null,
+    projectId: $("#taskProject").value ? Number($("#taskProject").value) : null,
     dueAt: dueAtForDate($("#taskDate").value),
     priority: $("#taskPriority").value,
     notes: $("#taskNotes").value
@@ -357,6 +399,58 @@ async function saveTask(event) {
     await loadData();
     toast(id ? "任务已更新。" : "任务已添加。日历和邮件将在服务连接后同步。");
   } catch (error) { toast(error.message); }
+}
+
+function projectFor(id) { return state.projects.find((project) => project.id === Number(id)); }
+function canManageProject(project) { return Boolean(project) && (state.member?.role === "admin" || project.created_by === state.member?.id); }
+
+function openProjectDialog(project = null) {
+  $("#projectId").value = project?.id || "";
+  $("#projectDialogKicker").textContent = project ? "EDIT PROJECT" : "NEW PROJECT";
+  $("#projectDialogTitle").textContent = project ? "编辑项目" : "新建项目";
+  $("#projectTitle").value = project?.title || "";
+  $("#projectDate").value = project?.due_at ? asDateInput(project.due_at) : "";
+  $("#projectNotes").value = project?.notes || "";
+  $("#projectDialog").showModal();
+  setTimeout(() => $("#projectTitle").focus(), 50);
+}
+
+async function saveProject(event) {
+  event.preventDefault();
+  const id = $("#projectId").value;
+  const dueDate = $("#projectDate").value;
+  const payload = {
+    title: $("#projectTitle").value,
+    dueAt: dueDate ? dueAtForDate(dueDate) : null,
+    notes: $("#projectNotes").value
+  };
+  try {
+    const result = await api(id ? `/projects/${id}` : "/projects", { method: id ? "PATCH" : "POST", body: JSON.stringify(payload) });
+    closeDialog("#projectDialog");
+    await loadData();
+    if (!id && result.project?.id) openProjectDetail(result.project.id);
+    toast(id ? "项目已更新。" : "项目已建立。现在可以添加子任务。 ");
+  } catch (error) { toast(error.message); }
+}
+
+function projectSubtaskRow(task) {
+  const due = statusCopy(task);
+  return `<button class="project-subtask ${isDone(task) ? "is-done" : ""}" data-project-task-id="${task.id}" type="button"><span>${isDone(task) ? "✓" : "○"}</span><div><strong>${escapeHtml(task.title)}</strong><small>${escapeHtml(task.assignee_name)} · ${escapeHtml(due.label)}</small></div><b>›</b></button>`;
+}
+
+function openProjectDetail(projectId) {
+  const project = projectFor(projectId);
+  if (!project) return;
+  state.selectedProjectId = project.id;
+  const progress = projectProgress(project);
+  const tasks = state.tasks.filter((task) => Number(task.project_id) === project.id).sort((left, right) => Number(isDone(left)) - Number(isDone(right)) || new Date(left.due_at) - new Date(right.due_at));
+  $("#projectDetailState").textContent = progress.total && progress.total === progress.completed ? "PROJECT · COMPLETE" : "PROJECT";
+  $("#projectDetailTitle").textContent = project.title;
+  $("#projectDetailPills").innerHTML = [`创建：${project.creator_name}`, projectDueCopy(project), `${progress.completed} / ${progress.total} 已完成`].map((item) => `<span class="pill">${escapeHtml(item)}</span>`).join("");
+  $("#projectDetailNotes").textContent = project.notes || "还没有说明。先把它拆成下一步可执行的子任务。";
+  $("#projectSubtaskList").innerHTML = tasks.length ? tasks.map(projectSubtaskRow).join("") : `<p class="project-subtask-empty">还没有子任务。先列出清单或第一家需要办理的机构。</p>`;
+  $("#projectDetailActions").innerHTML = `<button class="secondary-action" data-project-action="add-task" type="button">添加子任务</button>${canManageProject(project) ? '<button class="secondary-action" data-project-action="edit" type="button">编辑项目</button>' : ""}`;
+  $("#projectDetailDialog").showModal();
 }
 
 async function quickAdd(event) {
@@ -392,6 +486,7 @@ function openDetail(task) {
   $("#detailState").textContent = isDone(task) ? "COMPLETED" : (isOverdue(task) ? "NEEDS ATTENTION" : "TASK");
   $("#detailTitle").textContent = task.title;
   const pills = [`创建：${task.creator_name}`, `负责：${task.assignee_name}`, `日期：${dateFormatter.format(new Date(task.due_at))}`, task.priority === "high" ? "优先" : "正常"];
+  if (task.project_title) pills.unshift(`项目：${task.project_title}`);
   if (personalPlanStart(task)) pills.push(`我的安排：${timeRange(task)}`);
   if (task.collaborators?.length) pills.push(`共同：${task.collaborators.map((member) => member.displayName).join("、")}`);
   $("#detailPills").innerHTML = pills.map((item) => `<span class="pill">${escapeHtml(item)}</span>`).join("");
@@ -521,14 +616,20 @@ function bindEvents() {
   $("#statusSegments").addEventListener("click", (event) => { const button = event.target.closest("[data-status]"); if (!button) return; state.status = button.dataset.status; render(); });
   $("#searchInput").addEventListener("input", (event) => { state.search = event.target.value; render(); });
   $("#openTaskDialog").addEventListener("click", () => openTaskDialog());
+  $("#openProjectDialog").addEventListener("click", () => openProjectDialog());
   $("#quickAddForm").addEventListener("submit", quickAdd);
   $("#taskForm").addEventListener("submit", saveTask);
+  $("#projectForm").addEventListener("submit", saveProject);
   $("#taskList").addEventListener("click", (event) => {
     const row = event.target.closest("[data-task-id]");
     if (!row) return;
     const task = state.tasks.find((item) => item.id === Number(row.dataset.taskId));
     if (!task) return;
     if (event.target.closest("[data-action]")?.dataset.action === "complete") completeTask(task.id); else openDetail(task);
+  });
+  $("#projectsView").addEventListener("click", (event) => {
+    const projectId = Number(event.target.closest("[data-project-id]")?.dataset.projectId);
+    if (projectId) openProjectDetail(projectId);
   });
   $("#plannerView").addEventListener("click", async (event) => {
     const action = event.target.closest("[data-plan-action]")?.dataset.planAction;
@@ -582,7 +683,21 @@ function bindEvents() {
     if (action === "clear-focus") { closeDialog("#detailDialog"); clearFocus(); }
     if (action === "plan") { closeDialog("#detailDialog"); openPlanDialog(task); }
   });
+  $("#projectDetailActions").addEventListener("click", (event) => {
+    const action = event.target.closest("[data-project-action]")?.dataset.projectAction;
+    const project = projectFor(state.selectedProjectId);
+    if (!project || !action) return;
+    if (action === "add-task") { closeDialog("#projectDetailDialog"); openTaskDialog(null, { projectId: project.id }); }
+    if (action === "edit") { closeDialog("#projectDetailDialog"); openProjectDialog(project); }
+  });
+  $("#projectSubtaskList").addEventListener("click", (event) => {
+    const taskId = Number(event.target.closest("[data-project-task-id]")?.dataset.projectTaskId);
+    const task = state.tasks.find((item) => item.id === taskId);
+    if (task) { closeDialog("#projectDetailDialog"); openDetail(task); }
+  });
   $$("#closeTaskDialog,#cancelTaskDialog").forEach((button) => button.addEventListener("click", () => closeDialog("#taskDialog")));
+  $$("#closeProjectDialog,#cancelProjectDialog").forEach((button) => button.addEventListener("click", () => closeDialog("#projectDialog")));
+  $("#closeProjectDetailDialog").addEventListener("click", () => closeDialog("#projectDetailDialog"));
   $("#planForm").addEventListener("submit", savePlan);
   $$("#closePlanDialog,#cancelPlanDialog").forEach((button) => button.addEventListener("click", () => closeDialog("#planDialog")));
   $("#clearPlanButton").addEventListener("click", clearPlan);

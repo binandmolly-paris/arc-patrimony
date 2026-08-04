@@ -40,6 +40,7 @@
             <nav class="nav-list" id="navList">
               <button class="nav-item is-active" data-filter="today" type="button"><span class="nav-icon">◷</span>今天 <b id="countToday">0</b></button>
               <button class="nav-item" data-filter="planner" type="button"><span class="nav-icon">⌁</span>计划</button>
+              <button class="nav-item" data-filter="projects" type="button"><span class="nav-icon">▤</span>项目</button>
               <button class="nav-item" data-filter="inbox" type="button"><span class="nav-icon">□</span>收件箱 <b id="countInbox">0</b></button>
               <button class="nav-item" data-filter="upcoming" type="button"><span class="nav-icon">↗</span>即将到期 <b id="countUpcoming">0</b></button>
               <button class="nav-item" data-filter="waiting" type="button"><span class="nav-icon">→</span>等待他人 <b id="countWaiting">0</b></button>
@@ -49,12 +50,13 @@
           </aside>
 
           <section class="content" id="today">
-            <div class="content-heading"><div><p class="eyebrow" id="contextLabel">TODAY</p><h1 id="listTitle">今天</h1><p class="subheading" id="listSubtitle"></p></div><button class="round-add" id="openTaskDialog" type="button" aria-label="添加任务">＋</button></div>
+            <div class="content-heading"><div><p class="eyebrow" id="contextLabel">TODAY</p><h1 id="listTitle">今天</h1><p class="subheading" id="listSubtitle"></p></div><div class="heading-actions"><button class="new-project-button" id="openProjectDialog" type="button">＋ 项目</button><button class="round-add" id="openTaskDialog" type="button" aria-label="添加任务">＋</button></div></div>
             <section class="focus-card" id="focusCard" aria-live="polite"></section>
             <form class="quick-add" id="quickAddForm"><input id="quickTitle" autocomplete="off" placeholder="添加一件事…" required /><button type="submit">添加</button></form>
             <div class="task-toolbar"><div class="segmented" id="statusSegments"><button class="is-selected" data-status="open" type="button">待处理</button><button data-status="done" type="button">已完成</button></div><label class="search"><span>⌕</span><input id="searchInput" type="search" placeholder="搜索" /></label></div>
             <section class="task-list" id="taskList" aria-live="polite"></section>
             <section class="planner-view" id="plannerView" aria-live="polite" hidden></section>
+            <section class="projects-view" id="projectsView" aria-live="polite" hidden></section>
           </section>
         </div>
       </main>
@@ -66,11 +68,28 @@
         <input id="taskId" type="hidden" />
         <label class="input-field full"><span>事项</span><input id="taskTitle" maxlength="160" placeholder="清楚地写下要完成的事" required /></label>
         <div class="input-grid"><label class="input-field"><span>负责人</span><select id="taskAssignee"></select></label><label class="input-field"><span>共同参与</span><select id="taskCollaborator"></select></label></div>
+        <label class="input-field full"><span>所属项目 <em>可选</em></span><select id="taskProject"></select></label>
         <div class="input-grid"><label class="input-field"><span>截止日期</span><input id="taskDate" type="date" required /></label><label class="input-field"><span>优先级</span><select id="taskPriority"><option value="high">优先</option><option value="normal" selected>正常</option><option value="low">不急</option></select></label></div>
         <label class="input-field full"><span>备注</span><textarea id="taskNotes" rows="3" placeholder="链接、材料或完成标准（可选）"></textarea></label>
         <aside class="notice"><span>◌</span><p><strong>提醒</strong>截止前 1 天、截止当天、逾期第 3 天；App、日历和邮件同步。</p></aside>
         <footer class="dialog-actions"><button class="secondary-action" id="cancelTaskDialog" type="button">取消</button><button class="primary-action" type="submit">完成</button></footer>
       </form>
+    </dialog>
+
+    <dialog class="project-dialog" id="projectDialog" aria-labelledby="projectDialogTitle">
+      <form class="dialog-panel" id="projectForm">
+        <header class="dialog-header"><div><p class="eyebrow" id="projectDialogKicker">NEW PROJECT</p><h2 id="projectDialogTitle">新建项目</h2></div><button class="close-button" id="closeProjectDialog" type="button" aria-label="关闭">×</button></header>
+        <input id="projectId" type="hidden" />
+        <label class="input-field full"><span>项目目标</span><input id="projectTitle" maxlength="160" placeholder="例如：更新跨机构资料" required /></label>
+        <label class="input-field full"><span>总截止日期 <em>可选</em></span><input id="projectDate" type="date" /></label>
+        <label class="input-field full"><span>说明</span><textarea id="projectNotes" rows="3" placeholder="目标、清单或完成标准（可选）"></textarea></label>
+        <aside class="notice"><span>◌</span><p><strong>项目不占用时间</strong>项目只用来组织工作；添加子任务后，才为每一项分派负责人、截止日和具体时间。</p></aside>
+        <footer class="dialog-actions"><button class="secondary-action" id="cancelProjectDialog" type="button">取消</button><button class="primary-action" type="submit">保存项目</button></footer>
+      </form>
+    </dialog>
+
+    <dialog class="project-detail-dialog" id="projectDetailDialog" aria-labelledby="projectDetailTitle">
+      <article class="dialog-panel detail-panel"><header class="dialog-header"><div><p class="eyebrow" id="projectDetailState">PROJECT</p><h2 id="projectDetailTitle"></h2></div><button class="close-button" id="closeProjectDetailDialog" type="button" aria-label="关闭">×</button></header><div class="detail-pills" id="projectDetailPills"></div><p class="detail-notes" id="projectDetailNotes"></p><section class="project-subtasks"><p class="eyebrow">SUBTASKS</p><div id="projectSubtaskList"></div></section><footer class="dialog-actions" id="projectDetailActions"></footer></article>
     </dialog>
 
     <dialog class="detail-dialog" id="detailDialog" aria-labelledby="detailTitle">

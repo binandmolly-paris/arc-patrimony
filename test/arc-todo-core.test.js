@@ -6,6 +6,7 @@ const {
   canViewTask,
   canFocusTask,
   normalizeTaskInput,
+  normalizeProjectInput,
   normalizePlanInput,
   normalizeLegacyTask,
   reminderCheckpoints,
@@ -43,6 +44,19 @@ test("normalizes task input separately from a member's personal plan", () => {
   assert.throws(() => normalizePlanInput({ startAt: "2026-08-03T10:00:00+08:00" }), /同时填写/);
   assert.throws(() => normalizePlanInput({ startAt: "2026-08-03T11:00:00+08:00", endAt: "2026-08-03T10:00:00+08:00" }), /晚于/);
   assert.throws(() => normalizeTaskInput({ title: "", dueAt: "2026-08-03" }), /不能为空/);
+});
+
+test("normalizes a project without turning it into a scheduled task", () => {
+  const project = normalizeProjectInput({
+    title: "  更新跨机构资料  ",
+    notes: "逐家办理",
+    dueAt: "2026-12-31T18:00:00+08:00"
+  });
+  assert.equal(project.title, "更新跨机构资料");
+  assert.equal(project.notes, "逐家办理");
+  assert.equal(project.dueAt, "2026-12-31T10:00:00.000Z");
+  assert.throws(() => normalizeProjectInput({ title: "" }), /项目名称不能为空/);
+  assert.throws(() => normalizeProjectInput({ title: "资料整理", dueAt: "not-a-date" }), /总截止日期无效/);
 });
 
 test("only an open assignee or collaborator can make a task their current focus", () => {
