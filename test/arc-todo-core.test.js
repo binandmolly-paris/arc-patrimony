@@ -6,6 +6,7 @@ const {
   canViewTask,
   canFocusTask,
   normalizeTaskInput,
+  normalizePlanInput,
   normalizeLegacyTask,
   reminderCheckpoints,
   dueCheckpointWindow
@@ -25,15 +26,16 @@ test("admin sees all tasks; a member sees only participant tasks", () => {
   assert.equal(canViewTask({ id: 4, role: "member" }, task, [3]), false);
 });
 
-test("normalizes task input and rejects an empty title", () => {
-  const task = normalizeTaskInput({ title: "  预约牙医  ", dueAt: "2026-08-03T10:00:00+08:00", plannedStartAt: "2026-08-03T09:00:00+08:00", plannedEndAt: "2026-08-03T10:00:00+08:00", priority: "unknown" });
+test("normalizes task input separately from a member's personal plan", () => {
+  const task = normalizeTaskInput({ title: "  预约牙医  ", dueAt: "2026-08-03T10:00:00+08:00", priority: "unknown" });
   assert.equal(task.title, "预约牙医");
   assert.equal(task.priority, "normal");
   assert.equal(task.status, "assigned");
-  assert.equal(task.plannedStartAt, "2026-08-03T01:00:00.000Z");
-  const clearedSchedule = normalizeTaskInput({ title: "清除时段", dueAt: "2026-08-03T10:00:00+08:00", planned_start_at: "2026-08-03T09:00:00+08:00", plannedStartAt: null, plannedEndAt: null });
-  assert.equal(clearedSchedule.plannedStartAt, null);
-  assert.throws(() => normalizeTaskInput({ title: "时段不完整", dueAt: "2026-08-03", plannedStartAt: "2026-08-03T10:00:00+08:00" }), /同时填写/);
+  assert.equal(Object.hasOwn(task, "plannedStartAt"), false);
+  const plan = normalizePlanInput({ startAt: "2026-08-03T09:00:00+08:00", endAt: "2026-08-03T10:00:00+08:00" });
+  assert.equal(plan.plannedStartAt, "2026-08-03T01:00:00.000Z");
+  assert.throws(() => normalizePlanInput({ startAt: "2026-08-03T10:00:00+08:00" }), /同时填写/);
+  assert.throws(() => normalizePlanInput({ startAt: "2026-08-03T11:00:00+08:00", endAt: "2026-08-03T10:00:00+08:00" }), /晚于/);
   assert.throws(() => normalizeTaskInput({ title: "", dueAt: "2026-08-03" }), /不能为空/);
 });
 

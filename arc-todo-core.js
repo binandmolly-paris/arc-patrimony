@@ -39,6 +39,31 @@ function parseDate(value, fallback = null) {
   return Number.isNaN(date.getTime()) ? fallback : date;
 }
 
+function optionalDate(value, label) {
+  if (value === undefined || value === null || value === "") return null;
+  const date = parseDate(value);
+  if (date) return date;
+  const error = new Error(`${label}无效`);
+  error.code = "VALIDATION";
+  throw error;
+}
+
+function normalizePlanInput(input) {
+  const start = optionalDate(input?.startAt ?? input?.plannedStartAt ?? input?.planned_start_at, "开始时间");
+  const end = optionalDate(input?.endAt ?? input?.plannedEndAt ?? input?.planned_end_at, "计划完成时间");
+  if (Boolean(start) !== Boolean(end)) {
+    const error = new Error("请同时填写开始时间和计划完成时间");
+    error.code = "VALIDATION";
+    throw error;
+  }
+  if (start && end && end <= start) {
+    const error = new Error("计划完成时间需要晚于开始时间");
+    error.code = "VALIDATION";
+    throw error;
+  }
+  return { plannedStartAt: start?.toISOString() || null, plannedEndAt: end?.toISOString() || null };
+}
+
 function normalizeTaskInput(input, { fallbackDueAt = null } = {}) {
   const title = clampText(input?.title, 160);
   if (!title) {
@@ -54,35 +79,13 @@ function normalizeTaskInput(input, { fallbackDueAt = null } = {}) {
   }
   const rawStatus = String(input?.status || "assigned");
   const rawPriority = String(input?.priority || "normal");
-  const optionalDate = (value, label) => {
-    if (value === undefined || value === null || value === "") return null;
-    const date = parseDate(value);
-    if (date) return date;
-    const error = new Error(`${label}无效`);
-    error.code = "VALIDATION";
-    throw error;
-  };
-  const plannedStart = optionalDate(Object.prototype.hasOwnProperty.call(input || {}, "plannedStartAt") ? input.plannedStartAt : input?.planned_start_at, "开始时间");
-  const plannedEnd = optionalDate(Object.prototype.hasOwnProperty.call(input || {}, "plannedEndAt") ? input.plannedEndAt : input?.planned_end_at, "结束时间");
-  if (Boolean(plannedStart) !== Boolean(plannedEnd)) {
-    const error = new Error("安排时段请同时填写开始与结束时间");
-    error.code = "VALIDATION";
-    throw error;
-  }
-  if (plannedStart && plannedEnd && plannedEnd <= plannedStart) {
-    const error = new Error("结束时间需要晚于开始时间");
-    error.code = "VALIDATION";
-    throw error;
-  }
   return {
     title,
     notes: clampText(input?.notes, 4000),
     dueAt: dueAt.toISOString(),
     timezone: clampText(input?.timezone, 64) || "Asia/Kuala_Lumpur",
     priority: VALID_PRIORITIES.has(rawPriority) ? rawPriority : "normal",
-    status: VALID_STATUSES.has(rawStatus) ? rawStatus : "assigned",
-    plannedStartAt: plannedStart?.toISOString() || null,
-    plannedEndAt: plannedEnd?.toISOString() || null
+    status: VALID_STATUSES.has(rawStatus) ? rawStatus : "assigned"
   };
 }
 
@@ -126,6 +129,7 @@ module.exports = {
   assertTaskParticipant,
   canFocusTask,
   normalizeTaskInput,
+  normalizePlanInput,
   normalizeLegacyTask,
   reminderCheckpoints,
   dueCheckpointWindow

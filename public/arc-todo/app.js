@@ -35,7 +35,9 @@ function initials(name = "") { return String(name).split(/\s+/).map((word) => wo
 function toast(message) { const node = $("#toast"); node.textContent = message; node.classList.add("is-visible"); window.clearTimeout(toast.timer); toast.timer = setTimeout(() => node.classList.remove("is-visible"), 3600); }
 function currentFocusTask() { return state.focus ? state.tasks.find((task) => task.id === Number(state.focus.taskId)) : null; }
 function isFocusEligible(task) { return Boolean(task) && !isDone(task) && (task.assigned_to === state.member?.id || task.collaborators?.some((member) => member.id === state.member?.id)); }
-function scheduledDate(task) { return startOfDay(task.planned_start_at || task.due_at); }
+function personalPlanStart(task) { return task.personal_planned_start_at || null; }
+function personalPlanEnd(task) { return task.personal_planned_end_at || null; }
+function scheduledDate(task) { return startOfDay(personalPlanStart(task) || task.due_at); }
 function sameDay(left, right) { return startOfDay(left).getTime() === startOfDay(right).getTime(); }
 
 async function api(path, options = {}) {
@@ -71,8 +73,10 @@ function statusCopy(task) {
 }
 
 function timeRange(task) {
-  if (task.planned_start_at && task.planned_end_at) return `${timeFormatter.format(new Date(task.planned_start_at))}–${timeFormatter.format(new Date(task.planned_end_at))}`;
-  return "未排时段";
+  const start = personalPlanStart(task);
+  const end = personalPlanEnd(task);
+  if (start && end) return `${timeFormatter.format(new Date(start))}–${timeFormatter.format(new Date(end))}`;
+  return "尚未安排";
 }
 
 function visibleTasks() {
@@ -167,7 +171,7 @@ function renderPlanner() {
   const days = plannerDays();
   const heading = state.plannerOffset === 0 ? "未来七天" : `${dayFormatter.format(days[0])} — ${dayFormatter.format(days[6])}`;
   $("#plannerView").innerHTML = `<div class="planner-controls"><button class="planner-arrow" data-plan-action="previous" type="button" aria-label="上一周">←</button><strong>${heading}</strong><button class="planner-today" data-plan-action="today" type="button">今天</button><button class="planner-arrow" data-plan-action="next" type="button" aria-label="下一周">→</button></div><div class="planner-grid">${days.map((day) => {
-    const tasks = state.tasks.filter((task) => !isDone(task) && sameDay(scheduledDate(task), day)).sort((left, right) => new Date(left.planned_start_at || left.due_at) - new Date(right.planned_start_at || right.due_at));
+    const tasks = state.tasks.filter((task) => isFocusEligible(task) && sameDay(scheduledDate(task), day)).sort((left, right) => new Date(personalPlanStart(left) || left.due_at) - new Date(personalPlanStart(right) || right.due_at));
     return `<section class="planner-day ${sameDay(day, new Date()) ? "is-today" : ""}"><header><span>${dayFormatter.format(day)}</span>${sameDay(day, new Date()) ? "<b>今天</b>" : ""}</header><div class="planner-day-tasks">${tasks.length ? tasks.map(plannerTask).join("") : "<p>留白</p>"}</div></section>`;
   }).join("")}</div>`;
 }
@@ -222,8 +226,6 @@ function openTaskDialog(task = null) {
   $("#taskAssignee").innerHTML = memberOptions(task?.assigned_to || state.member.id);
   $("#taskCollaborator").innerHTML = memberOptions(task?.collaborators?.[0]?.id, true);
   $("#taskDate").value = task ? asDateInput(task.due_at) : defaultTaskDate();
-  $("#taskPlannedStart").value = task?.planned_start_at ? asInputDate(task.planned_start_at) : "";
-  $("#taskPlannedEnd").value = task?.planned_end_at ? asInputDate(task.planned_end_at) : "";
   $("#taskPriority").value = task?.priority || "normal";
   $("#taskNotes").value = task?.notes || "";
   $("#taskDialog").showModal();
@@ -235,16 +237,11 @@ function closeDialog(id) { const dialog = $(id); if (dialog.open) dialog.close()
 async function saveTask(event) {
   event.preventDefault();
   const id = $("#taskId").value;
-  const plannedStartAt = $("#taskPlannedStart").value;
-  const plannedEndAt = $("#taskPlannedEnd").value;
-  if (Boolean(plannedStartAt) !== Boolean(plannedEndAt)) return toast("安排时段请同时填写开始与结束时间。");
   const payload = {
     title: $("#taskTitle").value,
     assignedTo: Number($("#taskAssignee").value),
     collaboratorId: $("#taskCollaborator").value ? Number($("#taskCollaborator").value) : null,
     dueAt: dueAtForDate($("#taskDate").value),
-    plannedStartAt: plannedStartAt ? new Date(plannedStartAt).toISOString() : null,
-    plannedEndAt: plannedEndAt ? new Date(plannedEndAt).toISOString() : null,
     priority: $("#taskPriority").value,
     notes: $("#taskNotes").value
   };
@@ -289,7 +286,7 @@ function openDetail(task) {
   $("#detailState").textContent = isDone(task) ? "COMPLETED" : (isOverdue(task) ? "NEEDS ATTENTION" : "TASK");
   $("#detailTitle").textContent = task.title;
   const pills = [`创建：${task.creator_name}`, `负责：${task.assignee_name}`, `日期：${dateFormatter.format(new Date(task.due_at))}`, task.priority === "high" ? "优先" : "正常"];
-  if (task.planned_start_at) pills.push(`时段：${timeRange(task)}`);
+  if (personalPlanStart(task)) pills.push(`我的安排：${timeRange(task)}`);
   if (task.collaborators?.length) pills.push(`共同：${task.collaborators.map((member) => member.displayName).join("、")}`);
   $("#detailPills").innerHTML = pills.map((item) => `<span class="pill">${escapeHtml(item)}</span>`).join("");
   $("#detailNotes").textContent = task.notes || "还没有备注。";
@@ -299,8 +296,47 @@ function openDetail(task) {
   const focusAction = !isDone(task) && isFocusEligible(task)
     ? (isCurrent ? '<button class="secondary-action" data-detail-action="clear-focus" type="button">移除当前重点</button>' : '<button class="secondary-action" data-detail-action="set-focus" type="button">设为当前重点</button>')
     : "";
-  $("#detailActions").innerHTML = `${focusAction}${!isDone(task) ? '<button class="primary-action" data-detail-action="complete" type="button">标记完成</button>' : ""}<button class="secondary-action" data-detail-action="edit" type="button">编辑</button>`;
+  const planAction = !isDone(task) && isFocusEligible(task)
+    ? `<button class="secondary-action" data-detail-action="plan" type="button">${personalPlanStart(task) ? "调整我的安排" : "安排时间"}</button>`
+    : "";
+  $("#detailActions").innerHTML = `${focusAction}${planAction}${!isDone(task) ? '<button class="primary-action" data-detail-action="complete" type="button">标记完成</button>' : ""}<button class="secondary-action" data-detail-action="edit" type="button">编辑</button>`;
   $("#detailDialog").showModal();
+}
+
+function openPlanDialog(task) {
+  $("#planTaskId").value = task.id;
+  $("#planTaskTitle").textContent = task.title;
+  $("#planDeadline").textContent = `任务截止：${dateFormatter.format(new Date(task.due_at))}`;
+  $("#planStart").value = personalPlanStart(task) ? asInputDate(personalPlanStart(task)) : "";
+  $("#planEnd").value = personalPlanEnd(task) ? asInputDate(personalPlanEnd(task)) : "";
+  $("#clearPlanButton").hidden = !personalPlanStart(task);
+  $("#planDialog").showModal();
+}
+
+async function savePlan(event) {
+  event.preventDefault();
+  const taskId = Number($("#planTaskId").value);
+  const startAt = $("#planStart").value;
+  const endAt = $("#planEnd").value;
+  if (!startAt || !endAt) return toast("请同时填写开始时间和计划完成时间。");
+  try {
+    await api(`/tasks/${taskId}/plan`, { method: "PUT", body: JSON.stringify({ startAt: new Date(startAt).toISOString(), endAt: new Date(endAt).toISOString() }) });
+    closeDialog("#planDialog");
+    closeDialog("#detailDialog");
+    await loadData();
+    toast("已保存你的个人安排。");
+  } catch (error) { toast(error.message); }
+}
+
+async function clearPlan() {
+  const taskId = Number($("#planTaskId").value);
+  try {
+    await api(`/tasks/${taskId}/plan`, { method: "DELETE", body: "{}" });
+    closeDialog("#planDialog");
+    closeDialog("#detailDialog");
+    await loadData();
+    toast("已移除你的个人安排。");
+  } catch (error) { toast(error.message); }
 }
 
 function focusCandidate(task) {
@@ -410,8 +446,12 @@ function bindEvents() {
     if (action === "edit") { closeDialog("#detailDialog"); openTaskDialog(task); }
     if (action === "set-focus") setFocus(task.id);
     if (action === "clear-focus") { closeDialog("#detailDialog"); clearFocus(); }
+    if (action === "plan") { closeDialog("#detailDialog"); openPlanDialog(task); }
   });
   $$("#closeTaskDialog,#cancelTaskDialog").forEach((button) => button.addEventListener("click", () => closeDialog("#taskDialog")));
+  $("#planForm").addEventListener("submit", savePlan);
+  $$("#closePlanDialog,#cancelPlanDialog").forEach((button) => button.addEventListener("click", () => closeDialog("#planDialog")));
+  $("#clearPlanButton").addEventListener("click", clearPlan);
   $("#closeDetailDialog").addEventListener("click", () => closeDialog("#detailDialog"));
   $("#closeFocusDialog").addEventListener("click", () => closeDialog("#focusDialog"));
   $("#importButton").addEventListener("click", openImportDialog);

@@ -7,6 +7,7 @@ const {
   assertTaskParticipant,
   canFocusTask,
   normalizeTaskInput,
+  normalizePlanInput,
   normalizeLegacyTask
 } = require("./arc-todo-core");
 const { integrationHealth, deliverTask, runReminderDispatch } = require("./arc-todo-notify");
@@ -134,12 +135,28 @@ async function initArcTodoDB(pool) {
       active_session_id BIGINT,
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+    CREATE TABLE IF NOT EXISTS arc_todo_task_plans (
+      member_id INTEGER NOT NULL REFERENCES arc_todo_members(id) ON DELETE CASCADE,
+      task_id INTEGER NOT NULL REFERENCES arc_todo_tasks(id) ON DELETE CASCADE,
+      planned_start_at TIMESTAMPTZ NOT NULL,
+      planned_end_at TIMESTAMPTZ NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (member_id, task_id),
+      CHECK (planned_end_at > planned_start_at)
+    );
+    INSERT INTO arc_todo_task_plans (member_id, task_id, planned_start_at, planned_end_at)
+      SELECT assigned_to, id, planned_start_at, planned_end_at
+        FROM arc_todo_tasks
+       WHERE planned_start_at IS NOT NULL AND planned_end_at IS NOT NULL
+      ON CONFLICT (member_id, task_id) DO NOTHING;
     CREATE INDEX IF NOT EXISTS idx_arc_todo_tasks_due_open ON arc_todo_tasks (due_at) WHERE status <> 'done' AND archived_at IS NULL;
     CREATE INDEX IF NOT EXISTS idx_arc_todo_tasks_assigned ON arc_todo_tasks (assigned_to, due_at DESC);
     CREATE INDEX IF NOT EXISTS idx_arc_todo_collaborators_member ON arc_todo_collaborators (member_id, task_id);
     CREATE INDEX IF NOT EXISTS idx_arc_todo_activity_task ON arc_todo_activity (task_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_arc_todo_focus_sessions_member ON arc_todo_focus_sessions (member_id, started_at DESC);
     CREATE INDEX IF NOT EXISTS idx_arc_todo_focus_states_task ON arc_todo_focus_states (task_id);
+    CREATE INDEX IF NOT EXISTS idx_arc_todo_task_plans_member_time ON arc_todo_task_plans (member_id, planned_start_at);
   `);
 }
 
@@ -251,15 +268,17 @@ async function currentFocus(pool, memberId) {
 
 async function focusCandidates(pool, memberId, currentTaskId = null) {
   const result = await pool.query(
-    `SELECT t.id, t.title, t.due_at, t.planned_start_at, t.planned_end_at, t.priority
+    `SELECT t.id, t.title, t.due_at, p.planned_start_at AS personal_planned_start_at,
+            p.planned_end_at AS personal_planned_end_at, t.priority
        FROM arc_todo_tasks t
+       LEFT JOIN arc_todo_task_plans p ON p.task_id=t.id AND p.member_id=$1
       WHERE t.archived_at IS NULL AND t.status <> 'done'
         AND (t.assigned_to=$1 OR EXISTS (
           SELECT 1 FROM arc_todo_collaborators c WHERE c.task_id=t.id AND c.member_id=$1
         ))
         AND ($2::int IS NULL OR t.id <> $2)
       ORDER BY CASE t.priority WHEN 'high' THEN 0 WHEN 'normal' THEN 1 ELSE 2 END,
-               COALESCE(t.planned_start_at, t.due_at), t.id DESC
+               COALESCE(p.planned_start_at, t.due_at), t.id DESC
       LIMIT 12`,
     [memberId, currentTaskId]
   );
@@ -382,10 +401,14 @@ function registerArcTodoRoutes(app, pool) {
   app.get("/api/arc-todo/tasks", requireMember.bind(null, pool), async (req, res) => {
     const member = req.arcTodoMember;
     const result = await pool.query(
-      `SELECT t.*, creator.display_name AS creator_name, assignee.display_name AS assignee_name
+      `SELECT t.id, t.title, t.notes, t.due_at, t.timezone, t.priority, t.status, t.created_by, t.assigned_to,
+              t.calendar_event_id, t.delivery_state, t.completed_at, t.created_at, t.updated_at, t.archived_at,
+              p.planned_start_at AS personal_planned_start_at, p.planned_end_at AS personal_planned_end_at,
+              creator.display_name AS creator_name, assignee.display_name AS assignee_name
          FROM arc_todo_tasks t
          JOIN arc_todo_members creator ON creator.id=t.created_by
          JOIN arc_todo_members assignee ON assignee.id=t.assigned_to
+         LEFT JOIN arc_todo_task_plans p ON p.task_id=t.id AND p.member_id=$2
         WHERE t.archived_at IS NULL
           AND ($1='admin' OR t.created_by=$2 OR t.assigned_to=$2
                OR EXISTS (SELECT 1 FROM arc_todo_collaborators c WHERE c.task_id=t.id AND c.member_id=$2))
@@ -476,9 +499,9 @@ function registerArcTodoRoutes(app, pool) {
       await ensureMemberExists(pool, assignedTo);
       if (collaboratorId) await ensureMemberExists(pool, collaboratorId);
       const result = await pool.query(
-        `INSERT INTO arc_todo_tasks (title, notes, due_at, timezone, priority, status, created_by, assigned_to, planned_start_at, planned_end_at, completed_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
-        [input.title, input.notes, input.dueAt, input.timezone, input.priority, input.status, req.arcTodoMember.id, assignedTo, input.plannedStartAt, input.plannedEndAt, input.status === "done" ? new Date() : null]
+        `INSERT INTO arc_todo_tasks (title, notes, due_at, timezone, priority, status, created_by, assigned_to, completed_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+        [input.title, input.notes, input.dueAt, input.timezone, input.priority, input.status, req.arcTodoMember.id, assignedTo, input.status === "done" ? new Date() : null]
       );
       const task = result.rows[0];
       if (collaboratorId && collaboratorId !== assignedTo && collaboratorId !== req.arcTodoMember.id) {
@@ -505,12 +528,12 @@ function registerArcTodoRoutes(app, pool) {
       await ensureMemberExists(pool, assignedTo);
       const result = await pool.query(
         `UPDATE arc_todo_tasks
-            SET title=$1, notes=$2, due_at=$3, timezone=$4, priority=$5, status=$6, assigned_to=$7, planned_start_at=$8, planned_end_at=$9,
+            SET title=$1, notes=$2, due_at=$3, timezone=$4, priority=$5, status=$6, assigned_to=$7,
                 completed_at=CASE WHEN $6='done' THEN COALESCE(completed_at, NOW()) ELSE NULL END,
                 delivery_state=CASE WHEN due_at <> $3::timestamptz OR assigned_to <> $7 THEN 'pending_connection' ELSE delivery_state END,
                 updated_at=NOW()
-          WHERE id=$10 RETURNING *`,
-        [input.title, input.notes, input.dueAt, input.timezone, input.priority, input.status, assignedTo, input.plannedStartAt, input.plannedEndAt, loaded.task.id]
+          WHERE id=$8 RETURNING *`,
+        [input.title, input.notes, input.dueAt, input.timezone, input.priority, input.status, assignedTo, loaded.task.id]
       );
       if (input.status === "done") await endFocusForTask(pool, loaded.task.id, "completed");
       if (collaboratorId !== undefined) {
@@ -527,6 +550,40 @@ function registerArcTodoRoutes(app, pool) {
     } catch (error) {
       const status = error.code === "FORBIDDEN" ? 403 : (error.code === "VALIDATION" ? 400 : 500);
       res.status(status).json({ error: error.message || "更新任务失败。" });
+    }
+  });
+
+  app.put("/api/arc-todo/tasks/:id/plan", requireMember.bind(null, pool), async (req, res) => {
+    try {
+      const loaded = await loadTask(pool, Number(req.params.id));
+      if (!loaded) return res.status(404).json({ error: "任务不存在。" });
+      if (!canFocusTask(req.arcTodoMember, loaded.task, loaded.collaboratorIds)) return res.status(403).json({ error: "只能为由您负责或共同参与的未完成任务安排时间。" });
+      const plan = normalizePlanInput(req.body);
+      if (!plan.plannedStartAt || !plan.plannedEndAt) return res.status(400).json({ error: "请同时填写开始时间和计划完成时间。" });
+      await pool.query(
+        `INSERT INTO arc_todo_task_plans (member_id, task_id, planned_start_at, planned_end_at, updated_at)
+         VALUES ($1,$2,$3,$4,NOW())
+         ON CONFLICT (member_id, task_id) DO UPDATE
+           SET planned_start_at=EXCLUDED.planned_start_at, planned_end_at=EXCLUDED.planned_end_at, updated_at=NOW()`,
+        [req.arcTodoMember.id, loaded.task.id, plan.plannedStartAt, plan.plannedEndAt]
+      );
+      await writeActivity(pool, loaded.task.id, req.arcTodoMember.id, "personal_plan_updated");
+      res.json({ plan });
+    } catch (error) {
+      res.status(error.code === "VALIDATION" ? 400 : 500).json({ error: error.message || "安排时间失败。" });
+    }
+  });
+
+  app.delete("/api/arc-todo/tasks/:id/plan", requireMember.bind(null, pool), async (req, res) => {
+    try {
+      const loaded = await loadTask(pool, Number(req.params.id));
+      if (!loaded) return res.status(404).json({ error: "任务不存在。" });
+      if (!canFocusTask(req.arcTodoMember, loaded.task, loaded.collaboratorIds)) return res.status(403).json({ error: "只能移除自己的计划时间。" });
+      await pool.query("DELETE FROM arc_todo_task_plans WHERE member_id=$1 AND task_id=$2", [req.arcTodoMember.id, loaded.task.id]);
+      await writeActivity(pool, loaded.task.id, req.arcTodoMember.id, "personal_plan_cleared");
+      res.json({ ok: true });
+    } catch (error) {
+      res.status(500).json({ error: "移除计划时间失败。" });
     }
   });
 
