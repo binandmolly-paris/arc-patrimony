@@ -295,8 +295,8 @@ async function autoSeed() {
     {s:"8058.T",n:"三菱商事",q:500,c:5476,cur:"JPY",m:"东京",r:"日本",a:"防守",sec:"贸易"},
     {s:"8766.T",n:"东京海上",q:200,c:7191,cur:"JPY",m:"东京",r:"日本",a:"防守",sec:"保险"},
     {s:"8316.T",n:"三井住友金融",q:200,c:5015,cur:"JPY",m:"东京",r:"日本",a:"防守",sec:"金融"},
-    {s:"8031.T",n:"三井物产",q:300,c:6280,cur:"JPY",m:"东京",r:"日本",a:"防守",sec:"贸易"},
-    {s:"8053.T",n:"住友商事",q:100,c:5734,cur:"JPY",m:"东京",r:"日本",a:"防守",sec:"贸易"},
+    {s:"8031.T",n:"三井物产",q:500,c:6231.956,cur:"JPY",m:"东京",r:"日本",a:"防守",sec:"贸易"},
+    {s:"8053.T",n:"住友商事",q:400,c:1433.54,cur:"JPY",m:"东京",r:"日本",a:"防守",sec:"贸易"},
     {s:"8002.T",n:"丸红",q:500,c:5413,cur:"JPY",m:"东京",r:"日本",a:"防守",sec:"贸易"},
     {s:"MSFT",n:"微软",q:250,c:435.10,cur:"USD",m:"纳斯达克",r:"美国",a:"进攻",sec:"科技"},
     {s:"GOOGL",n:"谷歌",q:109,c:300.87,cur:"USD",m:"纳斯达克",r:"美国",a:"进攻",sec:"科技"},
@@ -328,6 +328,38 @@ async function autoSeed() {
     );
   }
   console.log("✅ 自动初始化完成: LiuBin + " + holdings.length + " 只股票");
+}
+
+// ===== 一次性数据修正（2026-07，对齐券商最新持仓）=====
+// autoSeed 只对空库生效，已上线的数据库需在此修正：
+// - 8031.T 三井物产：加仓 200 股（300→500，成本 6280→6231.956）
+// - 8053.T 住友商事：1拆4 股票分割（100→400，成本 5734→1433.54）
+// 以修正前的旧股数为条件，幂等：已修正或用户已自行调整时不会重复执行
+async function patchHoldings202607() {
+  const mitsui = await pool.query(
+    "UPDATE holdings SET qty=500, avg_cost=6231.956 WHERE symbol='8031.T' AND qty=300 RETURNING user_id"
+  );
+  for (const row of mitsui.rows) {
+    // 补记加仓交易，保持交易流水与持仓一致（6159.89 = 摊薄反推的买入均价）
+    await pool.query(
+      `INSERT INTO trades (user_id,symbol,name,type,qty,price,fee,date)
+       VALUES ($1,'8031.T','三井物产','买入',200,6159.89,0,'2026-07-02')`,
+      [row.user_id]
+    );
+  }
+  const sumitomo = await pool.query(
+    "UPDATE holdings SET qty=400, avg_cost=1433.54 WHERE symbol='8053.T' AND qty=100 RETURNING user_id"
+  );
+  for (const row of sumitomo.rows) {
+    // 拆股同步调整历史交易，保证 recomputeHoldingFromTrades 结果一致
+    await pool.query(
+      "UPDATE trades SET qty=qty*4, price=price/4 WHERE user_id=$1 AND symbol='8053.T'",
+      [row.user_id]
+    );
+  }
+  if (mitsui.rowCount || sumitomo.rowCount) {
+    console.log(`✅ 持仓数据修正完成: 三井物产 ${mitsui.rowCount} 户, 住友商事 ${sumitomo.rowCount} 户`);
+  }
 }
 
 // ===== Session 管理（DB 持久化 + 内存缓存）=====
@@ -677,7 +709,8 @@ async function adjustCashForTrade(userId, currency, region, delta) {
   return { currency, region: region || null };
 }
 
-app.post("/api/trade", auth, async (req, res) => {
+// 2026-08-17 Bin 授权:交易录入开放 x-holdings-token(卖出/买入须记交易才能保住 YTD 计算链;此前只认登录令牌导致 Claude 只能改 qty、YTD 失真)
+app.post("/api/trade", authOrHoldings, async (req, res) => {
   try {
     const { symbol, name, type, qty, price, fee, date, currency, market, region, attribute, sector, syncCash } = req.body;
     if (!symbol || !qty || !price || !type || !date) return res.status(400).json({ error: "请填写完整信息" });
@@ -3027,6 +3060,7 @@ async function startServer() {
   try {
     await initDB();
     await autoSeed();
+    await patchHoldings202607();
     app.listen(PORT, () => console.log(`Arc Patrimony 服务器已启动: http://localhost:${PORT}`));
     // Take today's snapshot ~30s after startup (let FX rates load first; fire-and-forget)
     setTimeout(() => { maybeStartupSnapshot(); }, 30000);
