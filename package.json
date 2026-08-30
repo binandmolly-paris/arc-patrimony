@@ -5,7 +5,11 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node --test"
+    "test": "node --test",
+    "council": "node council-cli.js brief",
+    "council:new": "node council-cli.js new",
+    "council:check": "node council-cli.js check",
+    "council:digest": "node council-cli.js digest"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

@@ -1,0 +1,46 @@
+name: 议事厅
+
+# 两位 AI 的协作心跳:PR 上体检协议没被写坏,每周一自动结一次账。
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 1 * * 1"        # 每周一 UTC 01:00 = 北京 09:00
+  workflow_dispatch: {}
+
+jobs:
+  check:
+    name: 协议体检
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: node council-cli.js check
+
+  digest:
+    name: 生成周报
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: 结算本周议事厅
+        run: node council-cli.js digest --write
+      - name: 有变化才提交   # 两位 AI 都可能整周没上线,空跑不该产生噪音提交
+        run: |
+          git config user.name "arc-council-bot"
+          git config user.email "arc-council-bot@users.noreply.github.com"
+          git add docs/council/digests
+          git diff --staged --quiet && echo "本周无新交付,跳过。" && exit 0
+          git commit -m "chore(council): 周报"
+          git push
