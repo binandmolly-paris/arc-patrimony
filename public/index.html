@@ -2863,7 +2863,7 @@
                     <div class="tab active" onclick="switchTab(0)">Portfolio <span class="tab-badge" id="holdingsBadge"></span></div>
                     <div class="tab" onclick="switchTab(1)">Market</div>
                     <div class="tab" onclick="switchTab(2)">Trades</div>
-                    <div class="tab-cash" id="cashTabBtn" onclick="openCashModal()" title="现金水位 · 点击管理">💵 Cash</div>
+                    <!-- 2026-09-18 Bin 指令:现金水位撤出凯旋门 APP,现金管理统一回 moomoo(木木)盘。原 Cash 页签已移除。 -->
                     <div class="tab" onclick="switchTab(3)">Alerts</div>
                     <div class="tab" onclick="switchTab(4)">Analysis</div>
                     <div class="tab" onclick="switchTab(5)">Allocation</div>
@@ -3254,7 +3254,8 @@
         // 没锚定价的股票走 fallback：本年新开仓位算全额浮盈亏
         const yearStart = `${new Date().getFullYear()}-01-01`;
         const anchorPrices = APP.anchorPrices || {};
-        let hasAnchorMode = false; // 至少有一只股有锚定价
+        let hasAnchorMode = false; // 至少有一只股真的年初就持有（才用锚价）
+        let ytdCostModeCount = 0;  // 本年才建仓、走成本法的只数
 
         // 统计本年所有交易（已实现 + 分红 + 买入金额）
         const ytdBuyBySymbol = {};   // 本年买入累计 qty 和 金额（本币）
@@ -3298,6 +3299,42 @@
         let ytdUnrealized = 0, ytdRealized = 0, ytdDividends = 0, ytdInvested = 0;
         const ytdByRegion = {};  // 按区域累加 YTD 总盈亏 (USD)，用于卡片国旗细分
 
+        // ===== 2026-09-18 修复（Bin 指令）=====
+        // 病根一：anchor/backfill 对「持仓表 ∪ 交易表」里每个代码都抓上一年末收盘价，
+        //         不管那天是否真的持有。凯旋门建仓日 = 2026-04-10，于是 1-4 月这段
+        //         「你根本没进场」的行情被算进了 YTD（腾讯锚 599 vs 建仓 514.36 一只
+        //         就制造了约 4.2 万美元的虚假亏损）。
+        //   → 修法：只有「本年年初确实持有」(anchorQty > 0) 才用锚价；本年新建仓一律用成本法，
+        //           与累计卡口径一致。
+        // 病根二：原 realLocal = ytdLocal - unrealLocal，展开后 ≈ 本年买入股数×锚价 − 本年买入金额，
+        //         一股没卖也能凭空造出「已实现」（实测虚高约 15 万美元）。
+        //   → 修法：已实现只由卖出产生，且成本基准用「按 id 回放交易得到的移动加权成本」，
+        //           而不是当前 avg_cost（否则卖出后又补回的标的会算错，例如宁德 8/17 卖、9/9 补）。
+
+        // 回放全部交易（按 id 顺序）→ 每只股的移动加权成本 + 逐笔已实现
+        const replayBasis = {};      // symbol -> 卖出发生时点的移动加权成本（本币）
+        const realizedYTDLocal = {}; // symbol -> 本年已实现（本币）
+        const replayPos = {};
+        [...APP.trades].sort((a, b) => (a.id || 0) - (b.id || 0)).forEach(t => {
+            const s = t.symbol;
+            if (!replayPos[s]) replayPos[s] = { qty: 0, cost: 0 };
+            const p = replayPos[s];
+            const isBuy = t.type === '买入' || t.type === 'BUY';
+            const isSell = t.type === '卖出' || t.type === 'SELL';
+            if (isBuy) {
+                const tot = p.qty + t.qty;
+                p.cost = tot > 0 ? (p.cost * p.qty + t.price * t.qty) / tot : 0;
+                p.qty = tot;
+            } else if (isSell) {
+                const gain = (t.price - p.cost) * t.qty - (t.fee || 0);
+                if (t.date >= yearStart) {
+                    realizedYTDLocal[s] = (realizedYTDLocal[s] || 0) + gain;
+                }
+                replayBasis[s] = p.cost;
+                p.qty -= t.qty;
+            }
+        });
+
         ytdSymbols.forEach(sym => {
             const h = APP.holdings.find(x => x.symbol === sym);
             if (!h) return;
@@ -3317,34 +3354,34 @@
             const divUSD = div * fx;
             ytdDividends += divUSD;
 
-            // 单只股票本年浮盈亏 / 已实现 (USD)，用于按 region 累加
             let stockYtdUnrealUSD = 0, stockYtdRealUSD = 0;
 
-            if (anchor && anchor.close_price > 0) {
-                // ✅ 精确模式：用锚定价
-                hasAnchorMode = true;
-                // 年初持仓数 = 当前持仓 - 本年买入 + 本年卖出
-                const anchorQty = currentQty - buy.qty + sell.qty;
-                const anchorValue = Math.max(0, anchorQty) * anchor.close_price;
-                const todayMV = currentQty * currentPrice;
-                // YTD per stock = (今市值 + 本年卖出 + 本年分红) − (锚定持仓价值 + 本年买入)
-                const ytdLocal = (todayMV + sell.amount) - (anchorValue + buy.amount);
-                // 拆分浮盈亏 vs 已实现：浮盈亏 = (current - anchor) * 当前持仓
-                const unrealLocal = currentQty > 0 ? (currentPrice - anchor.close_price) * currentQty : 0;
-                const realLocal = ytdLocal - unrealLocal;
-                stockYtdUnrealUSD = unrealLocal * fx;
-                stockYtdRealUSD   = realLocal   * fx;
-            } else {
-                // ⚠️ Fallback：没锚定价 → 本年新开仓位算全额浮盈亏；老仓位浮盈亏算 0
-                const firstBuy = firstBuyDateBySymbol[sym];
-                if (firstBuy && firstBuy >= yearStart) {
-                    if (currentQty > 0) {
-                        stockYtdUnrealUSD = (currentPrice - h.avg_cost) * currentQty * fx;
-                    }
+            // 年初持仓数 = 当前持仓 − 本年买入 + 本年卖出
+            const anchorQty = currentQty - buy.qty + sell.qty;
+            const heldAtYearStart = anchorQty > 0 && anchor && anchor.close_price > 0;
+
+            // ① 浮盈亏：年初就持有的那部分用锚价，本年新买的部分用成本
+            if (currentQty > 0) {
+                if (heldAtYearStart) {
+                    hasAnchorMode = true;
+                    const oldQty = Math.min(currentQty, anchorQty);
+                    const newQty = Math.max(0, currentQty - oldQty);
+                    stockYtdUnrealUSD = (oldQty * (currentPrice - anchor.close_price)
+                                       + newQty * (currentPrice - h.avg_cost)) * fx;
+                } else {
+                    // 本年才建仓 → 成本法（= 累计卡口径）
+                    ytdCostModeCount++;
+                    stockYtdUnrealUSD = (currentPrice - h.avg_cost) * currentQty * fx;
                 }
-                // 本年卖出，已实现按 avg_cost 算
-                if (sell.qty > 0) {
-                    stockYtdRealUSD = (sell.amount - h.avg_cost * sell.qty) * fx;
+            }
+
+            // ② 已实现：只由卖出产生，基准 = 回放得到的移动加权成本
+            if (sell.qty > 0) {
+                if (realizedYTDLocal[sym] !== undefined) {
+                    stockYtdRealUSD = realizedYTDLocal[sym] * fx;
+                } else {
+                    const basis = heldAtYearStart ? anchor.close_price : (replayBasis[sym] ?? h.avg_cost);
+                    stockYtdRealUSD = (sell.amount - basis * sell.qty) * fx;
                 }
             }
 
@@ -3531,7 +3568,7 @@
                         </div>
                         ${(() => {
                             // 各国预算使用率小字行：仅显示已设预算的区域
-                            const items = ['美国','中国','日本'].map(r => {
+                            const items = _pnlRegions(regionStats).map(r => {
                                 const stats = regionStats[r];
                                 if (!stats) return '';
                                 const budgetLocal = parseFloat(APP.regionBudgets[r]) || 0;
@@ -3539,7 +3576,7 @@
                                 const budgetUSD = budgetLocal * (APP.FX_RATES[cur] || 1);
                                 if (budgetUSD <= 0) return '';
                                 const pct = (stats.cost / budgetUSD) * 100;
-                                const flag = r==='美国'?'🇺🇸':r==='中国'?'🇨🇳':'🇯🇵';
+                                const flag = _regionFlag(r);
                                 const color = pct > 100 ? '#f87171' : pct > 80 ? '#fbbf24' : '#94a3b8';
                                 return `<span style="white-space:nowrap;">${flag}<span style="color:${color};margin-left:3px;">${fmtNum(pct,1)}%</span></span>`;
                             }).filter(Boolean);
@@ -3566,10 +3603,10 @@
                     <div class="stat-sub" style="display:block;font-size:11px;line-height:1.5;">
                         ${Object.keys(todayByRegion).length > 0 ? `
                         <div style="color:#64748b;display:flex;flex-wrap:wrap;gap:6px;">
-                            ${['美国','中国','日本'].filter(r => todayByRegion[r]).map(r => {
+                            ${_pnlRegions(todayByRegion).filter(r => todayByRegion[r]).map(r => {
                                 const info = todayByRegion[r];
                                 const v = info.amount || 0;
-                                const flag = r==='美国'?'🇺🇸':r==='中国'?'🇨🇳':'🇯🇵';
+                                const flag = _regionFlag(r);
                                 const cls = v >= 0 ? 'price-positive' : 'price-negative';
                                 return `<span style="white-space:nowrap;">${flag}<span class="${cls}">${v>=0?'+':''}$${fmtNum(v,0)}</span></span>`;
                             }).join('<span style="color:#334155;">·</span>')}
@@ -3599,7 +3636,7 @@
                 <div class="stat-card stat-ytd">
                     <div class="stat-label-row">
                         <span class="stat-label">YTD Total P&L / 本年总盈亏</span>
-                        <span class="stat-chip" title="${hasAnchorMode ? '使用各市场本地年末锚定价（精确模式）' : '老仓位本年浮盈亏暂记 0（保守 fallback）'}">${hasAnchorMode ? '⚓ ANCHOR' : 'YTD ⚠'}</span>
+                        <span class="stat-chip" title="${hasAnchorMode ? '年初已持仓的用年末锚定价，本年新建仓的用实际成本' : '全部仓位均为本年建仓 → 统一用实际成本（与累计口径一致）'}">${hasAnchorMode ? '⚓ ANCHOR' : '⚓ COST'}</span>
                     </div>
                     <div class="stat-pnl-row">
                         <span class="stat-pct-lg ${ytdCls}">${ytdInvested > 0 ? formatPercent(ytdReturnPct) : '—'}</span>
@@ -3609,14 +3646,14 @@
                         <div>浮 ${ytdUnrealized>=0?'+':''}$${fmtNum(ytdUnrealized,0)} · 实 ${ytdRealized>=0?'+':''}$${fmtNum(ytdRealized,0)} · 红 +$${fmtNum(ytdDividends,0)}</div>
                         ${Object.keys(ytdByRegion).length > 0 ? `
                         <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:2px;">
-                            ${['美国','中国','日本'].filter(r => ytdByRegion[r] !== undefined).map(r => {
+                            ${_pnlRegions(ytdByRegion).filter(r => ytdByRegion[r] !== undefined).map(r => {
                                 const v = ytdByRegion[r] || 0;
-                                const flag = r==='美国'?'🇺🇸':r==='中国'?'🇨🇳':'🇯🇵';
+                                const flag = _regionFlag(r);
                                 const cls = v >= 0 ? 'price-positive' : 'price-negative';
                                 return `<span style="white-space:nowrap;">${flag}<span class="${cls}">${v>=0?'+':''}$${fmtNum(v,0)}</span></span>`;
                             }).join('<span style="color:#334155;">·</span>')}
                         </div>` : ''}
-                        ${!hasAnchorMode ? '<div style="color:#fbbf24;font-size:10px;">⚠️ 未启用锚定价，YTD 不准。Settings → 锚定价回填</div>' : `<div style="color:#475569;font-size:10px;">⚓ ${ytdAnchorCoverage} 只股已锚定 ${new Date().getFullYear()-1} 年末</div>`}
+                        ${hasAnchorMode ? `<div style="color:#475569;font-size:10px;">⚓ 年初已持仓用 ${new Date().getFullYear()-1} 年末锚价 · 本年新建仓 ${ytdCostModeCount} 只用实际成本</div>` : `<div style="color:#475569;font-size:10px;">⚓ ${ytdCostModeCount} 只均为本年建仓 · 统一用实际成本，YTD 应≈累计</div>`}
                     </div>
                 </div>
 
@@ -3634,9 +3671,9 @@
                         <div>浮 ${unrealizedPL>=0?'+':''}$${fmtNum(unrealizedPL,0)} · 实 ${realizedPL_USD>=0?'+':''}$${fmtNum(realizedPL_USD,0)} · 红 +$${fmtNum(dividends_USD,0)}</div>
                         ${Object.keys(cumByRegion).length > 0 ? `
                         <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:2px;">
-                            ${['美国','中国','日本'].filter(r => cumByRegion[r] !== undefined).map(r => {
+                            ${_pnlRegions(cumByRegion).filter(r => cumByRegion[r] !== undefined).map(r => {
                                 const v = cumByRegion[r] || 0;
-                                const flag = r==='美国'?'🇺🇸':r==='中国'?'🇨🇳':'🇯🇵';
+                                const flag = _regionFlag(r);
                                 const cls = v >= 0 ? 'price-positive' : 'price-negative';
                                 return `<span style="white-space:nowrap;">${flag}<span class="${cls}">${v>=0?'+':''}$${fmtNum(v,0)}</span></span>`;
                             }).join('<span style="color:#334155;">·</span>')}
@@ -5966,7 +6003,16 @@
     }
 
     function _regionFlag(r) {
-        return r==='美国'?'🇺🇸':r==='中国'?'🇨🇳':r==='日本'?'🇯🇵':r==='香港'?'🇭🇰':'🌐';
+        return r==='美国'?'🇺🇸':r==='中国'?'🇨🇳':r==='日本'?'🇯🇵':r==='香港'?'🇭🇰':r==='黄金'?'🥇':'🌐';
+    }
+
+    // 2026-09-18:三张 P&L 卡的国旗分项原来硬编码 ['美国','中国','日本'],
+    // 于是「黄金」等地区进了总数却没有分项 → 分项永远加不出总数。改为按数据动态取,
+    // 美/中/日 固定在前,其余按字母序补在后面。
+    function _pnlRegions(obj) {
+        const base = ['美国','中国','日本'];
+        const extra = Object.keys(obj || {}).filter(r => r && !base.includes(r)).sort();
+        return [...base, ...extra];
     }
 
     function _regionItems(region) {
