@@ -618,28 +618,46 @@ app.post("/api/holdings/target-weight", authOrHoldings, async (req, res) => {
 app.get("/api/holdings", auth, async (req, res) => {
   try {
     const holdResult = await pool.query("SELECT * FROM holdings WHERE user_id=$1 ORDER BY id", [req.userId]);
-    const tradeResult = await pool.query("SELECT * FROM trades WHERE user_id=$1 ORDER BY date, id", [req.userId]);
-    // Calculate realized P&L and dividends from trade history
+    const tradeResult = await pool.query("SELECT * FROM trades WHERE user_id=$1 ORDER BY id", [req.userId]);
+    // 🔴 2026-09-18 修复（Bin 指令）：原来 realized_pl = 卖出金额 − 当前 avg_cost × 卖出股数，
+    // 用的是「当前」均价，于是「先卖后又补回」的标的会算错。
+    // 实例：宁德 8/17 卖 1,000 @398（当时成本 353.26，真实已实现 ¥44,740），
+    //       9/9 又以 331 补回 1,000 股把 avg_cost 拉到 331 → 旧算法得出 ¥67,000，虚高 ¥22,260（≈US$3,328）。
+    // 改法：按 id 顺序回放交易，用「卖出发生当时」的移动加权成本算已实现。
     const sellInfo = {};
     const dividendInfo = {};
+    const replay = {};
     tradeResult.rows.forEach(t => {
+      const sym = t.symbol;
       const isBuy = t.type === '买入' || t.type === 'BUY';
       const isDividend = t.type === '分红' || t.type === 'DIVIDEND';
+      const qty = parseFloat(t.qty) || 0;
+      const price = parseFloat(t.price) || 0;
+      const fee = parseFloat(t.fee) || 0;
+      if (!replay[sym]) replay[sym] = { qty: 0, cost: 0 };
+      const p = replay[sym];
       if (isDividend) {
-        if (!dividendInfo[t.symbol]) dividendInfo[t.symbol] = 0;
-        dividendInfo[t.symbol] += t.price * t.qty; // price=每股分红, qty=股数
-      } else if (!isBuy) {
-        if (!sellInfo[t.symbol]) sellInfo[t.symbol] = { amount: 0, qty: 0 };
-        sellInfo[t.symbol].amount += t.price * t.qty;
-        sellInfo[t.symbol].qty += t.qty;
+        if (!dividendInfo[sym]) dividendInfo[sym] = 0;
+        dividendInfo[sym] += price * qty; // price=每股分红, qty=股数
+      } else if (isBuy) {
+        const tot = p.qty + qty;
+        p.cost = tot > 0 ? (p.cost * p.qty + price * qty) / tot : 0;
+        p.qty = tot;
+      } else {
+        if (!sellInfo[sym]) sellInfo[sym] = { amount: 0, qty: 0, cost: 0, pl: 0 };
+        sellInfo[sym].amount += price * qty;
+        sellInfo[sym].qty += qty;
+        sellInfo[sym].cost += p.cost * qty;              // 卖出当时的成本
+        sellInfo[sym].pl += (price - p.cost) * qty - fee; // 扣费后的已实现
+        p.qty -= qty;
       }
     });
     const enriched = holdResult.rows.map(r => {
       const si = sellInfo[r.symbol];
       let realized_pl = 0, realized_cost = 0;
       if (si && si.qty > 0) {
-        realized_cost = r.avg_cost * si.qty;
-        realized_pl = si.amount - realized_cost;
+        realized_cost = si.cost;
+        realized_pl = si.pl;
       }
       const dividend_total = dividendInfo[r.symbol] || 0;
       return { ...r, realized_pl, realized_cost, dividend_total };
@@ -721,8 +739,11 @@ app.post("/api/trade", authOrHoldings, async (req, res) => {
     );
     const tradeId = ins.rows[0].id;
 
-    // 现金联动（默认开；前端可关）。买入扣 qty*price+fee；卖出/分红加 qty*price-fee。
-    if (syncCash && currency) {
+    // 🔴 2026-09-18 Bin 指令：现金水位撤出凯旋门 APP，现金管理统一回 moomoo（木木）盘。
+    // 交易不再自动动 cash_positions（旧行为只扣不进，已造成 USD -104,433 / HKD -652,601 等假负数）。
+    // 如需恢复：把下行改回 if (syncCash && currency) 即可，逻辑未删。
+    const CASH_SYNC_ENABLED = false;
+    if (CASH_SYNC_ENABLED && syncCash && currency) {
       const f = parseFloat(fee) || 0;
       const gross = qty * price;
       let delta = 0;
@@ -2583,10 +2604,16 @@ app.post("/api/anchor/backfill", auth, async (req, res) => {
     const year = parseInt(req.query.year || req.body?.year || new Date().getUTCFullYear() - 1);
     if (year < 2000 || year > 2100) return res.status(400).json({ error: "Invalid year" });
 
-    // 取该用户所有股票（含已清仓的，方便回测）
-    const hRes = await pool.query("SELECT DISTINCT symbol FROM holdings WHERE user_id=$1", [req.userId]);
-    const tRes = await pool.query("SELECT DISTINCT symbol FROM trades WHERE user_id=$1", [req.userId]);
-    const symbols = new Set([...hRes.rows.map(r => r.symbol), ...tRes.rows.map(r => r.symbol)]);
+    // 🔴 2026-09-18 修复（Bin 指令）：原来对「持仓表 ∪ 交易表」里每个代码都抓年末收盘价，
+    // 不管那天是否真的持有。凯旋门建仓日 = 2026-04-10，于是 39 只全被锚上 2025 年末价，
+    // 把「你根本没进场」的 1-4 月行情算进了 YTD（腾讯锚 599 vs 建仓 514.36，一只就造成 ~US$42,050 虚假亏损）。
+    // 改法：只给「该年年末真的持有」的标的抓锚价（用 getHoldingsAsOf 回放交易判定）。
+    const asOf = await getHoldingsAsOf(req.userId, `${year}-12-31`);
+    const symbols = new Set(
+      (asOf || [])
+        .filter(x => (parseFloat(x.qty) || 0) > 0)
+        .map(x => x.symbol)
+    );
 
     const results = { ok: 0, skipped: 0, failed: [] };
     for (const symbol of symbols) {
@@ -2940,6 +2967,45 @@ app.get("/api/cron/holdings", async (req, res) => {
     });
   } catch (e) {
     console.error("Holdings export error:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Auth: header "x-cron-token" 或 query "?token=" 必须等于 CRON_SECRET。
+// 只读、不可写。立于 2026-09-18（Bin）：YTD 盈亏核对需逐笔交易，
+// 而 GET /api/trades 只认登录令牌（每次登录轮换、无法预存）。
+// 原始待办见 工作纪要_2026-07-22 第 7 条。
+app.get("/api/cron/trades", async (req, res) => {
+  const token = req.headers["x-cron-token"] || req.query.token;
+  if (!process.env.CRON_SECRET) {
+    return res.status(500).json({ error: "CRON_SECRET not configured on server" });
+  }
+  if (!token || token !== process.env.CRON_SECRET) {
+    return res.status(401).json({ error: "Invalid token" });
+  }
+  try {
+    const u = await pool.query("SELECT id FROM users ORDER BY id LIMIT 1");
+    if (u.rows.length === 0) return res.json({ generated_at: new Date().toISOString(), trades: [] });
+    const userId = u.rows[0].id;
+    const from = req.query.from || null;
+    const to = req.query.to || null;
+    const params = [userId];
+    let where = "user_id=$1";
+    if (from) { params.push(from); where += ` AND date >= $${params.length}`; }
+    if (to)   { params.push(to);   where += ` AND date <= $${params.length}`; }
+    const r = await pool.query(
+      `SELECT id,symbol,name,type,qty,price,fee,date,cash_ccy,cash_region,cash_delta
+         FROM trades WHERE ${where} ORDER BY date ASC, id ASC`,
+      params
+    );
+    res.json({
+      generated_at: new Date().toISOString(),
+      user_id: userId,
+      count: r.rows.length,
+      trades: r.rows
+    });
+  } catch (e) {
+    console.error("Trades export error:", e.message);
     res.status(500).json({ error: e.message });
   }
 });
