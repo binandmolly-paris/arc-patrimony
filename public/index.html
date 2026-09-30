@@ -3335,6 +3335,14 @@
             }
         });
 
+        const qtyBeforeYearStart = {}; // symbol -> 年初(yearStart 之前)按交易回放的持仓股数
+        [...APP.trades].filter(t => t.date < yearStart).sort((a, b) => (a.id || 0) - (b.id || 0)).forEach(t => {
+            const isBuy = t.type === '买入' || t.type === 'BUY';
+            const isSell = t.type === '卖出' || t.type === 'SELL';
+            if (isBuy) qtyBeforeYearStart[t.symbol] = (qtyBeforeYearStart[t.symbol] || 0) + t.qty;
+            else if (isSell) qtyBeforeYearStart[t.symbol] = (qtyBeforeYearStart[t.symbol] || 0) - t.qty;
+        });
+
         ytdSymbols.forEach(sym => {
             const h = APP.holdings.find(x => x.symbol === sym);
             if (!h) return;
@@ -3357,7 +3365,11 @@
             let stockYtdUnrealUSD = 0, stockYtdRealUSD = 0;
 
             // 年初持仓数 = 当前持仓 − 本年买入 + 本年卖出
-            const anchorQty = currentQty - buy.qty + sell.qty;
+            // 🔴 2026-09-30 修复（Bin 指令）：原 anchorQty = 现持仓(拆股后) − 本年买入(交易表，拆股前口径) + 卖出，
+            // 拆股标的（东京电子/东京海上/三井住友）两边股数口径不一 → 算出「年初持有」→ 误用旧年末锚价，
+            // YTD 凭空多亏约 US$16.7 万（YTD −5.37% vs 累计 +3.55%）。
+            // 改法：年初持仓 = 只回放「年初之前」的交易（同一口径），没有年初前交易 = 没在年初持有 = 成本法。
+            const anchorQty = qtyBeforeYearStart[sym] || 0;
             const heldAtYearStart = anchorQty > 0 && anchor && anchor.close_price > 0;
 
             // ① 浮盈亏：年初就持有的那部分用锚价，本年新买的部分用成本
