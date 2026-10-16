@@ -1183,8 +1183,8 @@ app.delete("/api/cash/:id", auth, async (req, res) => {
 
 // ===== 实时汇率 =====
 // fxRates[X] = USD per 1 X. _prev_X = previous trading day's close (for daily-change display).
-const fxRates = { JPY: 0.0067, CNY: 0.138, USD: 1, HKD: 0.128, CHF: 1.10, MYR: 0.21 };
-const fxPairs = ['JPYUSD=X', 'CNYUSD=X', 'HKDUSD=X', 'CHFUSD=X', 'MYRUSD=X'];
+const fxRates = { JPY: 0.0067, CNY: 0.138, USD: 1, HKD: 0.128, CHF: 1.10, MYR: 0.21, KRW: 0.00073 };
+const fxPairs = ['JPYUSD=X', 'CNYUSD=X', 'HKDUSD=X', 'CHFUSD=X', 'MYRUSD=X', 'KRWUSD=X'];
 
 async function fetchFXRates() {
   for (const pair of fxPairs) {
