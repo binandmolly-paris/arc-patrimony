@@ -3698,7 +3698,7 @@
                             row('Gold', fundGold, fmtNum(fundGold / FUND_PLAN.gold * 100, 0) + '% of $1.0M', '#fbbf24', false),
                             `<div style="border-top:1px solid #334155;margin-top:7px;"></div>`,
                             `<div style="display:flex;justify-content:space-between;font-size:12px;color:#e2e8f0;margin-top:6px;font-family:Montserrat,sans-serif;font-weight:600;"><span>MMF</span><span style="color:#34d399;">$${fmtNum(fundMMF, 0)}</span></div>`,
-                            row('War Chest', FUND_PLAN.reserve, fundMMF > 0 ? fmtNum(FUND_PLAN.reserve / fundMMF * 100, 0) + '% of MMF' : '', '#e2e8f0', true),
+                            row('Dry Powder', FUND_PLAN.reserve, fundMMF > 0 ? fmtNum(FUND_PLAN.reserve / fundMMF * 100, 0) + '% of MMF' : '', '#e2e8f0', true),
                             row('Sell-Put collateral', fundPut, fundPutN + ' open contracts', '#fbbf24', true),
                             row('Available for stocks', fundAvail, '', fundAvail >= 0 ? '#34d399' : '#f87171', true),
                             row('Gold still to buy', fundGoldTodo, '', '#e2e8f0', true),
