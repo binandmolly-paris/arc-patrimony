@@ -3554,17 +3554,53 @@
             const _md = (_ext.mmf && _ext.mmf.detail) || {};
             const _optTip = _od.net_premium_usd !== undefined ? `净收权利金 $${fmtNum(_od.net_premium_usd,0)} − 在仓买回成本 $${fmtNum(Math.abs(_od.open_mv_usd||0),0)}` : '';
             const _mmfTip = _md.fund_assets_usd !== undefined ? `现值 $${fmtNum(_md.fund_assets_usd,0)} − 累计净申购 $${fmtNum(_md.net_subscribed_usd||0,0)}` : '';
+            // 环形图：只画正数板块；负数板块仍列在右侧说明里
+            const _parts = [
+                { k: '正股', sub: 'Stocks',  v: cumulativePL, c: '#C1A673', tip: '浮盈 + 已实现 + 分红' },
+                { k: '期权', sub: 'Options', v: optPL,        c: '#60a5fa', tip: _optTip },
+                { k: '货基', sub: 'MMF',     v: mmfPL,        c: '#34d399', tip: _mmfTip },
+            ];
+            const _posSum = _parts.reduce((s, p) => s + Math.max(p.v, 0), 0);
+            const _R = 54, _C = 2 * Math.PI * _R;
+            let _off = 0;
+            const _arcs = _posSum > 0 ? _parts.filter(p => p.v > 0).map(p => {
+                const len = p.v / _posSum * _C;
+                const seg = `<circle cx="70" cy="70" r="${_R}" fill="none" stroke="${p.c}" stroke-width="20" stroke-dasharray="${Math.max(len - 2, 0)} ${_C - Math.max(len - 2, 0)}" stroke-dashoffset="${-_off}" transform="rotate(-90 70 70)"><title>${p.k} ${_sgn(p.v)}</title></circle>`;
+                _off += len;
+                return seg;
+            }).join('') : '';
+            const _row = (p) => `
+                <div title="${p.tip}" style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:4px 0;">
+                    <span style="font-size:13px;color:#cbd5e1;"><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${p.c};margin-right:7px;"></span>${p.k} <span style="font-size:10px;color:#64748b;">${p.sub}${_posSum > 0 && p.v > 0 ? ' · ' + fmtNum(p.v / _posSum * 100, 0) + '%' : ''}</span></span>
+                    <span class="${_plCls(p.v)}" style="font-size:14px;font-weight:600;font-family:Montserrat,sans-serif;">${_sgn(p.v)}</span>
+                </div>`;
+            const _note = (label, val) => `<div style="display:flex;justify-content:space-between;gap:10px;font-size:11px;color:#94a3b8;padding:1px 0 1px 16px;"><span>${label}</span><span style="font-family:Montserrat,sans-serif;">$${fmtNum(val,0)}</span></div>`;
+            const _optNotes = _od.gross_sold_usd !== undefined ? `
+                ${_note('累计收权利金', _od.gross_sold_usd)}
+                ${_note('已落袋（了结合约净赚）', _od.realized_usd || 0)}
+                ${_note('买回平仓已花', _od.gross_bought_usd || 0)}
+                <div style="font-size:10px;color:#64748b;padding:1px 0 3px 16px;">在仓 ${(_od.open || []).length} 张：已收 $${fmtNum(_od.open_premium_usd||0,0)}，现在买回要 $${fmtNum(Math.abs(_od.open_mv_usd||0),0)}</div>` : '';
             grandStrip = `
-            <div class="stat-card" style="margin-top:12px;display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 18px;">
-                <span class="stat-label">Grand P&L / 总账</span>
-                <span class="${_plCls(grandPL)}" style="font-size:22px;font-weight:700;">${_sgn(grandPL)}</span>
-                <span style="font-size:12px;color:#64748b;display:flex;flex-wrap:wrap;gap:4px 14px;">
-                    <span>正股 <span class="${_plCls(cumulativePL)}">${_sgn(cumulativePL)}</span></span>
-                    <span title="${_optTip}">期权 <span class="${_plCls(optPL)}">${_ext.options ? _sgn(optPL) : '—'}</span></span>
-                    <span title="${_mmfTip}">货基 <span class="${_plCls(mmfPL)}">${_ext.mmf ? _sgn(mmfPL) : '—'}</span></span>
-                    <span style="color:${_stale ? '#f87171' : '#475569'};">${_stale ? '⚠️ ' : ''}期权/货基截至 ${_asOf.slice(5)}</span>
-                </span>
-            </div>`;
+                <div class="chart-card" style="position:relative;overflow:hidden;">
+                    <div class="chart-title" style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+                        <span>Grand P&L / 总账</span>
+                        <span style="font-size:10px;font-weight:400;color:${_stale ? '#f87171' : '#64748b'};">${_stale ? '⚠️ ' : ''}期权/货基截至 ${_asOf.slice(5)}</span>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap;">
+                        <svg width="140" height="140" viewBox="0 0 140 140" style="flex:0 0 auto;">
+                            <circle cx="70" cy="70" r="${_R}" fill="none" stroke="rgba(148,163,184,0.12)" stroke-width="20"/>
+                            ${_arcs}
+                            <text x="70" y="64" text-anchor="middle" fill="#64748b" font-size="9" letter-spacing="1">TOTAL</text>
+                            <text x="70" y="82" text-anchor="middle" fill="${grandPL >= 0 ? '#4ade80' : '#f87171'}" font-size="15" font-weight="700" font-family="Montserrat,sans-serif">${_sgn(grandPL)}</text>
+                        </svg>
+                        <div style="flex:1 1 170px;min-width:170px;">
+                            ${_row(_parts[0])}
+                            ${_row(_parts[1])}
+                            ${_optNotes}
+                            ${_row(_parts[2])}
+                        </div>
+                    </div>
+                </div>`;
         }
 
         const cumCls = cumulativePL >= 0 ? 'price-positive' : 'price-negative';
@@ -3736,7 +3772,6 @@
                     </div>
                 </div>
             </div>
-            ${grandStrip}
             ${renderFXStrip()}
             <div class="stat-cards" style="margin-top:12px;">
                 ${Object.entries(regionStats).map(([r, s]) => {
@@ -3843,6 +3878,7 @@
             </div>
 
             <div class="charts-row">
+                ${grandStrip}
                 <div class="chart-card" style="position:relative;overflow:hidden;">
                     <div style="position:absolute;top:-40px;right:-40px;width:120px;height:120px;border-radius:50%;background:radial-gradient(circle,rgba(193,166,115,0.08),transparent 70%);pointer-events:none;"></div>
                     <div class="chart-title" style="display:flex;align-items:center;gap:10px;">
