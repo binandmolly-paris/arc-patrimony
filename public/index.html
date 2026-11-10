@@ -2091,6 +2091,7 @@
         trades: [],
         alerts: [],
         cash: { positions: [], total_usd: 0, red_line_pct: 20 },
+        extPl: {},   // 场外盈亏：{ options:{pl_usd,date,detail}, mmf:{...} }，木木同步脚本每日推送
         selectedStock: null,
         isRegister: false,
         regionFilter: '全部',
@@ -2561,6 +2562,16 @@
         }
     }
 
+    // 场外盈亏（期权 / 货基）— 取不到就当没有，总账条不显示
+    async function loadExtPl() {
+        try {
+            APP.extPl = (await apiCall('/ext-pl')) || {};
+        } catch (error) {
+            console.error('Failed to load ext-pl:', error);
+            APP.extPl = {};
+        }
+    }
+
     // 加载上一年度的锚定价（用于精确 YTD 计算）
     async function loadAnchorPrices() {
         const lastYear = new Date().getFullYear() - 1;
@@ -2704,6 +2715,7 @@
         await loadTrades();
         await loadAlerts();
         await loadCash();
+        await loadExtPl();
         await loadAnchorPrices();  // 加载年初锚定价（用于精确 YTD）
         // Seed target alerts only for LiuBin on first use
         if (APP.alerts.length === 0 && APP.username === 'LiuBin') {
@@ -3526,6 +3538,35 @@
             badge.style.display = activeHoldings.length > 0 ? 'inline-block' : 'none';
         }
 
+        // === 总账 = 正股累计 + 期权 + 货基（后两项由木木同步脚本每日推送，2026-11-10）===
+        const _ext = APP.extPl || {};
+        const _sgn = (v) => `${v>=0?'+':'-'}$${fmtNum(Math.abs(v),0)}`;
+        const _plCls = (v) => v >= 0 ? 'price-positive' : 'price-negative';
+        let grandStrip = '';
+        if (_ext.options || _ext.mmf) {
+            const optPL = _ext.options ? (_ext.options.pl_usd || 0) : 0;
+            const mmfPL = _ext.mmf ? (_ext.mmf.pl_usd || 0) : 0;
+            const grandPL = cumulativePL + optPL + mmfPL;
+            const _asOf = [_ext.options, _ext.mmf].filter(Boolean).map(x => x.date).sort()[0] || '';
+            const _todayStr = new Date().toISOString().slice(0, 10);
+            const _stale = _asOf && (new Date(_todayStr) - new Date(_asOf)) / 86400000 > 3;
+            const _od = (_ext.options && _ext.options.detail) || {};
+            const _md = (_ext.mmf && _ext.mmf.detail) || {};
+            const _optTip = _od.net_premium_usd !== undefined ? `净收权利金 $${fmtNum(_od.net_premium_usd,0)} − 在仓买回成本 $${fmtNum(Math.abs(_od.open_mv_usd||0),0)}` : '';
+            const _mmfTip = _md.fund_assets_usd !== undefined ? `现值 $${fmtNum(_md.fund_assets_usd,0)} − 累计净申购 $${fmtNum(_md.net_subscribed_usd||0,0)}` : '';
+            grandStrip = `
+            <div class="stat-card" style="margin-top:12px;display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 18px;">
+                <span class="stat-label">Grand P&L / 总账</span>
+                <span class="${_plCls(grandPL)}" style="font-size:22px;font-weight:700;">${_sgn(grandPL)}</span>
+                <span style="font-size:12px;color:#64748b;display:flex;flex-wrap:wrap;gap:4px 14px;">
+                    <span>正股 <span class="${_plCls(cumulativePL)}">${_sgn(cumulativePL)}</span></span>
+                    <span title="${_optTip}">期权 <span class="${_plCls(optPL)}">${_ext.options ? _sgn(optPL) : '—'}</span></span>
+                    <span title="${_mmfTip}">货基 <span class="${_plCls(mmfPL)}">${_ext.mmf ? _sgn(mmfPL) : '—'}</span></span>
+                    <span style="color:${_stale ? '#f87171' : '#475569'};">${_stale ? '⚠️ ' : ''}期权/货基截至 ${_asOf.slice(5)}</span>
+                </span>
+            </div>`;
+        }
+
         const cumCls = cumulativePL >= 0 ? 'price-positive' : 'price-negative';
         const todayCls = todayPL >= 0 ? 'price-positive' : 'price-negative';
         const ytdCls = ytdTotalPL >= 0 ? 'price-positive' : 'price-negative';
@@ -3695,6 +3736,7 @@
                     </div>
                 </div>
             </div>
+            ${grandStrip}
             ${renderFXStrip()}
             <div class="stat-cards" style="margin-top:12px;">
                 ${Object.entries(regionStats).map(([r, s]) => {
