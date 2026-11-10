@@ -3702,101 +3702,58 @@
                             row('Sell-Put collateral', fundPut, fundPutN + ' open contracts', '#fbbf24', true),
                             row('Available for stocks', fundAvail, '', fundAvail >= 0 ? '#34d399' : '#f87171', true),
                             row('Gold still to buy', fundGoldTodo, '', '#e2e8f0', true),
-                            row('Spare cash', fundFree, 'uncommitted', fundFree >= 0 ? '#e2e8f0' : '#f87171', true),
+                            row(fundFree >= 0 ? 'Over the $6.0M plan' : 'Short of the $6.0M plan', fundFree, fundFree >= 0 ? 'gains kept here' : '', fundFree >= 0 ? '#e2e8f0' : '#f87171', true),
                         ].join('');
                     })()}
                 </div>
 
                 <!-- ===== Card 2: Today P&L (点击展开详情) ===== -->
-                <div class="stat-card stat-today ${todayPL>=0?'pulse-up':'pulse-down'}" onclick="openTodayPLBreakdown()" style="cursor:pointer;" title="点击查看分地区/分股票明细">
+                <div class="stat-card stat-today ${todayPL>=0?'pulse-up':'pulse-down'}" onclick="openTodayPLBreakdown()" style="cursor:pointer;" title="Click for breakdown by region / stock">
                     <div class="stat-label-row">
-                        <span class="stat-label">Today P&L / 今日浮盈亏 ›</span>
+                        <span class="stat-label">Today P&L ›</span>
                         <span class="stat-dot ${todayPL>=0?'dot-up':'dot-down'}"></span>
                     </div>
-                    <div class="stat-pnl-row">
-                        <span class="stat-pct-lg ${todayCls}">${formatPercent(todayPLPct)}</span>
-                        <span class="stat-amount-sm ${todayCls}">${todayPL>=0?'+':''}$${fmtNum(todayPL)}</span>
-                    </div>
-                    <div class="stat-sub" style="display:block;font-size:11px;line-height:1.5;">
-                        ${Object.keys(todayByRegion).length > 0 ? `
-                        <div style="color:#64748b;display:flex;flex-wrap:wrap;gap:6px;">
-                            ${_pnlRegions(todayByRegion).filter(r => todayByRegion[r]).map(r => {
-                                const info = todayByRegion[r];
-                                const v = info.amount || 0;
-                                const flag = _regionFlag(r);
-                                const cls = v >= 0 ? 'price-positive' : 'price-negative';
-                                return `<span style="white-space:nowrap;">${flag}<span class="${cls}">${v>=0?'+':''}$${fmtNum(v,0)}</span></span>`;
-                            }).join('<span style="color:#334155;">·</span>')}
-                        </div>
-                        ` : ''}
-                        ${Object.keys(pendingByMarket).length > 0 ? `
-                        <div style="color:#475569;font-size:10px;margin-top:3px;display:flex;flex-wrap:wrap;gap:4px;align-items:center;">
-                            <span style="color:#64748b;">⏰ 待开盘 / 等成交:</span>
-                            ${['美国','中国A股','香港','中概','日本'].filter(k => pendingByMarket[k]).map(k => {
-                                const info = pendingByMarket[k];
-                                const v = info.amount || 0;
-                                const cls = v >= 0 ? 'price-positive' : 'price-negative';
-                                const md = (info.lastDate || '').slice(5);
-                                if (info.marketOpenNow) {
-                                    // 已开盘但 Yahoo 还没推 tick → 不显示陈旧金额，仅标 "已开盘 等成交"
-                                    return `<span style="white-space:nowrap;opacity:0.85;">${info.flag} <span style="color:#94a3b8;">${info.label}</span><span style="color:#4ade80;font-weight:600;"> 🟢 已开盘</span><span style="color:#475569;font-size:9px;"> 等今日首笔成交</span></span>`;
-                                }
-                                return `<span style="white-space:nowrap;opacity:0.7;">${info.flag} <span style="color:#94a3b8;">${info.label}</span> <span class="${cls}" style="opacity:0.6;">${v>=0?'+':''}$${fmtNum(v,0)}</span> <span style="color:#475569;">(${md})</span></span>`;
-                            }).join('<span style="color:#334155;">·</span>')}
-                        </div>
-                        ` : ''}
-                        ${Object.keys(todayByRegion).length === 0 && Object.keys(pendingByMarket).length === 0 ? '<div style="color:#64748b;">无可用报价数据</div>' : '<div style="color:#475569;font-size:10px;margin-top:2px;">仅含市场本地"今日"已成交</div>'}
-                    </div>
+                    ${_plHead(todayPL, formatPercent(todayPLPct))}
+                    ${_plRegionRows(todayByRegion, r => (todayByRegion[r] || {}).amount, r => todayByRegion[r])}
+                    ${Object.keys(pendingByMarket).length > 0 ? `
+                        ${_plDivider('Not counted yet')}
+                        ${['美国','中国A股','香港','中概','日本'].filter(k => pendingByMarket[k]).map(k => {
+                            const info = pendingByMarket[k];
+                            const name = info.flag + ' ' + ({'美国':'US','中国A股':'China A','香港':'Hong Kong','中概':'China ADR','日本':'Japan'}[k] || k);
+                            // 已开盘但 Yahoo 还没推 tick → 不显示陈旧金额
+                            if (info.marketOpenNow) return _plRow(name, null, 'open · awaiting first trade', true);
+                            return _plRow(name, info.amount || 0, 'last ' + (info.lastDate || '').slice(5), true);
+                        }).join('')}
+                    ` : ''}
+                    ${_plFoot(Object.keys(todayByRegion).length === 0 && Object.keys(pendingByMarket).length === 0 ? 'No quotes available' : "Counts only trades in each market's local today")}
                 </div>
 
                 <!-- ===== Card 3: YTD Total P&L ===== -->
                 <div class="stat-card stat-ytd">
                     <div class="stat-label-row">
-                        <span class="stat-label">YTD Total P&L / 本年总盈亏</span>
+                        <span class="stat-label">YTD P&L</span>
                         <span class="stat-chip" title="${hasAnchorMode ? '年初已持仓的用年末锚定价，本年新建仓的用实际成本' : '全部仓位均为本年建仓 → 统一用实际成本（与累计口径一致）'}">${hasAnchorMode ? '⚓ ANCHOR' : '⚓ COST'}</span>
                     </div>
-                    <div class="stat-pnl-row">
-                        <span class="stat-pct-lg ${ytdCls}">${ytdInvested > 0 ? formatPercent(ytdReturnPct) : '—'}</span>
-                        <span class="stat-amount-sm ${ytdCls}">${ytdTotalPL>=0?'+':''}$${fmtNum(ytdTotalPL)}</span>
-                    </div>
-                    <div class="stat-sub" style="display:block;font-size:11px;line-height:1.5;color:#64748b;">
-                        <div>浮 ${ytdUnrealized>=0?'+':''}$${fmtNum(ytdUnrealized,0)} · 实 ${ytdRealized>=0?'+':''}$${fmtNum(ytdRealized,0)} · 红 +$${fmtNum(ytdDividends,0)}</div>
-                        ${Object.keys(ytdByRegion).length > 0 ? `
-                        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:2px;">
-                            ${_pnlRegions(ytdByRegion).filter(r => ytdByRegion[r] !== undefined).map(r => {
-                                const v = ytdByRegion[r] || 0;
-                                const flag = _regionFlag(r);
-                                const cls = v >= 0 ? 'price-positive' : 'price-negative';
-                                return `<span style="white-space:nowrap;">${flag}<span class="${cls}">${v>=0?'+':''}$${fmtNum(v,0)}</span></span>`;
-                            }).join('<span style="color:#334155;">·</span>')}
-                        </div>` : ''}
-                        ${hasAnchorMode ? `<div style="color:#475569;font-size:10px;">⚓ 年初已持仓用 ${new Date().getFullYear()-1} 年末锚价 · 本年新建仓 ${ytdCostModeCount} 只用实际成本</div>` : `<div style="color:#475569;font-size:10px;">⚓ ${ytdCostModeCount} 只均为本年建仓 · 统一用实际成本，YTD 应≈累计</div>`}
-                    </div>
+                    ${_plHead(ytdTotalPL, ytdInvested > 0 ? formatPercent(ytdReturnPct) : '—')}
+                    ${_plRow('Unrealized', ytdUnrealized)}
+                    ${_plRow('Realized', ytdRealized)}
+                    ${_plRow('Dividends', ytdDividends)}
+                    ${Object.keys(ytdByRegion).length > 0 ? _plDivider('By region') + _plRegionRows(ytdByRegion, r => ytdByRegion[r], r => ytdByRegion[r] !== undefined, true) : ''}
+                    ${_plFoot(hasAnchorMode ? `Held since Jan 1: ${new Date().getFullYear()-1} year-end price · ${ytdCostModeCount} opened this year: cost` : `All ${ytdCostModeCount} positions opened this year · cost basis`)}
                 </div>
 
                 <!-- ===== Card 4: Cumulative Total P&L ===== -->
                 <div class="stat-card stat-cumulative">
                     <div class="stat-label-row">
-                        <span class="stat-label">Cumulative P&L / 累计总盈亏</span>
+                        <span class="stat-label">Cumulative P&L</span>
                         <span class="stat-chip" title="浮盈亏+已实现+分红，自成立以来">★ INCEPTION</span>
                     </div>
-                    <div class="stat-pnl-row">
-                        <span class="stat-pct-lg ${cumCls}">${formatPercent(cumulativeReturnPct)}</span>
-                        <span class="stat-amount-sm ${cumCls}">${cumulativePL>=0?'+':''}$${fmtNum(cumulativePL)}</span>
-                    </div>
-                    <div class="stat-sub" style="display:block;font-size:11px;line-height:1.5;color:#64748b;">
-                        <div>浮 ${unrealizedPL>=0?'+':''}$${fmtNum(unrealizedPL,0)} · 实 ${realizedPL_USD>=0?'+':''}$${fmtNum(realizedPL_USD,0)} · 红 +$${fmtNum(dividends_USD,0)}</div>
-                        ${Object.keys(cumByRegion).length > 0 ? `
-                        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:2px;">
-                            ${_pnlRegions(cumByRegion).filter(r => cumByRegion[r] !== undefined).map(r => {
-                                const v = cumByRegion[r] || 0;
-                                const flag = _regionFlag(r);
-                                const cls = v >= 0 ? 'price-positive' : 'price-negative';
-                                return `<span style="white-space:nowrap;">${flag}<span class="${cls}">${v>=0?'+':''}$${fmtNum(v,0)}</span></span>`;
-                            }).join('<span style="color:#334155;">·</span>')}
-                        </div>` : ''}
-                        <div style="color:#475569;font-size:10px;">on $${fmtNum(totalInvestedEver,0)} invested</div>
-                    </div>
+                    ${_plHead(cumulativePL, formatPercent(cumulativeReturnPct))}
+                    ${_plRow('Unrealized', unrealizedPL)}
+                    ${_plRow('Realized', realizedPL_USD)}
+                    ${_plRow('Dividends', dividends_USD)}
+                    ${Object.keys(cumByRegion).length > 0 ? _plDivider('By region') + _plRegionRows(cumByRegion, r => cumByRegion[r], r => cumByRegion[r] !== undefined, true) : ''}
+                    ${_plFoot('on $' + fmtNum(totalInvestedEver, 0) + ' invested')}
                 </div>
             </div>
             ${renderFXStrip()}
@@ -5960,6 +5917,29 @@
                 </div>
             </div>
         `;
+    }
+
+    // 2026-11-10:三张 P&L 卡与 Funds on Platform 卡统一版式(大字金额 + 左名右数的文字行)
+    function _plSigned(v) { return (v >= 0 ? '+' : '-') + '$' + fmtNum(Math.abs(v), 0); }
+    function _plColor(v) { return v >= 0 ? '#4ade80' : '#f87171'; }
+    function _plHead(v, pctText) {
+        return `<div class="stat-value-lg" style="color:${_plColor(v)};">${_plSigned(v)} <span style="font-size:12px;font-weight:500;letter-spacing:0;">${pctText}</span></div>`;
+    }
+    function _plRow(k, v, note, sub) {
+        const val = v === null || v === undefined ? '' : `<span style="color:${_plColor(v)};font-weight:600;">${_plSigned(v)}</span>`;
+        return `<div style="display:flex;justify-content:space-between;gap:8px;font-size:${sub ? 10 : 11}px;color:${sub ? '#94a3b8' : '#cbd5e1'};margin-top:${sub ? 3 : 6}px;font-family:Montserrat,sans-serif;${sub ? 'padding-left:10px;' : ''}">
+            <span>${k}</span>
+            <span style="white-space:nowrap;">${val}${note ? ` <span style="color:#64748b;">${val ? '· ' : ''}${note}</span>` : ''}</span>
+        </div>`;
+    }
+    function _plDivider(title) {
+        return `<div style="border-top:1px solid #334155;margin-top:7px;"></div><div style="font-size:9px;color:#64748b;letter-spacing:1.2px;text-transform:uppercase;margin-top:6px;font-family:Montserrat,sans-serif;">${title}</div>`;
+    }
+    function _plFoot(text) {
+        return `<div style="font-size:10px;color:#475569;margin-top:8px;font-family:Montserrat,sans-serif;">${text}</div>`;
+    }
+    function _plRegionRows(obj, getV, keep, sub) {
+        return _pnlRegions(obj).filter(keep).map(r => _plRow(_regionFlag(r) + ' ' + regionEN(r), getV(r) || 0, '', sub)).join('');
     }
 
     function _regionFlag(r) {
