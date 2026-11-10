@@ -256,6 +256,27 @@ async function initDB() {
       ADD COLUMN IF NOT EXISTS cash_delta NUMERIC(20,2)
   `);
 
+  // 场外盈亏（2026-11-10 Bin 指令）：期权、货基不是「持仓×现价」能算出来的，
+  // 由 Mac 上的木木同步脚本每日算好推上来。key = 'options' | 'mmf'，一天一行。
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS ext_pl (
+      user_id INTEGER NOT NULL,
+      key TEXT NOT NULL,
+      date DATE NOT NULL,
+      pl_usd NUMERIC(20,2) NOT NULL DEFAULT 0,
+      detail JSONB,
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      PRIMARY KEY (user_id, key, date)
+    );
+  `);
+  // 快照加总账三列；cumulative_pl_usd 仍只含正股，保证历史曲线连续
+  await pool.query(`
+    ALTER TABLE daily_snapshot
+      ADD COLUMN IF NOT EXISTS options_pl_usd NUMERIC(20,2),
+      ADD COLUMN IF NOT EXISTS mmf_pl_usd NUMERIC(20,2),
+      ADD COLUMN IF NOT EXISTS grand_pl_usd NUMERIC(20,2)
+  `);
+
   await initArcTodoDB(pool);
   await seedArcTodoMembers(pool);
   console.log("✅ 数据库表已就绪（Phase 2.3 + ARC TODO 隔离模块）");
@@ -614,44 +635,70 @@ app.post("/api/holdings/target-weight", authOrHoldings, async (req, res) => {
   }
 });
 
+// ===== 已实现盈亏 / 分红：唯一算法（持仓接口与每日快照共用）=====
+// 🔴 2026-09-18 修复（Bin 指令）：原来 realized_pl = 卖出金额 − 当前 avg_cost × 卖出股数，
+// 用的是「当前」均价，于是「先卖后又补回」的标的会算错。
+// 实例：宁德 8/17 卖 1,000 @398（当时成本 353.26，真实已实现 ¥44,740），
+//       9/9 又以 331 补回 1,000 股把 avg_cost 拉到 331 → 旧算法得出 ¥67,000，虚高 ¥22,260（≈US$3,328）。
+// 改法：按 id 顺序回放交易，用「卖出发生当时」的移动加权成本算已实现，并扣卖出手续费。
+// 🔴 2026-11-10（Bin 指令）：每日快照原先还在用旧算法，抽成此函数后两处统一。
+function replayTrades(tradeRows) {
+  const sellInfo = {};
+  const dividendInfo = {};
+  const replay = {};
+  tradeRows.forEach(t => {
+    const sym = t.symbol;
+    const isBuy = t.type === '买入' || t.type === 'BUY';
+    const isDividend = t.type === '分红' || t.type === 'DIVIDEND';
+    const qty = parseFloat(t.qty) || 0;
+    const price = parseFloat(t.price) || 0;
+    const fee = parseFloat(t.fee) || 0;
+    if (!replay[sym]) replay[sym] = { qty: 0, cost: 0 };
+    const p = replay[sym];
+    if (isDividend) {
+      if (!dividendInfo[sym]) dividendInfo[sym] = 0;
+      dividendInfo[sym] += price * qty; // price=每股分红, qty=股数
+    } else if (isBuy) {
+      const tot = p.qty + qty;
+      p.cost = tot > 0 ? (p.cost * p.qty + price * qty) / tot : 0;
+      p.qty = tot;
+    } else {
+      if (!sellInfo[sym]) sellInfo[sym] = { amount: 0, qty: 0, cost: 0, pl: 0 };
+      sellInfo[sym].amount += price * qty;
+      sellInfo[sym].qty += qty;
+      sellInfo[sym].cost += p.cost * qty;              // 卖出当时的成本
+      sellInfo[sym].pl += (price - p.cost) * qty - fee; // 扣费后的已实现
+      p.qty -= qty;
+    }
+  });
+  return { sellInfo, dividendInfo };
+}
+
+// 场外盈亏（期权 / 货基）各取最新一行
+async function latestExtPl(userId) {
+  const r = await pool.query(
+    `SELECT DISTINCT ON (key) key, date, pl_usd, detail, updated_at
+       FROM ext_pl WHERE user_id=$1 ORDER BY key, date DESC`,
+    [userId]
+  );
+  const out = {};
+  r.rows.forEach(x => {
+    out[x.key] = {
+      date: x.date instanceof Date ? x.date.toISOString().slice(0, 10) : String(x.date).slice(0, 10),
+      pl_usd: parseFloat(x.pl_usd) || 0,
+      detail: x.detail || {},
+      updated_at: x.updated_at,
+    };
+  });
+  return out;
+}
+
 // ===== 持仓 =====
 app.get("/api/holdings", auth, async (req, res) => {
   try {
     const holdResult = await pool.query("SELECT * FROM holdings WHERE user_id=$1 ORDER BY id", [req.userId]);
     const tradeResult = await pool.query("SELECT * FROM trades WHERE user_id=$1 ORDER BY id", [req.userId]);
-    // 🔴 2026-09-18 修复（Bin 指令）：原来 realized_pl = 卖出金额 − 当前 avg_cost × 卖出股数，
-    // 用的是「当前」均价，于是「先卖后又补回」的标的会算错。
-    // 实例：宁德 8/17 卖 1,000 @398（当时成本 353.26，真实已实现 ¥44,740），
-    //       9/9 又以 331 补回 1,000 股把 avg_cost 拉到 331 → 旧算法得出 ¥67,000，虚高 ¥22,260（≈US$3,328）。
-    // 改法：按 id 顺序回放交易，用「卖出发生当时」的移动加权成本算已实现。
-    const sellInfo = {};
-    const dividendInfo = {};
-    const replay = {};
-    tradeResult.rows.forEach(t => {
-      const sym = t.symbol;
-      const isBuy = t.type === '买入' || t.type === 'BUY';
-      const isDividend = t.type === '分红' || t.type === 'DIVIDEND';
-      const qty = parseFloat(t.qty) || 0;
-      const price = parseFloat(t.price) || 0;
-      const fee = parseFloat(t.fee) || 0;
-      if (!replay[sym]) replay[sym] = { qty: 0, cost: 0 };
-      const p = replay[sym];
-      if (isDividend) {
-        if (!dividendInfo[sym]) dividendInfo[sym] = 0;
-        dividendInfo[sym] += price * qty; // price=每股分红, qty=股数
-      } else if (isBuy) {
-        const tot = p.qty + qty;
-        p.cost = tot > 0 ? (p.cost * p.qty + price * qty) / tot : 0;
-        p.qty = tot;
-      } else {
-        if (!sellInfo[sym]) sellInfo[sym] = { amount: 0, qty: 0, cost: 0, pl: 0 };
-        sellInfo[sym].amount += price * qty;
-        sellInfo[sym].qty += qty;
-        sellInfo[sym].cost += p.cost * qty;              // 卖出当时的成本
-        sellInfo[sym].pl += (price - p.cost) * qty - fee; // 扣费后的已实现
-        p.qty -= qty;
-      }
-    });
+    const { sellInfo, dividendInfo } = replayTrades(tradeResult.rows);
     const enriched = holdResult.rows.map(r => {
       const si = sellInfo[r.symbol];
       let realized_pl = 0, realized_cost = 0;
@@ -2811,23 +2858,11 @@ async function takeDailySnapshot(userId) {
   // 2) Get holdings + trades for this user
   const [hRes, tRes] = await Promise.all([
     pool.query("SELECT * FROM holdings WHERE user_id=$1", [userId]),
-    pool.query("SELECT type, symbol, qty, price FROM trades WHERE user_id=$1", [userId]),
+    pool.query("SELECT * FROM trades WHERE user_id=$1 ORDER BY id", [userId]),
   ]);
 
-  // 3) Compute per-symbol realized PL & dividends from trade history
-  const sellInfo = {};   // { symbol: { amount, qty } }
-  const dividendInfo = {};
-  tRes.rows.forEach(t => {
-    const isBuy = t.type === '买入' || t.type === 'BUY';
-    const isDiv = t.type === '分红' || t.type === 'DIVIDEND';
-    if (isDiv) {
-      dividendInfo[t.symbol] = (dividendInfo[t.symbol] || 0) + t.price * t.qty;
-    } else if (!isBuy) {
-      if (!sellInfo[t.symbol]) sellInfo[t.symbol] = { amount: 0, qty: 0 };
-      sellInfo[t.symbol].amount += t.price * t.qty;
-      sellInfo[t.symbol].qty += t.qty;
-    }
-  });
+  // 3) Per-symbol realized PL & dividends — 与 /api/holdings 同一算法
+  const { sellInfo, dividendInfo } = replayTrades(tRes.rows);
 
   // 4) Fetch current prices for active symbols
   const activeSymbols = hRes.rows.filter(h => h.qty > 0).map(h => h.symbol);
@@ -2847,8 +2882,7 @@ async function takeDailySnapshot(userId) {
     // Realized PL & dividends apply across all positions (including sold)
     const si = sellInfo[h.symbol];
     if (si && si.qty > 0) {
-      const realizedCost = h.avg_cost * si.qty;
-      realizedUsd += (si.amount - realizedCost) * fx;
+      realizedUsd += si.pl * fx;
     }
     const divLocal = dividendInfo[h.symbol] || 0;
     dividendsUsd += divLocal * fx;
@@ -2872,13 +2906,19 @@ async function takeDailySnapshot(userId) {
   const cumulativePlUsd = unrealizedUsd + realizedUsd + dividendsUsd;
   const today = new Date().toISOString().slice(0, 10);
 
+  // 5b) 总账 = 正股 + 期权 + 货基（后两项取同步脚本最新推送；从未推送过则留空）
+  const ext = await latestExtPl(userId);
+  const optionsPlUsd = ext.options ? ext.options.pl_usd : null;
+  const mmfPlUsd = ext.mmf ? ext.mmf.pl_usd : null;
+  const grandPlUsd = cumulativePlUsd + (optionsPlUsd || 0) + (mmfPlUsd || 0);
+
   // 6) UPSERT today's snapshot (one row per user per date)
   await pool.query(`
     INSERT INTO daily_snapshot (
       user_id, date, total_value_usd, total_cost_usd,
       unrealized_pl_usd, realized_pl_usd, dividend_total_usd, cumulative_pl_usd,
-      region_values, fx_rates
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      region_values, fx_rates, options_pl_usd, mmf_pl_usd, grand_pl_usd
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
     ON CONFLICT (user_id, date) DO UPDATE SET
       total_value_usd     = EXCLUDED.total_value_usd,
       total_cost_usd      = EXCLUDED.total_cost_usd,
@@ -2887,19 +2927,26 @@ async function takeDailySnapshot(userId) {
       dividend_total_usd  = EXCLUDED.dividend_total_usd,
       cumulative_pl_usd   = EXCLUDED.cumulative_pl_usd,
       region_values       = EXCLUDED.region_values,
-      fx_rates            = EXCLUDED.fx_rates
+      fx_rates            = EXCLUDED.fx_rates,
+      options_pl_usd      = EXCLUDED.options_pl_usd,
+      mmf_pl_usd          = EXCLUDED.mmf_pl_usd,
+      grand_pl_usd        = EXCLUDED.grand_pl_usd
   `, [
     userId, today,
     totalValueUsd.toFixed(2), totalCostUsd.toFixed(2),
     unrealizedUsd.toFixed(2), realizedUsd.toFixed(2),
     dividendsUsd.toFixed(2), cumulativePlUsd.toFixed(2),
     JSON.stringify(regionValues), JSON.stringify(fxRates),
+    optionsPlUsd === null ? null : optionsPlUsd.toFixed(2),
+    mmfPlUsd === null ? null : mmfPlUsd.toFixed(2),
+    grandPlUsd.toFixed(2),
   ]);
 
   return {
     userId, date: today,
     total_value_usd: +totalValueUsd.toFixed(2),
     cumulative_pl_usd: +cumulativePlUsd.toFixed(2),
+    grand_pl_usd: +grandPlUsd.toFixed(2),
     active_positions: activeSymbols.length,
   };
 }
@@ -3010,13 +3057,66 @@ app.get("/api/cron/trades", async (req, res) => {
   }
 });
 
+// ===== 场外盈亏：期权 / 货基（2026-11-10 Bin 指令）=====
+// 写：Mac 上的木木同步脚本每日推送，x-holdings-token（或登录态）。同一天重推即覆盖。
+app.post("/api/ext-pl", authOrHoldings, async (req, res) => {
+  try {
+    const { key, pl_usd, detail, date } = req.body || {};
+    if (key !== "options" && key !== "mmf") return res.status(400).json({ error: "key 只能是 options 或 mmf" });
+    const v = parseFloat(pl_usd);
+    if (!isFinite(v)) return res.status(400).json({ error: "pl_usd 不是数字" });
+    const d = /^\d{4}-\d{2}-\d{2}$/.test(date || "") ? date : new Date().toISOString().slice(0, 10);
+    await pool.query(
+      `INSERT INTO ext_pl (user_id, key, date, pl_usd, detail, updated_at)
+       VALUES ($1,$2,$3,$4,$5,NOW())
+       ON CONFLICT (user_id, key, date) DO UPDATE SET
+       pl_usd=EXCLUDED.pl_usd, detail=EXCLUDED.detail, updated_at=NOW()`,
+      [req.userId, key, d, v.toFixed(2), JSON.stringify(detail || {})]
+    );
+    res.json({ ok: true, key, date: d, pl_usd: +v.toFixed(2) });
+  } catch (e) {
+    console.error("ext-pl save error:", e.message);
+    res.status(500).json({ error: "保存场外盈亏失败" });
+  }
+});
+
+// 读：前端总账条用（登录态）
+app.get("/api/ext-pl", auth, async (req, res) => {
+  try {
+    res.json(await latestExtPl(req.userId));
+  } catch (e) {
+    console.error("ext-pl error:", e.message);
+    res.status(500).json({ error: "获取场外盈亏失败" });
+  }
+});
+
+// 读：只读令牌（对账脚本用）
+app.get("/api/cron/ext-pl", async (req, res) => {
+  const token = req.headers["x-cron-token"] || req.query.token;
+  if (!process.env.CRON_SECRET) {
+    return res.status(500).json({ error: "CRON_SECRET not configured on server" });
+  }
+  if (!token || token !== process.env.CRON_SECRET) {
+    return res.status(401).json({ error: "Invalid token" });
+  }
+  try {
+    const u = await pool.query("SELECT id FROM users ORDER BY id LIMIT 1");
+    if (u.rows.length === 0) return res.json({});
+    res.json(await latestExtPl(u.rows[0].id));
+  } catch (e) {
+    console.error("ext-pl export error:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ===== Snapshot history endpoint (for future YTD chart UI) =====
 app.get("/api/snapshots", auth, async (req, res) => {
   try {
     const days = Math.min(parseInt(req.query.days) || 365, 1825); // cap at 5 years
     const r = await pool.query(
       `SELECT date, total_value_usd, total_cost_usd, unrealized_pl_usd, realized_pl_usd,
-              dividend_total_usd, cumulative_pl_usd, region_values
+              dividend_total_usd, cumulative_pl_usd, region_values,
+              options_pl_usd, mmf_pl_usd, grand_pl_usd
        FROM daily_snapshot
        WHERE user_id=$1 AND date >= CURRENT_DATE - $2::int
        ORDER BY date`,
