@@ -3480,14 +3480,14 @@
         // 浏览器今日（仅用于 UI 提示）
         const userTodayDate = getUserTodayDate();
 
-        // === Total Budget USD = Σ(region budgets in local ccy → USD) ===
-        const allRegionsForBudget = [...new Set(APP.holdings.filter(h => h.qty > 0).map(h => h.region).filter(Boolean))];
-        let totalBudgetUSD = 0;
-        allRegionsForBudget.forEach(r => { totalBudgetUSD += regionBudgetToUSD(r); });
-        // ★ Budget used = COST (actual money spent), NOT market value
-        const budgetUsedByCost = totalCost;
-        const budgetUsedPct = totalBudgetUSD > 0 ? (budgetUsedByCost / totalBudgetUSD * 100) : 0;
-        const budgetRemaining = totalBudgetUSD - budgetUsedByCost;
+        // === Funds on Platform(2026-11-10 Bin 定:预算取消,改按 600 万计划 = 黄金 100 万 + 木木 500 万[正股 350 万 + 正库银 150 万])===
+        let fundGold = 0, fundStk = 0, fundOther = 0;
+        APP.holdings.filter(h => h.qty > 0).forEach(h => {
+            const c = h.qty * h.avg_cost * (APP.FX_RATES[h.currency] || 1);
+            if (h.region === '黄金') fundGold += c; else if (inStockPlan(h)) fundStk += c; else fundOther += c;
+        });
+        const fundMMF = (((APP.extPl || {}).mmf || {}).detail || {}).fund_assets_usd || 0;
+        const fundTotal = fundGold + fundStk + fundMMF + fundOther;
 
         // Update market light bar
         const lightBar = document.getElementById('marketLightBar');
@@ -3583,7 +3583,7 @@
                     <div style="display:flex;align-items:center;gap:0;">
                         <div style="min-width:0;">
                             <div style="color:#e2e8f0;font-size:12px;font-weight:600;font-family:Montserrat,sans-serif;">${p.k}</div>
-                            <div class="${_plCls(p.v)}" style="font-size:9px;font-family:Montserrat,sans-serif;margin-top:1px;">${_sgn(p.v)}</div>
+                            <div class="${_plCls(p.v)}" style="font-size:10px;font-family:Montserrat,sans-serif;margin-top:1px;">${_sgn(p.v)}</div>
                         </div>
                         <div style="flex:1;display:flex;align-items:center;justify-content:center;padding:0 8px;">
                             <div style="width:100%;height:3px;border-radius:2px;background:${p.c}40;position:relative;">
@@ -3596,19 +3596,19 @@
                     </div>${extra || ''}
                 </div>`;
             };
-            const _note = (label, val, signed) => `<div style="display:flex;justify-content:space-between;gap:8px;font-size:9px;color:#94a3b8;padding-top:2px;font-family:Montserrat,sans-serif;"><span>${label}</span><span${signed ? ' class="' + _plCls(val) + '"' : ''}>${signed ? _sgn(val) : '$' + fmtNum(val,0)}</span></div>`;
+            const _note = (label, val, signed) => `<div style="display:flex;justify-content:space-between;gap:8px;font-size:10px;color:#94a3b8;padding-top:3px;font-family:Montserrat,sans-serif;"><span>${label}</span><span${signed ? ' class="' + _plCls(val) + '"' : ''}>${signed ? _sgn(val) : '$' + fmtNum(val,0)}</span></div>`;
             const _stkNotes = `
                 <div style="margin-top:5px;">
                 ${_note('Realized', realizedPL_USD, true)}
                 ${_note('Unrealized', unrealizedPL, true)}
-                ${_note('Dividends', dividends_USD, true)}
+                ${_note('Dividends (stocks, net)', dividends_USD, true)}
                 </div>`;
             const _optNotes = _od.gross_sold_usd !== undefined ? `
                 <div style="margin-top:5px;">
                 ${_note('Premium collected', _od.gross_sold_usd)}
                 ${_note('Locked in', _od.realized_usd || 0)}
                 ${_note('Buy-back spent', _od.gross_bought_usd || 0)}
-                <div style="font-size:9px;color:#64748b;padding-top:2px;">Open ${(_od.open || []).length}: collected $${fmtNum(_od.open_premium_usd||0,0)}, buy-back $${fmtNum(Math.abs(_od.open_mv_usd||0),0)}</div>
+                <div style="font-size:10px;color:#64748b;padding-top:3px;">Open ${(_od.open || []).length}: collected $${fmtNum(_od.open_premium_usd||0,0)}, buy-back $${fmtNum(Math.abs(_od.open_mv_usd||0),0)}</div>
                 </div>` : '';
             grandStrip = `
                 <div class="chart-card" style="position:relative;overflow:hidden;">
@@ -3643,10 +3643,8 @@
         const ytdCls = ytdTotalPL >= 0 ? 'price-positive' : 'price-negative';
         const unrealCls = unrealizedPL >= 0 ? 'price-positive' : 'price-negative';
         const realizedCls = realizedPL_USD >= 0 ? 'price-positive' : 'price-negative';
-        const budgetBarColor = budgetUsedPct > 100 ? '#f87171' : budgetUsedPct > 80 ? '#fbbf24' : '#C1A673';
-        const budgetTextColor = budgetUsedPct > 100 ? '#f87171' : budgetUsedPct > 80 ? '#fbbf24' : '#94a3b8';
 
-        // === 主页价格触达走马灯(A1+,2026-06-14;格式对齐底部 FX 条):放标签栏与预算卡之间 ===
+        // === 主页价格触达走马灯(A1+,2026-06-14;格式对齐底部 FX 条):放标签栏与资金卡之间 ===
         const _trig = (a) => {
             const cur = APP.prices[a.symbol]?.price;
             if (cur == null) return false;
@@ -3676,43 +3674,28 @@
         let html = `
             ${alertTicker}
             <div class="stat-grid">
-                <!-- ===== Card 1: Budget (used by COST not market value) ===== -->
+                <!-- ===== Card 1: Funds on Platform (cost basis + MMF value, vs 6.0M plan) ===== -->
                 <div class="stat-card stat-budget">
                     <div class="stat-label-row">
-                        <span class="stat-label">Budget / 预算使用</span>
-                        <span class="stat-chip" style="color:${budgetTextColor};border-color:${budgetTextColor}40;">${totalBudgetUSD > 0 ? fmtNum(budgetUsedPct,1)+'%' : 'N/A'}</span>
+                        <span class="stat-label">Funds on Platform</span>
+                        <span class="stat-chip" style="color:#94a3b8;border-color:#94a3b840;">Plan $${fmtNum(FUND_PLAN.gold + FUND_PLAN.stocks + FUND_PLAN.reserve, 0)}</span>
                     </div>
-                    ${totalBudgetUSD > 0 ? `
-                        <div class="stat-value-lg" style="color:#C1A673;">$${fmtNum(totalBudgetUSD)}</div>
-                        <div class="budget-bar-wrap">
-                            <div class="budget-bar-fill" style="width:${Math.min(100,budgetUsedPct)}%;background:${budgetBarColor};box-shadow:0 0 8px ${budgetBarColor}80;"></div>
-                        </div>
-                        <div class="stat-sub" style="display:flex;justify-content:space-between;font-size:11px;">
-                            <span style="color:${budgetTextColor};">Used (cost) $${fmtNum(budgetUsedByCost)}</span>
-                            <span style="color:${budgetRemaining>=0?'#4ade80':'#f87171'};">${budgetRemaining>=0?'Rem':'Over'} $${fmtNum(Math.abs(budgetRemaining))}</span>
-                        </div>
-                        ${(() => {
-                            // 各国预算使用率小字行：仅显示已设预算的区域
-                            const items = _pnlRegions(regionStats).map(r => {
-                                const stats = regionStats[r];
-                                if (!stats) return '';
-                                const budgetLocal = parseFloat(APP.regionBudgets[r]) || 0;
-                                const cur = getRegionCurrency(r);
-                                const budgetUSD = budgetLocal * (APP.FX_RATES[cur] || 1);
-                                if (budgetUSD <= 0) return '';
-                                const pct = (stats.cost / budgetUSD) * 100;
-                                const flag = _regionFlag(r);
-                                const color = pct > 100 ? '#f87171' : pct > 80 ? '#fbbf24' : '#94a3b8';
-                                return `<span style="white-space:nowrap;">${flag}<span style="color:${color};margin-left:3px;">${fmtNum(pct,1)}%</span></span>`;
-                            }).filter(Boolean);
-                            return items.length > 0
-                                ? `<div style="display:flex;flex-wrap:wrap;gap:6px;font-size:10px;color:#64748b;margin-top:4px;">${items.join('<span style="color:#334155;">·</span>')}</div>`
-                                : '';
-                        })()}
-                    ` : `
-                        <div class="stat-value-lg" style="color:#64748b;">—</div>
-                        <div class="stat-sub" style="color:#64748b;">Set region budgets in Allocation tab</div>
-                    `}
+                    <div class="stat-value-lg" style="color:#C1A673;">$${fmtNum(fundTotal, 0)}</div>
+                    ${[
+                        ['Gold', fundGold, FUND_PLAN.gold, '#fbbf24'],
+                        ['Stocks (cost)', fundStk, FUND_PLAN.stocks, '#C1A673'],
+                        ['Reserve (MMF)', fundMMF, FUND_PLAN.reserve, '#34d399'],
+                    ].map(([k, v, plan, c]) => {
+                        const pct = plan > 0 ? v / plan * 100 : 0;
+                        return `<div style="margin-top:5px;font-family:Montserrat,sans-serif;">
+                            <div style="display:flex;justify-content:space-between;font-size:10px;color:#94a3b8;">
+                                <span>${k}</span>
+                                <span><span style="color:#e2e8f0;font-weight:600;">$${fmtNum(v, 0)}</span> / $${fmtNum(plan / 1e6, 1)}M · <span style="color:${c};">${fmtNum(pct, 0)}%</span></span>
+                            </div>
+                            <div class="budget-bar-wrap" style="margin-top:2px;"><div class="budget-bar-fill" style="width:${Math.min(100, pct)}%;background:${c};"></div></div>
+                        </div>`;
+                    }).join('')}
+                    ${fundOther > 0 ? `<div style="display:flex;justify-content:space-between;font-size:10px;color:#64748b;margin-top:5px;font-family:Montserrat,sans-serif;"><span>Outside plan (Japan, A-shares)</span><span>$${fmtNum(fundOther, 0)}</span></div>` : ''}
                 </div>
 
                 <!-- ===== Card 2: Today P&L (点击展开详情) ===== -->
@@ -3822,12 +3805,6 @@
                     const rCurSym = getRegionCurrencySymbol(rCur);
                     const rFx     = APP.FX_RATES[rCur] || 1;
                     const usd2local = (usd) => rFx > 0 ? (usd / rFx) : 0;
-                    // === 预算 (本地货币存储；预算条进度按 USD 成本比) ===
-                    const regionBudgetLocal = parseFloat(APP.regionBudgets[r]) || 0;
-                    const regionBudgetUSD   = regionBudgetLocal * rFx;
-                    const budgetUsedPct     = regionBudgetUSD > 0 ? (s.cost / regionBudgetUSD * 100) : 0;
-                    const budgetUsedLocal   = usd2local(s.cost);
-                    const budgetRemainLocal = regionBudgetLocal - budgetUsedLocal;
                     // === 区域市值 / 累计盈亏 显示用本地币 ===
                     const regionValueLocal  = usd2local(s.value);
                     const regionCumPL_Local = usd2local(regionCumPL_USD);
@@ -3850,7 +3827,7 @@
                     return `<div class="stat-card" style="position:relative;padding:14px 16px;cursor:pointer;" onclick="openRegionDrilldown('${r}')" title="点击查看资产占比与持仓清单">
                         <div style="display:flex;justify-content:space-between;align-items:flex-start;">
                             <div>
-                                <div class="stat-label" style="margin-bottom:4px;">${flag} ${r} (${s.count})</div>
+                                <div class="stat-label" style="margin-bottom:4px;">${flag} ${regionEN(r)} (${s.count})</div>
                                 <div style="font-size:15px;color:#e2e8f0;font-weight:600;font-family:Montserrat,sans-serif;">${rCurSym}${fmtNum(regionValueLocal,localDecimals)}</div>
                                 ${rCur !== 'USD' ? `<div style="font-size:10px;color:#64748b;margin-top:2px;">≈$${fmtNum(s.value,0)}</div>` : ''}
                             </div>
@@ -3861,34 +3838,12 @@
                             </div>
                         </div>
                         <div style="margin-top:8px;padding:6px 8px;background:rgba(193,166,115,0.06);border-radius:6px;border:1px solid rgba(193,166,115,0.08);">
-                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
-                                <span style="font-size:9px;color:#64748b;letter-spacing:0.5px;">BUDGET (${rCur})</span>
-                                <div style="display:flex;align-items:center;gap:4px;">
-                                    <span style="font-size:11px;color:#64748b;">${rCurSym}</span>
-                                    <input type="text" value="${fmtBudgetInput(regionBudgetLocal)}" placeholder="Set budget"
-                                        style="width:${rCur==='JPY'?'110':'90'}px;background:rgba(15,23,42,0.6);border:1px solid rgba(193,166,115,0.15);color:#C1A673;border-radius:4px;padding:2px 6px;font-size:11px;font-weight:600;font-family:Montserrat,sans-serif;text-align:right;outline:none;"
-                                        onclick="event.stopPropagation()"
-                                        onfocus="this.style.borderColor='rgba(193,166,115,0.4)';this.value=String(${regionBudgetLocal||0}||'')"
-                                        onblur="this.style.borderColor='rgba(193,166,115,0.15)';this.value=fmtBudgetInput(this.value)"
-                                        onchange="saveRegionBudget('${r}',parseBudgetInput(this.value))">
-                                    ${rCur !== 'USD' ? `<span style="font-size:9px;color:#94a3b8;margin-left:2px;">≈$${fmtNum(regionBudgetUSD,0)}</span>` : ''}
-                                </div>
-                            </div>
-                            ${regionBudgetLocal > 0 ? `
-                            <div style="background:rgba(30,41,59,0.8);border:1px solid rgba(193,166,115,0.18);border-radius:3px;height:6px;overflow:hidden;">
-                                <div style="width:${Math.min(100, budgetUsedPct)}%;height:100%;background:${budgetUsedPct>100?'#f87171':budgetUsedPct>80?'#fbbf24':barColor};border-radius:3px;transition:width 0.3s;"></div>
-                            </div>
-                            <div style="display:flex;justify-content:space-between;margin-top:3px;">
-                                <span style="font-size:10px;color:${budgetUsedPct>100?'#f87171':budgetUsedPct>80?'#fbbf24':'#94a3b8'};">${fmtNum(budgetUsedPct,1)}% invested</span>
-                                <span style="font-size:10px;color:${budgetRemainLocal>=0?'#4ade80':'#f87171'};">${budgetRemainLocal>=0?'Remaining':'Over'}: ${rCurSym}${fmtNum(Math.abs(budgetRemainLocal),localDecimals)}</span>
-                            </div>` : `
                             <div style="background:rgba(30,41,59,0.6);border-radius:3px;height:4px;overflow:hidden;">
                                 <div style="width:${Math.min(100, s.value/totalValue*100)}%;height:100%;background:${barColor};border-radius:3px;box-shadow:0 0 8px ${barColor}40;"></div>
                             </div>
                             <div style="display:flex;justify-content:space-between;margin-top:3px;">
                                 <span style="font-size:10px;color:#94a3b8;">Portfolio share: ${fmtNum(s.value/totalValue*100,1)}%</span>
-                                <span style="font-size:10px;color:#64748b;">No budget set</span>
-                            </div>`}
+                            </div>
                         </div>
                         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-top:8px;padding-top:6px;border-top:1px solid rgba(193,166,115,0.06);">
                             <div style="text-align:left;">
@@ -3988,57 +3943,6 @@
                         <span style="color:#94a3b8;font-size:13px;">Currency:</span>
                         ${allCurrencies.map(c => `<button onclick="filterCurrency('${c}')" style="padding:4px 14px;border-radius:16px;border:1px solid ${APP.currencyFilter===c?'#C1A673':'#334155'};background:${APP.currencyFilter===c?'#C1A673':'transparent'};color:${APP.currencyFilter===c?'#fff':'#94a3b8'};cursor:pointer;font-size:12px;">${c}</button>`).join('')}
                     </div>
-                    ${(() => {
-                        // Show region budget bar when a specific region is selected
-                        if (APP.regionFilter !== '全部') {
-                            const rb = parseFloat(APP.regionBudgets[APP.regionFilter]) || 0;
-                            if (rb > 0) {
-                                const cur = getRegionCurrency(APP.regionFilter);
-                                const curSym = getRegionCurrencySymbol(cur);
-                                const rbUSD = regionBudgetToUSD(APP.regionFilter);
-                                const regionActiveHoldings = enriched.filter(d => !d.isSold);
-                                // Budget usage by COST (actual purchase amount), not market value
-                                const regionCostUSD = regionActiveHoldings.reduce((s, d) => s + d.cv, 0);
-                                const usedPct = rbUSD > 0 ? (regionCostUSD / rbUSD * 100) : 0;
-                                const remUSD = rbUSD - regionCostUSD;
-                                const bColor = usedPct > 100 ? '#f87171' : usedPct > 80 ? '#fbbf24' : '#C1A673';
-                                return '<div style="padding:10px 14px;margin-bottom:12px;background:rgba(193,166,115,0.06);border:1px solid rgba(193,166,115,0.12);border-radius:8px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;">'
-                                    + '<div style="font-size:12px;color:#94a3b8;">Budget:</div>'
-                                    + '<div style="font-size:14px;color:#C1A673;font-weight:600;font-family:Montserrat,sans-serif;">' + curSym + fmtNum(rb) + (cur !== 'USD' ? ' <span style="font-size:11px;color:#94a3b8;font-weight:400;">≈ $' + fmtNum(rbUSD) + '</span>' : '') + '</div>'
-                                    + '<div style="flex:1;min-width:120px;background:rgba(30,41,59,0.8);border-radius:3px;height:6px;overflow:hidden;">'
-                                    + '<div style="width:' + Math.min(100,usedPct) + '%;height:100%;background:' + bColor + ';border-radius:3px;transition:width 0.3s;"></div></div>'
-                                    + '<div style="font-size:12px;color:' + bColor + ';font-weight:600;">' + fmtNum(usedPct,1) + '% used</div>'
-                                    + '<div style="font-size:12px;color:#94a3b8;">Used (cost): <span style="color:#e2e8f0;font-weight:600;">$' + fmtNum(regionCostUSD) + '</span></div>'
-                                    + '<div style="font-size:12px;color:#94a3b8;">' + (remUSD >= 0 ? 'Remaining' : 'Over') + ': <span style="color:' + (remUSD >= 0 ? '#4ade80' : '#f87171') + ';font-weight:600;">$' + fmtNum(Math.abs(remUSD)) + '</span></div>'
-                                    + '</div>';
-                            }
-                        }
-                        // When showing all regions, show a compact summary
-                        // Total budget = sum of region budgets converted to USD
-                        const allRegions = [...new Set(APP.holdings.filter(h => h.qty > 0).map(h => h.region).filter(Boolean))];
-                        let totalBudget = 0;
-                        allRegions.forEach(r => { totalBudget += regionBudgetToUSD(r); });
-                        if (totalBudget > 0 && APP.regionFilter === '全部') {
-                            // Budget usage by COST (actual purchase amount), not market value
-                            const totalCostUsd = enriched.filter(d => !d.isSold).reduce((s, d) => s + d.cv, 0);
-                            const totalUsedPct = totalBudget > 0 ? (totalCostUsd / totalBudget * 100) : 0;
-                            return '<div style="padding:8px 14px;margin-bottom:12px;background:rgba(193,166,115,0.04);border:1px solid rgba(193,166,115,0.08);border-radius:8px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:12px;">'
-                                + '<span style="color:#94a3b8;">Total Budget:</span>'
-                                + '<span style="color:#C1A673;font-weight:600;">$' + fmtNum(totalBudget) + '</span>'
-                                + '<span style="color:#64748b;">|</span>'
-                                + allRegions.map(r => {
-                                    const rBudget = parseFloat(APP.regionBudgets[r]) || 0;
-                                    const rCur = getRegionCurrency(r);
-                                    const rCurSym = getRegionCurrencySymbol(rCur);
-                                    const flag = r==='美国'?'🇺🇸':r==='中国'?'🇨🇳':r==='日本'?'🇯🇵':'🌐';
-                                    return rBudget > 0 ? '<span>' + flag + ' ' + rCurSym + fmtNum(rBudget) + '</span>' : '';
-                                }).filter(Boolean).join('<span style="color:#334155;">·</span>')
-                                + '<span style="color:#64748b;">|</span>'
-                                + '<span style="color:#94a3b8;">Used: <span style="color:' + (totalUsedPct>100?'#f87171':'#e2e8f0') + ';font-weight:600;">' + fmtNum(totalUsedPct,1) + '%</span></span>'
-                                + '</div>';
-                        }
-                        return '';
-                    })()}
                     <div style="overflow:auto;max-height:70vh;">
                     <table class="holdings-table" style="font-size:13px;table-layout:fixed;width:100%;">
                         <colgroup>
@@ -4088,7 +3992,9 @@
             activeList.forEach(d => {
                 const curSym = curSym0fn(d.currency);
                 const tw = d.target_weight || 0;
-                const cw = grandTotal > 0 ? (d.mv / grandTotal * 100) : 0;
+                // 权重分母 = 350 万正股计划(只对计划内标的;日股、A 股、黄金不计)
+                const inPlan = inStockPlan(d);
+                const cw = inPlan ? (d.mv / FUND_PLAN.stocks * 100) : 0;
                 const diff = cw - tw;
                 filteredValue += d.mv;
                 filteredCost += d.cv;
@@ -4099,7 +4005,7 @@
                     <tr style="cursor:pointer;" onclick="showStockDetail('${d.symbol}')">
                         <td class="sticky-name-col" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${d.name}">${d.name}</td>
                         <td class="symbol-cell">${d.symbol}</td>
-                        <td><span class="region-badge">${d.region}</span></td>
+                        <td><span class="region-badge">${regionEN(d.region)}</span></td>
                         <td>${d.currency}</td>
                         <td>${d.attribute || '-'}</td>
                         <td style="text-align:right;">${fmtNum(d.qty, 0)}</td>
@@ -4110,8 +4016,8 @@
                         <td class="${d.plLocal>=0?'price-positive':'price-negative'}" style="text-align:right;">${d.plLocal>=0?'+':''}${curSym}${fmtNum(d.plLocal)}</td>
                         <td class="${d.plPct>=0?'price-positive':'price-negative'}" style="text-align:right;">${formatPercent(d.plPct)}</td>
                         <td style="text-align:right;">${tw > 0 ? fmtNum(tw,1)+'%' : '-'}</td>
-                        <td style="text-align:right;">${fmtNum(cw,1)}%</td>
-                        <td style="text-align:right;color:${Math.abs(diff)<1?'#94a3b8':diff>0?'#4ade80':'#f87171'}">${(diff>=0?'+':'')+fmtNum(diff,1)}%</td>
+                        <td style="text-align:right;">${inPlan ? fmtNum(cw,1)+'%' : '-'}</td>
+                        <td style="text-align:right;color:${Math.abs(diff)<1?'#94a3b8':diff>0?'#4ade80':'#f87171'}">${inPlan ? (diff>=0?'+':'')+fmtNum(diff,1)+'%' : '-'}</td>
                     </tr>
                 `;
             });
@@ -4127,25 +4033,6 @@
             soldList.forEach(d => { soldTotalPL += (d.pl || 0); });
 
             html += `</tbody><tfoot>`;
-            // Budget row for filtered region
-            if (APP.regionFilter !== '全部') {
-                const rb = parseFloat(APP.regionBudgets[APP.regionFilter]) || 0;
-                if (rb > 0) {
-                    const ftCur = getRegionCurrency(APP.regionFilter);
-                    const ftCurSym = getRegionCurrencySymbol(ftCur);
-                    const rbUSD = regionBudgetToUSD(APP.regionFilter);
-                    // Budget usage by COST (actual purchase amount), not market value
-                    const usedPct = rbUSD > 0 ? (filteredCost / rbUSD * 100) : 0;
-                    const rem = rbUSD - filteredCost;
-                    html += `<tr style="border-top:1px solid rgba(193,166,115,0.15);color:#C1A673;">
-                        <td colspan="5" style="font-size:12px;">Budget: ${ftCurSym}${fmtNum(rb)}${ftCur !== 'USD' ? ' <span style="color:#94a3b8;">≈ $' + fmtNum(rbUSD) + '</span>' : ''}</td>
-                        <td></td><td></td><td></td><td></td>
-                        <td style="text-align:right;font-size:12px;">${fmtNum(usedPct,1)}% used</td>
-                        <td style="text-align:right;font-size:12px;color:${rem>=0?'#4ade80':'#f87171'};">${rem>=0?'Rem':'Over'}: $${fmtNum(Math.abs(rem))}</td>
-                        <td colspan="3"></td>
-                    </tr>`;
-                }
-            }
             html += `<tr style="border-top:2px solid rgba(193,166,115,0.3);font-weight:bold;">
                 <td colspan="5">${filterLabel} Total (${activeList.length} stocks) — USD</td>
                 <td></td><td></td><td></td><td></td>
@@ -4170,7 +4057,7 @@
                         return `<tr style="cursor:pointer;opacity:0.85;" onclick="showStockDetail('${d.symbol}')">
                             <td class="sticky-name-col">${d.name}</td>
                             <td class="symbol-cell" style="color:#f97316;">${d.symbol}</td>
-                            <td><span class="region-badge">${d.region}</span></td>
+                            <td><span class="region-badge">${regionEN(d.region)}</span></td>
                             <td>${d.currency}</td>
                             <td>${d.attribute||'-'}</td>
                             <td style="text-align:right;">0</td>
@@ -4219,7 +4106,7 @@
         // Render region orbital ring + holdings heatmap
         if (activeHoldings.length > 0) {
             const regionColors = {'美国':'#C1A673','中国':'#E05252','日本':'#3B9EE0','香港':'#50C878'};
-            const regionFlags = {'美国':'🇺🇸','中国':'🇨🇳','日本':'🇯🇵','香港':'🇭🇰'};
+            const regionFlags = {'美国':'🇺🇸','中国':'🇨🇳','日本':'🇯🇵','香港':'🇭🇰','黄金':'🥇'};
             const fallbackColor = '#8B9CB6';
 
             // Region data with P&L
@@ -4255,7 +4142,7 @@
 
             let ringSegments = '';
             let ringLabels = '';
-            const regionAbbr = {'美国':'US','中国':'CN','日本':'JP','香港':'HK'};
+            const regionAbbr = {'美国':'US','中国':'CN','日本':'JP','香港':'HK','黄金':'AU'};
             regionData.forEach((d, i) => {
                 const segDeg = (d.value / regionTotal) * availableDeg;
                 const segLen = (segDeg / 360) * circumference;
@@ -4281,7 +4168,7 @@
                     + '<div style="display:flex;align-items:center;gap:6px;min-width:0;">'
                     + '<span style="font-size:14px;flex-shrink:0;">'+d.flag+'</span>'
                     + '<div>'
-                    + '<div style="color:#e2e8f0;font-size:12px;font-weight:600;font-family:Montserrat,sans-serif;">'+d.label+'</div>'
+                    + '<div style="color:#e2e8f0;font-size:12px;font-weight:600;font-family:Montserrat,sans-serif;">'+regionEN(d.label)+'</div>'
                     + '<div style="color:#64748b;font-size:9px;font-family:Montserrat,sans-serif;margin-top:1px;">$'+fmtNum(d.value)+'</div>'
                     + '</div></div>'
                     + '<div style="flex:1;display:flex;align-items:center;justify-content:center;padding:0 8px;">'
@@ -4755,7 +4642,7 @@
             html += `<tr style="cursor:pointer;" onclick="showStockDetail('${d.symbol}')">
                 <td class="symbol-cell">${d.symbol}</td>
                 <td>${d.name}</td>
-                <td><span class="region-badge">${d.region}</span></td>
+                <td><span class="region-badge">${regionEN(d.region)}</span></td>
                 <td>${d.currency}</td>
                 <td>${d.attribute||'-'}</td>
                 <td>${d.sector||'-'}</td>
@@ -4842,7 +4729,7 @@
                         return `<tr style="cursor:pointer;opacity:0.85;" onclick="showStockDetail('${d.symbol}')">
                             <td class="symbol-cell" style="color:#f97316;">${d.symbol}</td>
                             <td>${d.name}</td>
-                            <td><span class="region-badge">${d.region}</span></td>
+                            <td><span class="region-badge">${regionEN(d.region)}</span></td>
                             <td>${d.currency}</td>
                             <td>${d.attribute||'-'}</td>
                             <td>${d.sector||'-'}</td>
@@ -5446,152 +5333,90 @@
             renderTab0();
         } catch (e) { alert('删除失败：' + e.message); }
     }
-    // Convert local budget to USD using current real-time FX rate.
-    function regionBudgetToUSD(region) {
-        const localVal = parseFloat(APP.regionBudgets[region]) || 0;
-        const cur = getRegionCurrency(region);
-        const fxRate = APP.FX_RATES[cur] || 1;
-        return localVal * fxRate;
+    // === 600 万计划(Bin 2026-11-10):黄金 100 万 + 木木 500 万 = 正股 350 万 + 正库银 150 万;个股权重分母 = 350 万 ===
+    const FUND_PLAN = { gold: 1000000, stocks: 3500000, reserve: 1500000 };
+    // 计划内正股 = 木木的港美韩台股(日股在永隆、A 股在招商,不占 350 万;黄金单列)
+    function inStockPlan(h) {
+        return h.region !== '黄金' && ['USD', 'HKD', 'KRW', 'TWD'].includes(h.currency);
     }
+    const REGION_EN = {'美国':'US','中国':'China','日本':'Japan','香港':'Hong Kong','黄金':'Gold','韩国':'Korea','台湾':'Taiwan','全部':'All'};
+    function regionEN(r) { return REGION_EN[r] || r; }
 
     function renderTab5Portfolio() {
         const container = document.getElementById('tab-5');
         const regions = [...new Set(APP.holdings.map(h => h.region).filter(Boolean))];
-
-        // Total budget USD = sum of each region's local budget converted to USD
-        let totalBudget = 0;
-        regions.forEach(r => { totalBudget += regionBudgetToUSD(r); });
-        APP.portfolioBudget = totalBudget;
-
         const flags = {'美国':'🇺🇸','中国':'🇨🇳','日本':'🇯🇵','香港':'🇭🇰'};
 
         let html = `<div class="chart-card" style="margin-bottom:16px;">
             <div class="chart-title">Portfolio Allocation</div>
-            <div style="display:flex;gap:16px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">
-                <div style="display:flex;align-items:center;gap:8px;">
-                    <label style="color:#94a3b8;font-size:13px;">Total Budget (USD):</label>
-                    <span style="font-size:18px;color:#C1A673;font-weight:700;font-family:Montserrat,sans-serif;">$${fmtNum(totalBudget)}</span>
-                    <span style="font-size:11px;color:#64748b;margin-left:4px;">= sum of regions</span>
-                </div>
-            </div>
-            <div style="display:flex;gap:10px;flex-wrap:wrap;">
-                ${regions.map(r => {
-                    const rb = parseFloat(APP.regionBudgets[r]) || 0;
-                    const cur = getRegionCurrency(r);
-                    const curSym = getRegionCurrencySymbol(cur);
-                    const rbUSD = regionBudgetToUSD(r);
-                    const flag = flags[r] || '🌐';
-                    const pct = totalBudget > 0 ? (rbUSD / totalBudget * 100) : 0;
-                    return '<div style="flex:1;min-width:240px;padding:10px 14px;background:rgba(30,41,59,0.4);border:1px solid rgba(193,166,115,0.10);border-radius:10px;">'
-                        + '<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">'
-                        + '<span style="font-size:14px;">'+flag+'</span>'
-                        + '<span style="color:#e2e8f0;font-size:13px;font-weight:600;font-family:Montserrat,sans-serif;">'+r+'</span>'
-                        + '<span style="color:#64748b;font-size:10px;margin-left:auto;">'+fmtNum(pct,1)+'% of total</span>'
-                        + '</div>'
-                        + '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'
-                        + '<label style="color:#94a3b8;font-size:11px;">Budget ('+cur+'):</label>'
-                        + '<input type="text" class="form-input" style="width:'+(cur==='JPY'?'180':'150')+'px;font-size:13px;" value="'+fmtBudgetInput(rb)+'" onfocus="this.value=String('+rb+'||\'\')" onblur="this.value=fmtBudgetInput(this.value)" onchange="saveRegionBudget(\''+r+'\',parseBudgetInput(this.value))" placeholder="0">'
-                        + (cur !== 'USD' ? '<span style="color:#C1A673;font-size:12px;font-weight:600;">≈ $'+fmtNum(rbUSD)+'</span>' : '')
-                        + '</div>'
-                        + '</div>';
-                }).join('')}
+            <div style="display:flex;gap:24px;flex-wrap:wrap;align-items:baseline;font-family:Montserrat,sans-serif;">
+                <div><span style="color:#94a3b8;font-size:13px;">Stock plan (weight base):</span>
+                    <span style="font-size:18px;color:#C1A673;font-weight:700;margin-left:6px;">$${fmtNum(FUND_PLAN.stocks, 0)}</span></div>
+                <div style="font-size:12px;color:#64748b;">Gold $${fmtNum(FUND_PLAN.gold, 0)} · Reserve (MMF) $${fmtNum(FUND_PLAN.reserve, 0)} · Japan and A-shares outside plan</div>
             </div>
         </div>`;
 
+        let allW = 0, allTarget = 0, allCurrent = 0;
         regions.forEach(region => {
-            const regionHoldings = APP.holdings.filter(h => h.region === region && h.qty > 0);
+            const regionHoldings = APP.holdings.filter(h => h.region === region && h.qty > 0 && inStockPlan(h));
             if (regionHoldings.length === 0) return;
-            const cur = getRegionCurrency(region);
-            const fxRate = APP.FX_RATES[cur] || 1;
-            const regionBudgetLocal = parseFloat(APP.regionBudgets[region]) || 0;
-            const regionBudgetUSD = regionBudgetLocal * fxRate;
             const flag = flags[region] || '🌐';
-
-            let regionTotalWeight = 0;
-            let regionTargetLocal = 0;
-            let regionCurrentLocal = 0;
+            let regionTotalWeight = 0, regionTargetUSD = 0, regionCurrentUSD = 0;
 
             html += `<div class="chart-card" style="margin-bottom:16px;">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-                    <div class="chart-title" style="margin-bottom:0;">${flag} ${region} Allocation (${cur})</div>
-                    <div style="font-size:12px;color:#94a3b8;">
-                        Budget: <span style="color:#C1A673;font-weight:600;">$${fmtNum(regionBudgetUSD)}</span>
-                        <span style="color:#64748b;margin-left:4px;">(${cur === 'USD' ? '' : cur+' '}${fmtNum(regionBudgetLocal,0)})</span>
-                    </div>
-                </div>
+                <div class="chart-title">${flag} ${regionEN(region)} Allocation (USD)</div>
                 <table class="holdings-table" style="font-size:13px;">
                     <thead><tr>
                         <th>Symbol</th><th>Name</th><th>Currency</th>
-                        <th>Target Wt</th><th>Target(${cur})</th>
-                        <th>Current(${cur})</th><th>Achievement</th>
-                        <th>Gap(${cur})</th><th>Gap(USD)</th>
+                        <th>Target Wt</th><th>Target</th>
+                        <th>Current</th><th>Current Wt</th><th>Achievement</th>
+                        <th>Gap</th>
                     </tr></thead><tbody>`;
 
             regionHoldings.forEach(h => {
                 const tw = h.target_weight || 0;
-                const targetLocal = regionBudgetLocal * tw / 100;
-                const targetUSD = targetLocal * fxRate;
+                const targetUSD = FUND_PLAN.stocks * tw / 100;
                 const currentPrice = APP.prices[h.symbol]?.price || h.avg_cost;
-                const currentLocal = h.qty * currentPrice;
-                const currentUSD = currentLocal * fxRate;
-                const completion = targetLocal > 0 ? (currentLocal / targetLocal * 100) : 0;
-                const gapLocal = targetLocal - currentLocal;
-                const gapUSD = gapLocal * fxRate;
+                const currentUSD = h.qty * currentPrice * (APP.FX_RATES[h.currency] || 1);
+                const completion = targetUSD > 0 ? (currentUSD / targetUSD * 100) : 0;
+                const gapUSD = targetUSD - currentUSD;
 
                 regionTotalWeight += tw;
-                regionTargetLocal += targetLocal;
-                regionCurrentLocal += currentLocal;
+                regionTargetUSD += targetUSD;
+                regionCurrentUSD += currentUSD;
 
                 html += `<tr>
                     <td class="symbol-cell">${h.symbol}</td>
                     <td>${h.name}</td>
                     <td>${h.currency}</td>
                     <td><input type="number" value="${tw}" min="0" max="100" step="0.5" style="width:60px;background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:4px;padding:3px 6px;text-align:right;" onchange="saveTargetWeight('${h.symbol}',this.value)">%</td>
-                    <td style="text-align:right;">${fmtNum(targetLocal, 0)}</td>
-                    <td style="text-align:right;">${fmtNum(currentLocal, 0)}</td>
-                    <td style="text-align:right;color:${completion>=100?'#4ade80':completion>=50?'#fbbf24':'#f87171'}">${fmtNum(completion,1)}%</td>
-                    <td style="text-align:right;color:${gapLocal>0?'#fbbf24':'#4ade80'}">${gapLocal>0?'+':''}${fmtNum(gapLocal, 0)}</td>
-                    <td style="text-align:right;color:${gapUSD>0?'#fbbf24':'#4ade80'}">$${gapLocal>0?'+':''}${fmtNum(gapUSD, 0)}</td>
+                    <td style="text-align:right;">$${fmtNum(targetUSD, 0)}</td>
+                    <td style="text-align:right;">$${fmtNum(currentUSD, 0)}</td>
+                    <td style="text-align:right;">${fmtNum(currentUSD / FUND_PLAN.stocks * 100, 1)}%</td>
+                    <td style="text-align:right;color:${tw <= 0 ? '#64748b' : completion>=100?'#4ade80':completion>=50?'#fbbf24':'#f87171'}">${tw > 0 ? fmtNum(completion,1)+'%' : '-'}</td>
+                    <td style="text-align:right;color:${gapUSD>0?'#fbbf24':'#4ade80'}">${gapUSD>0?'+':'-'}$${fmtNum(Math.abs(gapUSD), 0)}</td>
                 </tr>`;
             });
 
-            const regionGapLocal = regionTargetLocal - regionCurrentLocal;
-            const regionGapUSD = regionGapLocal * fxRate;
-            const regionCompletion = regionTargetLocal > 0 ? (regionCurrentLocal / regionTargetLocal * 100) : 0;
+            allW += regionTotalWeight; allTarget += regionTargetUSD; allCurrent += regionCurrentUSD;
+            const regionGapUSD = regionTargetUSD - regionCurrentUSD;
+            const regionCompletion = regionTargetUSD > 0 ? (regionCurrentUSD / regionTargetUSD * 100) : 0;
             html += `</tbody><tfoot><tr style="border-top:2px solid rgba(193,166,115,0.2);font-weight:bold;">
-                <td colspan="3">${region} Subtotal</td>
+                <td colspan="3">${regionEN(region)} Subtotal</td>
                 <td style="text-align:right;">${fmtNum(regionTotalWeight,1)}%</td>
-                <td style="text-align:right;">${fmtNum(regionTargetLocal, 0)}</td>
-                <td style="text-align:right;">${fmtNum(regionCurrentLocal, 0)}</td>
+                <td style="text-align:right;">$${fmtNum(regionTargetUSD, 0)}</td>
+                <td style="text-align:right;">$${fmtNum(regionCurrentUSD, 0)}</td>
+                <td style="text-align:right;">${fmtNum(regionCurrentUSD / FUND_PLAN.stocks * 100, 1)}%</td>
                 <td style="text-align:right;color:${regionCompletion>=100?'#4ade80':regionCompletion>=50?'#fbbf24':'#f87171'}">${fmtNum(regionCompletion,1)}%</td>
-                <td style="text-align:right;color:${regionGapLocal>0?'#fbbf24':'#4ade80'}">${regionGapLocal>0?'+':''}${fmtNum(regionGapLocal, 0)}</td>
-                <td style="text-align:right;color:${regionGapUSD>0?'#fbbf24':'#4ade80'}">$${regionGapLocal>0?'+':''}${fmtNum(regionGapUSD, 0)}</td>
+                <td style="text-align:right;color:${regionGapUSD>0?'#fbbf24':'#4ade80'}">${regionGapUSD>0?'+':'-'}$${fmtNum(Math.abs(regionGapUSD), 0)}</td>
             </tr></tfoot></table></div>`;
         });
+        html += `<div class="chart-card" style="font-size:13px;font-family:Montserrat,sans-serif;color:#94a3b8;">
+            Total target weight <span style="color:#C1A673;font-weight:700;">${fmtNum(allW,1)}%</span>
+            · Target $${fmtNum(allTarget,0)} · Current <span style="color:#e2e8f0;font-weight:600;">$${fmtNum(allCurrent,0)}</span>
+            (${fmtNum(allCurrent / FUND_PLAN.stocks * 100, 1)}% of plan)</div>`;
 
         container.innerHTML = html;
-    }
-
-    async function saveBudget(val) {
-        APP.portfolioBudget = val;
-        try { await apiCall('/portfolio-config', 'POST', { key: 'totalBudget', value: val }); } catch(e) {}
-        renderTab5Portfolio();
-    }
-
-    async function saveRegionBudget(region, val) {
-        APP.regionBudgets[region] = parseFloat(val) || 0;
-        // Auto-calculate total budget USD = sum of each region's local budget * FX rate
-        let total = 0;
-        const allRegions = [...new Set(APP.holdings.map(h => h.region).filter(Boolean))];
-        allRegions.forEach(r => { total += regionBudgetToUSD(r); });
-        APP.portfolioBudget = total;
-        try {
-            await apiCall('/portfolio-config', 'POST', { key: 'budget_' + region, value: val });
-            await apiCall('/portfolio-config', 'POST', { key: 'totalBudget', value: String(total) });
-        } catch(e) {}
-        renderTab5Portfolio();
-        // Also refresh dashboard if on tab 0
-        if (APP.currentTab === 0) renderDashboard();
     }
 
     async function saveTargetWeight(symbol, weight) {
