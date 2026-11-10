@@ -3936,12 +3936,12 @@
                     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
                         <div class="chart-title" style="margin-bottom:0;">Holdings Detail</div>
                         <div style="display:flex;gap:6px;flex-wrap:wrap;">
-                            ${regions.map(r => `<button onclick="filterRegion('${r}')" style="padding:6px 16px;border-radius:20px;border:1px solid ${APP.regionFilter===r?'#C1A673':'#334155'};background:${APP.regionFilter===r?'#C1A673':'transparent'};color:${APP.regionFilter===r?'#fff':'#94a3b8'};cursor:pointer;font-size:13px;transition:all 0.2s;">${r}${r!=='全部'?' ('+APP.holdings.filter(h=>h.region===r).length+')':''}</button>`).join('')}
+                            ${regions.map(r => `<button onclick="filterRegion('${r}')" style="padding:6px 16px;border-radius:20px;border:1px solid ${APP.regionFilter===r?'#C1A673':'#334155'};background:${APP.regionFilter===r?'#C1A673':'transparent'};color:${APP.regionFilter===r?'#fff':'#94a3b8'};cursor:pointer;font-size:13px;transition:all 0.2s;">${regionEN(r)}${r!=='全部'?' ('+APP.holdings.filter(h=>h.region===r).length+')':''}</button>`).join('')}
                         </div>
                     </div>
                     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;align-items:center;">
                         <span style="color:#94a3b8;font-size:13px;">Currency:</span>
-                        ${allCurrencies.map(c => `<button onclick="filterCurrency('${c}')" style="padding:4px 14px;border-radius:16px;border:1px solid ${APP.currencyFilter===c?'#C1A673':'#334155'};background:${APP.currencyFilter===c?'#C1A673':'transparent'};color:${APP.currencyFilter===c?'#fff':'#94a3b8'};cursor:pointer;font-size:12px;">${c}</button>`).join('')}
+                        ${allCurrencies.map(c => `<button onclick="filterCurrency('${c}')" style="padding:4px 14px;border-radius:16px;border:1px solid ${APP.currencyFilter===c?'#C1A673':'#334155'};background:${APP.currencyFilter===c?'#C1A673':'transparent'};color:${APP.currencyFilter===c?'#fff':'#94a3b8'};cursor:pointer;font-size:12px;">${regionEN(c)}</button>`).join('')}
                     </div>
                     <div style="overflow:auto;max-height:70vh;">
                     <table class="holdings-table" style="font-size:13px;table-layout:fixed;width:100%;">
@@ -4026,7 +4026,7 @@
             const filteredPLPct = filteredCost > 0 ? (filteredPL / filteredCost * 100) : 0;
             const filteredLocalPL = filteredLocalValue - filteredLocalCost;
             const filteredLocalPLPct = filteredLocalCost > 0 ? (filteredLocalPL / filteredLocalCost * 100) : 0;
-            const filterLabel = [APP.regionFilter!=='全部'?APP.regionFilter:'', APP.currencyFilter!=='全部'?APP.currencyFilter:''].filter(Boolean).join(' ') || '全部';
+            const filterLabel = [APP.regionFilter!=='全部'?APP.regionFilter:'', APP.currencyFilter!=='全部'?APP.currencyFilter:''].filter(Boolean).map(regionEN).join(' ') || 'All';
 
             // Sold stocks realized P&L totals
             let soldTotalPL = 0;
@@ -4204,7 +4204,7 @@
 
                 let blocksHtml = '';
                 regions.forEach((r, ri) => {
-                    const flag = r==='美国'?'🇺🇸':r==='中国'?'🇨🇳':r==='日本'?'🇯🇵':'🌐';
+                    const flag = r==='美国'?'🇺🇸':r==='中国'?'🇨🇳':r==='日本'?'🇯🇵':r==='黄金'?'🥇':'🌐';
                     const rColor = regionColors[r] || fallbackColor;
                     const rHoldings = activeHoldings.filter(h => h.region === r).map(h => ({
                         name: h.name || h.symbol, symbol: h.symbol,
@@ -4219,7 +4219,7 @@
                         // Flag + country - shifted right ~20mm (75px)
                         + '<div style="display:flex;align-items:center;gap:4px;flex-shrink:0;padding:0 12px 0 75px;">'
                         + '<span style="font-size:13px;">'+flag+'</span>'
-                        + '<span style="color:'+rColor+';font-weight:600;font-size:11px;font-family:Montserrat,sans-serif;">'+r+'</span>'
+                        + '<span style="color:'+rColor+';font-weight:600;font-size:11px;font-family:Montserrat,sans-serif;">'+regionEN(r)+'</span>'
                         + '</div>'
                         // Best 3: right-aligned against the up arrow
                         + '<div style="flex:1;display:flex;flex-direction:column;align-items:flex-end;justify-content:center;padding:0 6px;min-width:0;">'
@@ -4275,7 +4275,7 @@
         html += `<span style="color:#94a3b8;font-size:13px;line-height:32px;">Region:</span>`;
         regions.forEach(r => {
             const active = st.region === r;
-            html += `<button onclick="APP._tab1State.region='${r}';renderTab1()" style="padding:4px 14px;border-radius:16px;border:1px solid ${active?'#C1A673':'#334155'};background:${active?'#C1A673':'transparent'};color:${active?'#fff':'#94a3b8'};cursor:pointer;font-size:12px;">${r}</button>`;
+            html += `<button onclick="APP._tab1State.region='${r}';renderTab1()" style="padding:4px 14px;border-radius:16px;border:1px solid ${active?'#C1A673':'#334155'};background:${active?'#C1A673':'transparent'};color:${active?'#fff':'#94a3b8'};cursor:pointer;font-size:12px;">${regionEN(r)}</button>`;
         });
         html += `</div>`;
 
@@ -4284,7 +4284,7 @@
         html += `<span style="color:#94a3b8;font-size:13px;line-height:32px;">Currency:</span>`;
         currencies.forEach(c => {
             const active = st.currency === c;
-            html += `<button onclick="APP._tab1State.currency='${c}';renderTab1()" style="padding:4px 14px;border-radius:16px;border:1px solid ${active?'#C1A673':'#334155'};background:${active?'#C1A673':'transparent'};color:${active?'#fff':'#94a3b8'};cursor:pointer;font-size:12px;">${c}</button>`;
+            html += `<button onclick="APP._tab1State.currency='${c}';renderTab1()" style="padding:4px 14px;border-radius:16px;border:1px solid ${active?'#C1A673':'#334155'};background:${active?'#C1A673':'transparent'};color:${active?'#fff':'#94a3b8'};cursor:pointer;font-size:12px;">${regionEN(c)}</button>`;
         });
         html += `</div>`;
 
@@ -4606,9 +4606,9 @@
             </div>
             <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center;">
                 <span style="color:#94a3b8;font-size:13px;">Region:</span>
-                ${regions.map(r => `<button onclick="setAnalysisFilter('region','${r}')" style="padding:4px 12px;border-radius:16px;border:1px solid ${st.regionFilter===r?'#C1A673':'#334155'};background:${st.regionFilter===r?'#C1A673':'transparent'};color:${st.regionFilter===r?'#fff':'#94a3b8'};cursor:pointer;font-size:12px;">${r}</button>`).join('')}
+                ${regions.map(r => `<button onclick="setAnalysisFilter('region','${r}')" style="padding:4px 12px;border-radius:16px;border:1px solid ${st.regionFilter===r?'#C1A673':'#334155'};background:${st.regionFilter===r?'#C1A673':'transparent'};color:${st.regionFilter===r?'#fff':'#94a3b8'};cursor:pointer;font-size:12px;">${regionEN(r)}</button>`).join('')}
                 <span style="color:#94a3b8;font-size:13px;margin-left:12px;">Currency:</span>
-                ${currencies.map(c => `<button onclick="setAnalysisFilter('currency','${c}')" style="padding:4px 12px;border-radius:16px;border:1px solid ${st.currencyFilter===c?'#C1A673':'#334155'};background:${st.currencyFilter===c?'#C1A673':'transparent'};color:${st.currencyFilter===c?'#fff':'#94a3b8'};cursor:pointer;font-size:12px;">${c}</button>`).join('')}
+                ${currencies.map(c => `<button onclick="setAnalysisFilter('currency','${c}')" style="padding:4px 12px;border-radius:16px;border:1px solid ${st.currencyFilter===c?'#C1A673':'#334155'};background:${st.currencyFilter===c?'#C1A673':'transparent'};color:${st.currencyFilter===c?'#fff':'#94a3b8'};cursor:pointer;font-size:12px;">${regionEN(c)}</button>`).join('')}
             </div>
             <div style="overflow:auto;max-height:70vh;">
             <table class="holdings-table" id="analysisTable" style="font-size:13px;">
@@ -5909,7 +5909,7 @@
             const check = r === currentRegion ? '<span class="check">✓</span>' : '';
             return `<div class="apple-dropdown-item ${sel}" onclick="setRegionDrilldownRegion('${r}')">
                 <span>${_regionFlag(r)}</span>
-                <span>${r}</span>
+                <span>${regionEN(r)}</span>
                 ${check}
             </div>`;
         }).join('');
