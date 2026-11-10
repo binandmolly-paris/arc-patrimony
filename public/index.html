@@ -3488,6 +3488,13 @@
         });
         const fundMMF = (((APP.extPl || {}).mmf || {}).detail || {}).fund_assets_usd || 0;
         const fundTotal = fundGold + fundStk + fundMMF + fundOther;
+        // MMF 内部划分(文字注解):正库银 / 卖 PUT 担保金(毛义务) / 还可买股 / 黄金待买 / 未分配
+        const _optD = (((APP.extPl || {}).options || {}).detail || {});
+        const fundPut = Number(_optD.put_obligation_usd) || 0;
+        const fundPutN = Number(_optD.short_put_contracts) || 0;
+        const fundAvail = FUND_PLAN.stocks - fundStk - fundPut;
+        const fundGoldTodo = Math.max(0, FUND_PLAN.gold - fundGold);
+        const fundFree = fundMMF - FUND_PLAN.reserve - fundPut - fundAvail - fundGoldTodo;
 
         // Update market light bar
         const lightBar = document.getElementById('marketLightBar');
@@ -3674,28 +3681,34 @@
         let html = `
             ${alertTicker}
             <div class="stat-grid">
-                <!-- ===== Card 1: Funds on Platform (cost basis + MMF value, vs 6.0M plan) ===== -->
+                <!-- ===== Card 1: Funds on Platform (MMF large, text notes only, no bars) ===== -->
                 <div class="stat-card stat-budget">
                     <div class="stat-label-row">
                         <span class="stat-label">Funds on Platform</span>
-                        <span class="stat-chip" style="color:#94a3b8;border-color:#94a3b840;">Plan $${fmtNum(FUND_PLAN.gold + FUND_PLAN.stocks + FUND_PLAN.reserve, 0)}</span>
+                        <span class="stat-chip" style="color:#94a3b8;border-color:#94a3b840;">Total $${fmtNum(fundTotal, 0)}</span>
                     </div>
-                    <div class="stat-value-lg" style="color:#C1A673;">$${fmtNum(fundTotal, 0)}</div>
-                    ${[
-                        ['Gold', fundGold, FUND_PLAN.gold, '#fbbf24'],
-                        ['Stocks (cost)', fundStk, FUND_PLAN.stocks, '#C1A673'],
-                        ['Reserve (MMF)', fundMMF, FUND_PLAN.reserve, '#34d399'],
-                    ].map(([k, v, plan, c]) => {
-                        const pct = plan > 0 ? v / plan * 100 : 0;
-                        return `<div style="margin-top:5px;font-family:Montserrat,sans-serif;">
-                            <div style="display:flex;justify-content:space-between;font-size:10px;color:#94a3b8;">
-                                <span>${k}</span>
-                                <span><span style="color:#e2e8f0;font-weight:600;">$${fmtNum(v, 0)}</span> / $${fmtNum(plan / 1e6, 1)}M · <span style="color:${c};">${fmtNum(pct, 0)}%</span></span>
-                            </div>
-                            <div class="budget-bar-wrap" style="margin-top:2px;"><div class="budget-bar-fill" style="width:${Math.min(100, pct)}%;background:${c};"></div></div>
+                    <div style="display:flex;align-items:baseline;gap:8px;">
+                        <div class="stat-value-lg" style="color:#34d399;">$${fmtNum(fundMMF, 0)}</div>
+                        <span style="font-size:11px;color:#94a3b8;font-family:Montserrat,sans-serif;">MMF</span>
+                    </div>
+                    ${(() => {
+                        const pm = (v) => fundMMF > 0 ? fmtNum(v / fundMMF * 100, 0) + '%' : '-';
+                        const row = (k, v, note, c, sub) => `<div style="display:flex;justify-content:space-between;gap:8px;font-size:${sub ? 10 : 11}px;color:${sub ? '#94a3b8' : '#cbd5e1'};margin-top:${sub ? 3 : 6}px;font-family:Montserrat,sans-serif;${sub ? 'padding-left:10px;' : ''}">
+                            <span>${k}</span>
+                            <span style="white-space:nowrap;"><span style="color:${c};font-weight:600;">${v < 0 ? '-' : ''}$${fmtNum(Math.abs(v), 0)}</span>${note ? ` <span style="color:#64748b;">· ${note}</span>` : ''}</span>
                         </div>`;
-                    }).join('')}
-                    ${fundOther > 0 ? `<div style="display:flex;justify-content:space-between;font-size:10px;color:#64748b;margin-top:5px;font-family:Montserrat,sans-serif;"><span>Outside plan (Japan, A-shares)</span><span>$${fmtNum(fundOther, 0)}</span></div>` : ''}
+                        return [
+                            row('Reserve', FUND_PLAN.reserve, pm(FUND_PLAN.reserve) + ' of MMF', '#e2e8f0', true),
+                            row('Sell-Put collateral', fundPut, pm(fundPut) + ' · ' + fundPutN + ' puts', '#fbbf24', true),
+                            row('Available for stocks', fundAvail, pm(fundAvail), fundAvail >= 0 ? '#34d399' : '#f87171', true),
+                            row('Gold to buy', fundGoldTodo, pm(fundGoldTodo), '#e2e8f0', true),
+                            row('Unallocated', fundFree, pm(fundFree), fundFree >= 0 ? '#e2e8f0' : '#f87171', true),
+                            `<div style="border-top:1px solid #334155;margin-top:7px;"></div>`,
+                            row('Stocks (cost)', fundStk, fmtNum(fundStk / FUND_PLAN.stocks * 100, 0) + '% of $3.5M', '#C1A673', false),
+                            fundOther > 0 ? row('Outside plan (Japan, A-shares)', fundOther, '', '#94a3b8', false) : '',
+                            row('Gold', fundGold, fmtNum(fundGold / FUND_PLAN.gold * 100, 0) + '% of $1.0M', '#fbbf24', false),
+                        ].join('');
+                    })()}
                 </div>
 
                 <!-- ===== Card 2: Today P&L (点击展开详情) ===== -->
