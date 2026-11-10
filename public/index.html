@@ -2524,6 +2524,8 @@
     async function loadHoldings() {
         try {
             APP.holdings = await apiCall('/holdings');
+            // 区域口径与木木一致：韩国、台湾并入美国（2026-11-10）
+            APP.holdings.forEach(h => { if (h.region === '韩国' || h.region === '台湾') { h.region_raw = h.region; h.region = '美国'; } });
         } catch (error) {
             console.error('Failed to load holdings:', error);
             APP.holdings = [];
@@ -3552,13 +3554,13 @@
             const _stale = _asOf && (new Date(_todayStr) - new Date(_asOf)) / 86400000 > 3;
             const _od = (_ext.options && _ext.options.detail) || {};
             const _md = (_ext.mmf && _ext.mmf.detail) || {};
-            const _optTip = _od.net_premium_usd !== undefined ? `净收权利金 $${fmtNum(_od.net_premium_usd,0)} − 在仓买回成本 $${fmtNum(Math.abs(_od.open_mv_usd||0),0)}` : '';
-            const _mmfTip = _md.fund_assets_usd !== undefined ? `现值 $${fmtNum(_md.fund_assets_usd,0)} − 累计净申购 $${fmtNum(_md.net_subscribed_usd||0,0)}` : '';
+            const _optTip = _od.net_premium_usd !== undefined ? `Net premium $${fmtNum(_od.net_premium_usd,0)} − buy-back cost of open contracts $${fmtNum(Math.abs(_od.open_mv_usd||0),0)}` : '';
+            const _mmfTip = _md.fund_assets_usd !== undefined ? `Value $${fmtNum(_md.fund_assets_usd,0)} − net subscribed $${fmtNum(_md.net_subscribed_usd||0,0)}` : '';
             // 环形图：只画正数板块；负数板块仍列在右侧说明里
             const _parts = [
-                { k: '正股', sub: 'Stocks',  v: cumulativePL, c: '#C1A673', tip: '浮盈 + 已实现 + 分红' },
-                { k: '期权', sub: 'Options', v: optPL,        c: '#60a5fa', tip: _optTip },
-                { k: '货基', sub: 'MMF',     v: mmfPL,        c: '#34d399', tip: _mmfTip },
+                { k: 'Stocks', sub: 'STK',  v: cumulativePL, c: '#C1A673', tip: 'Unrealized + realized + dividends' },
+                { k: 'Options', sub: 'OPT', v: optPL,        c: '#60a5fa', tip: _optTip },
+                { k: 'MMF', sub: 'MMF',     v: mmfPL,        c: '#34d399', tip: _mmfTip },
             ];
             const _posSum = _parts.reduce((s, p) => s + Math.max(p.v, 0), 0);
             // 图样与比例对齐 Regional Allocation：同一圆环尺寸、间隙、环上标签、左侧图例
@@ -3571,7 +3573,7 @@
                 const segLen = segDeg / 360 * _C;
                 _arcs += `<circle cx="${_CX}" cy="${_CY}" r="${_R}" fill="none" stroke="${p.c}" stroke-width="${_SW}" stroke-dasharray="${segLen} ${_C - segLen}" stroke-dashoffset="${-(_rot / 360) * _C}" stroke-linecap="round" style="filter:drop-shadow(0 0 12px ${p.c}50);transform-origin:center;opacity:0;animation:ringFadeIn 0.8s ease ${0.2 + i * 0.15}s forwards;"><title>${p.k} ${_sgn(p.v)}</title></circle>`;
                 const midRad = (_rot + segDeg / 2) * Math.PI / 180;
-                _ringLabels += `<text x="${(_CX + _R * Math.cos(midRad)).toFixed(1)}" y="${(_CY + _R * Math.sin(midRad)).toFixed(1)}" text-anchor="middle" dominant-baseline="central" fill="#fff" font-size="10" font-weight="700" font-family="Montserrat,sans-serif" style="text-shadow:0 1px 3px rgba(0,0,0,0.6);">${p.k}</text>`;
+                _ringLabels += `<text x="${(_CX + _R * Math.cos(midRad)).toFixed(1)}" y="${(_CY + _R * Math.sin(midRad)).toFixed(1)}" text-anchor="middle" dominant-baseline="central" fill="#fff" font-size="10" font-weight="700" font-family="Montserrat,sans-serif" style="text-shadow:0 1px 3px rgba(0,0,0,0.6);">${p.sub}</text>`;
                 _rot += segDeg + _gapDeg;
             });
             const _row = (p, extra, isLast) => {
@@ -3590,31 +3592,36 @@
                         </div>
                         <div style="text-align:right;flex-shrink:0;min-width:60px;">
                             <div style="color:${p.c};font-size:15px;font-weight:700;font-family:Montserrat,sans-serif;">${fmtNum(pct, 1)}%</div>
-                            <div style="color:#64748b;font-size:9px;font-weight:600;font-family:Montserrat,sans-serif;margin-top:1px;">${p.sub}</div>
                         </div>
                     </div>${extra || ''}
                 </div>`;
             };
-            const _note = (label, val) => `<div style="display:flex;justify-content:space-between;gap:8px;font-size:9px;color:#94a3b8;padding-top:2px;font-family:Montserrat,sans-serif;"><span>${label}</span><span>$${fmtNum(val,0)}</span></div>`;
+            const _note = (label, val, signed) => `<div style="display:flex;justify-content:space-between;gap:8px;font-size:9px;color:#94a3b8;padding-top:2px;font-family:Montserrat,sans-serif;"><span>${label}</span><span${signed ? ' class="' + _plCls(val) + '"' : ''}>${signed ? _sgn(val) : '$' + fmtNum(val,0)}</span></div>`;
+            const _stkNotes = `
+                <div style="margin-top:5px;">
+                ${_note('Realized', realizedPL_USD, true)}
+                ${_note('Unrealized', unrealizedPL, true)}
+                ${_note('Dividends', dividends_USD, true)}
+                </div>`;
             const _optNotes = _od.gross_sold_usd !== undefined ? `
                 <div style="margin-top:5px;">
-                ${_note('累计收权利金', _od.gross_sold_usd)}
-                ${_note('已落袋', _od.realized_usd || 0)}
-                ${_note('买回平仓已花', _od.gross_bought_usd || 0)}
-                <div style="font-size:9px;color:#64748b;padding-top:2px;">在仓 ${(_od.open || []).length} 张：已收 $${fmtNum(_od.open_premium_usd||0,0)}，买回要 $${fmtNum(Math.abs(_od.open_mv_usd||0),0)}</div>
+                ${_note('Premium collected', _od.gross_sold_usd)}
+                ${_note('Locked in', _od.realized_usd || 0)}
+                ${_note('Buy-back spent', _od.gross_bought_usd || 0)}
+                <div style="font-size:9px;color:#64748b;padding-top:2px;">Open ${(_od.open || []).length}: collected $${fmtNum(_od.open_premium_usd||0,0)}, buy-back $${fmtNum(Math.abs(_od.open_mv_usd||0),0)}</div>
                 </div>` : '';
             grandStrip = `
                 <div class="chart-card" style="position:relative;overflow:hidden;">
                     <div style="position:absolute;top:-40px;right:-40px;width:120px;height:120px;border-radius:50%;background:radial-gradient(circle,rgba(193,166,115,0.08),transparent 70%);pointer-events:none;"></div>
                     <div class="chart-title" style="display:flex;align-items:center;gap:10px;">
                         <svg width="18" height="18" viewBox="0 0 18 18"><circle cx="9" cy="9" r="7" fill="none" stroke="var(--gold)" stroke-width="1.5" opacity="0.6"/><circle cx="9" cy="9" r="3" fill="var(--gold)" opacity="0.8"/><circle cx="9" cy="3" r="1.2" fill="var(--gold-light)"/></svg>
-                        Grand P&L / 总账
-                        <span style="margin-left:auto;font-size:10px;font-weight:400;color:${_stale ? '#f87171' : '#64748b'};">${_stale ? '⚠️ ' : ''}期权/货基截至 ${_asOf.slice(5)}</span>
+                        Grand P&L
+                        <span style="margin-left:auto;font-size:10px;font-weight:400;color:${_stale ? '#f87171' : '#64748b'};">${_stale ? '⚠️ ' : ''}Options/MMF as of ${_asOf.slice(5)}</span>
                     </div>
                     <div style="display:flex;align-items:center;gap:20px;">
                         <style>@keyframes ringFadeIn{from{opacity:0;transform:scale(0.85);}to{opacity:1;transform:scale(1);}}</style>
                         <div style="min-width:110px;max-width:200px;display:flex;flex-direction:column;justify-content:center;margin-left:auto;padding-right:16px;">
-                            ${_row(_parts[0])}
+                            ${_row(_parts[0], _stkNotes)}
                             ${_row(_parts[1], _optNotes)}
                             ${_row(_parts[2], '', true)}
                         </div>
@@ -3906,7 +3913,6 @@
             </div>
 
             <div class="charts-row">
-                ${grandStrip}
                 <div class="chart-card" style="position:relative;overflow:hidden;">
                     <div style="position:absolute;top:-40px;right:-40px;width:120px;height:120px;border-radius:50%;background:radial-gradient(circle,rgba(193,166,115,0.08),transparent 70%);pointer-events:none;"></div>
                     <div class="chart-title" style="display:flex;align-items:center;gap:10px;">
@@ -3915,6 +3921,7 @@
                     </div>
                     <div id="region-viz" style="display:flex;align-items:center;gap:20px;"></div>
                 </div>
+                ${grandStrip}
                 <div class="chart-card" style="position:relative;overflow:hidden;">
                     <div style="position:absolute;bottom:-30px;left:-30px;width:100px;height:100px;border-radius:50%;background:radial-gradient(circle,rgba(193,166,115,0.06),transparent 70%);pointer-events:none;"></div>
                     <div class="chart-title" style="display:flex;align-items:center;gap:10px;">
